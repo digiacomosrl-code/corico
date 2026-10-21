@@ -1,0 +1,186 @@
+@inject CommesseService Commesse
+@inject ClientiService Clienti
+@inject DocumentiService Documenti
+
+@{ var mancanti = CommesseService.DatiMancanti(_modifica); }
+@if (mancanti.Count > 0)
+{
+    <div class="nota-mancanti">Dati da completare: @string.Join(", ", mancanti)</div>
+}
+
+<Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+<EditForm Model="_modifica" OnValidSubmit="SalvaAsync" class="riquadro">
+    <div class="griglia-form">
+        <label>Codice <input value="@_modifica.Codice" disabled /></label>
+        <label>Codice esterno (cliente/gestionale) <InputText @bind-Value="_modifica.CodiceEsterno" /></label>
+        <label class="largo">Descrizione <InputText @bind-Value="_modifica.Descrizione" /></label>
+
+        <label>
+            Cliente
+            <InputSelect @bind-Value="_modifica.ClienteId">
+                <option value="">— non indicato —</option>
+                @foreach (var c in _clienti)
+                {
+                    <option value="@c.Id">@c.Denominazione</option>
+                }
+            </InputSelect>
+        </label>
+        <div class="allinea-basso">
+            <button type="button" class="pulsante" @onclick="() => _nuovoCliente = new DatiCliente()">Nuovo cliente…</button>
+        </div>
+
+        @if (_nuovoCliente is not null)
+        {
+            <div class="largo sotto-riquadro">
+                <strong>Inserimento rapido cliente</strong>
+                <div class="riga-form">
+                    <input placeholder="Denominazione" @bind="_nuovoCliente.Denominazione" />
+                    <input placeholder="Partita IVA" @bind="_nuovoCliente.PartitaIva" />
+                    <input placeholder="Codice fiscale" @bind="_nuovoCliente.CodiceFiscale" />
+                    <button type="button" class="pulsante primario" @onclick="CreaClienteAsync">@(_duplicati.Count > 0 ? "Crea comunque" : "Crea")</button>
+                    <button type="button" class="pulsante" @onclick="() => { _nuovoCliente = null; _duplicati = []; }">Annulla</button>
+                </div>
+                @if (_duplicati.Count > 0)
+                {
+                    <div class="nota-mancanti">
+                        Possibili duplicati:
+                        @foreach (var d in _duplicati)
+                        {
+                            <div>
+                                @d.Denominazione (@d.Motivo)
+                                <button type="button" class="pulsante piccolo" @onclick="() => UsaEsistente(d.Id)">Usa questo</button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        <label class="largo">Indirizzo del cantiere <InputText @bind-Value="_modifica.IndirizzoCantiere" /></label>
+        <label>Comune <InputText @bind-Value="_modifica.ComuneCantiere" /></label>
+        <label>Provincia <InputText @bind-Value="_modifica.ProvinciaCantiere" maxlength="2" /></label>
+        <label>Responsabile <InputText @bind-Value="_modifica.Responsabile" /></label>
+        <span></span>
+        <label>Inizio previsto <InputDate @bind-Value="_modifica.DataInizioPrevista" /></label>
+        <label>Fine prevista <InputDate @bind-Value="_modifica.DataFinePrevista" /></label>
+
+        <label>
+            Valore contrattuale (€)
+            <InputNumber @bind-Value="_modifica.ValoreContrattuale" step="0.01" />
+            <small class="testo-secondario">Riepilogativo: non viene sommato ai ricavi del preventivo.</small>
+        </label>
+        <span></span>
+
+        <label>
+            Contratto: documento
+            <InputSelect @bind-Value="_modifica.ContrattoDocumentoId">
+                <option value="">— nessuno —</option>
+                @foreach (var d in _documenti)
+                {
+                    <option value="@d.Id">@d.NomeOriginale</option>
+                }
+            </InputSelect>
+        </label>
+        <label>Contratto: numero <InputText @bind-Value="_modifica.ContrattoNumero" /></label>
+        <label>Contratto: data <InputDate @bind-Value="_modifica.ContrattoData" /></label>
+        <span></span>
+
+        <label class="largo">Note <InputTextArea @bind-Value="_modifica.Note" rows="3" /></label>
+    </div>
+
+    <div class="azioni">
+        <button type="submit" class="pulsante primario">Salva</button>
+        <button type="button" class="pulsante" @onclick="Annulla">Annulla modifiche</button>
+    </div>
+</EditForm>
+
+<div class="riquadro">
+    <h3>Stato e archiviazione</h3>
+    <div class="riga-form">
+        <span>Stato attuale: <EtichettaStato Stato="Commessa.Stato" /></span>
+        @foreach (var s in Enum.GetValues<StatoCommessa>().Where(s => s != Commessa.Stato))
+        {
+            <button class="pulsante" @onclick="() => CambiaStatoAsync(s)">Porta a «@EtichettaStato.Testo(s)»</button>
+        }
+        <span class="spazio"></span>
+        <button class="pulsante" @onclick="ArchiviaAsync">@(Commessa.Archiviata ? "Riattiva commessa" : "Archivia commessa")</button>
+    </div>
+    <p class="testo-secondario">Ogni cambio di stato e ogni archiviazione sono registrati nello storico. L'archiviazione è reversibile.</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DatiCommessa Commessa { get; set; } = default!;
+    [Parameter] public EventCallback<DatiCommessa> CommessaChanged { get; set; }
+
+    private DatiCommessa _modifica = new();
+    private IReadOnlyList<DatiCliente> _clienti = [];
+    private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
+    private DatiCliente? _nuovoCliente;
+    private IReadOnlyList<PossibileDuplicato> _duplicati = [];
+    private string? _messaggio;
+    private bool _errore;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _clienti = await Clienti.ElencoAsync();
+        _documenti = await Documenti.ElencoAsync(Commessa.Id);
+    }
+
+    protected override void OnParametersSet() => Annulla();
+
+    private void Annulla() => _modifica = Commessa.Clona();
+
+    private async Task SalvaAsync() => await EseguiAsync(() => Commesse.AggiornaAsync(_modifica), "Dati salvati.");
+
+    private Task CambiaStatoAsync(StatoCommessa s) =>
+        EseguiAsync(() => Commesse.CambiaStatoAsync(Commessa.Id, Commessa.Versione, s), "Stato aggiornato.");
+
+    private Task ArchiviaAsync() =>
+        EseguiAsync(() => Commesse.ImpostaArchiviazioneAsync(Commessa.Id, Commessa.Versione, !Commessa.Archiviata),
+            Commessa.Archiviata ? "Commessa riattivata." : "Commessa archiviata.");
+
+    private async Task EseguiAsync(Func<Task<DatiCommessa>> operazione, string esito)
+    {
+        try
+        {
+            var aggiornata = await operazione();
+            await CommessaChanged.InvokeAsync(aggiornata);
+            (_messaggio, _errore) = (esito, false);
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task CreaClienteAsync()
+    {
+        if (_nuovoCliente is null) return;
+        if (_duplicati.Count == 0)
+        {
+            _duplicati = await Clienti.PossibiliDuplicatiAsync(_nuovoCliente);
+            if (_duplicati.Count > 0) return;
+        }
+        try
+        {
+            var c = await Clienti.SalvaAsync(_nuovoCliente);
+            _clienti = await Clienti.ElencoAsync();
+            _modifica.ClienteId = c.Id;
+            _nuovoCliente = null;
+            _duplicati = [];
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private void UsaEsistente(Guid id)
+    {
+        _modifica.ClienteId = id;
+        _nuovoCliente = null;
+        _duplicati = [];
+    }
+
+}

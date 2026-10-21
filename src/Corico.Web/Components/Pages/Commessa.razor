@@ -1,0 +1,66 @@
+@page "/commesse/{Id:guid}"
+@inject CommesseService Commesse
+@inject RegistroModuli Moduli
+
+<PageTitle>@(_commessa?.Codice ?? "Commessa") — Corico</PageTitle>
+
+@if (_commessa is null)
+{
+    <p>@(_caricata ? "Commessa non trovata." : "Caricamento…")</p>
+}
+else
+{
+    <div class="intestazione">
+        <div>
+            <div class="testo-secondario"><a href="">Commesse</a> › @_commessa.Codice</div>
+            <h1>@_commessa.Codice — @_commessa.Descrizione</h1>
+        </div>
+        <div><EtichettaStato Stato="_commessa.Stato" Archiviata="_commessa.Archiviata" /></div>
+    </div>
+
+    <div class="schede" role="tablist">
+        @foreach (var titolo in Schede())
+        {
+            <button role="tab" class="scheda @(titolo == _schedaAttiva ? "attiva" : "")" @onclick="() => _schedaAttiva = titolo">@titolo</button>
+        }
+    </div>
+
+    @switch (_schedaAttiva)
+    {
+        case "Dati generali":
+            <DatiGeneraliCommessa Commessa="_commessa" CommessaChanged="c => _commessa = c" />
+            break;
+        case "Documenti":
+            <DocumentiCommessa CommessaId="_commessa.Id" />
+            break;
+        case "Storico":
+            <StoricoCommessa CommessaId="_commessa.Id" />
+            break;
+        default:
+            var scheda = Moduli.SchedeCommessa.FirstOrDefault(s => s.Titolo == _schedaAttiva);
+            if (scheda is not null)
+            {
+                <DynamicComponent Type="scheda.Componente" Parameters="@(new Dictionary<string, object> { ["CommessaId"] = _commessa.Id })" />
+            }
+            break;
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private DatiCommessa? _commessa;
+    private bool _caricata;
+    private string _schedaAttiva = "Dati generali";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _commessa = await Commesse.OttieniAsync(Id);
+        _caricata = true;
+    }
+
+    private IEnumerable<string> Schede() =>
+        new[] { "Dati generali" }
+            .Concat(Moduli.SchedeCommessa.Select(s => s.Titolo))
+            .Concat(new[] { "Documenti", "Storico" });
+}

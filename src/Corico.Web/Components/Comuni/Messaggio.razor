@@ -1,0 +1,16 @@
+@* Messaggio di esito (successo o errore) mostrato in testa a una sezione. *@
+@if (!string.IsNullOrEmpty(Testo))
+{
+    <div class="messaggio @(Errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @Testo
+        <button type="button" class="chiudi" @onclick="Chiudi" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Testo { get; set; }
+    [Parameter] public bool Errore { get; set; }
+    [Parameter] public EventCallback OnChiudi { get; set; }
+
+    private Task Chiudi() => OnChiudi.InvokeAsync();
+}

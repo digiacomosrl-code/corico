@@ -1,0 +1,18 @@
+<span class="etichetta etichetta-@Stato.ToString().ToLowerInvariant()">@Testo(Stato)</span>
+@if (Archiviata)
+{
+    <span class="etichetta etichetta-archiviata">Archiviata</span>
+}
+
+@code {
+    [Parameter] public StatoCommessa Stato { get; set; }
+    [Parameter] public bool Archiviata { get; set; }
+
+    public static string Testo(StatoCommessa s) => s switch
+    {
+        StatoCommessa.DaAvviare => "Da avviare",
+        StatoCommessa.Attiva => "Attiva",
+        StatoCommessa.Conclusa => "Conclusa",
+        _ => s.ToString(),
+    };
+}

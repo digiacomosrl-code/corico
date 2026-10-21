@@ -1,0 +1,113 @@
+@page "/"
+@inject CommesseService Commesse
+@inject NavigationManager Nav
+
+<PageTitle>Commesse — Corico</PageTitle>
+
+<div class="intestazione">
+    <h1>Commesse</h1>
+    <button class="pulsante primario" @onclick="() => _nuova = !_nuova">Nuova commessa</button>
+</div>
+
+@if (_nuova)
+{
+    <div class="riquadro">
+        <h3>Nuova commessa</h3>
+        <p class="testo-secondario">Basta la descrizione: il codice viene assegnato automaticamente e gli altri dati si completano in seguito.</p>
+        <form class="riga-form" @onsubmit="CreaAsync">
+            <input class="largo" placeholder="Descrizione (es. Restauro CDD Caltagirone)" @bind="_descrizioneNuova" />
+            <button class="pulsante primario" type="submit">Crea</button>
+            <button class="pulsante" type="button" @onclick="() => _nuova = false">Annulla</button>
+        </form>
+        <Messaggio Testo="@_errore" Errore="true" OnChiudi="() => _errore = null" />
+    </div>
+}
+
+<div class="filtri">
+    <input type="search" placeholder="Cerca per codice, descrizione, cliente…" @bind="Cerca" @bind:after="CaricaAsync" />
+    <select @bind="_stato" @bind:after="CaricaAsync">
+        <option value="">Tutti gli stati</option>
+        <option value="@StatoCommessa.DaAvviare">Da avviare</option>
+        <option value="@StatoCommessa.Attiva">Attive</option>
+        <option value="@StatoCommessa.Conclusa">Concluse</option>
+    </select>
+    <label class="spunta"><input type="checkbox" @bind="_includiArchiviate" @bind:after="CaricaAsync" /> Mostra archiviate</label>
+</div>
+
+@if (_elenco is null)
+{
+    <p>Caricamento…</p>
+}
+else if (_elenco.Count == 0)
+{
+    <div class="vuoto">Nessuna commessa trovata.</div>
+}
+else
+{
+    <table class="tabella">
+        <thead>
+            <tr>
+                <th>Codice</th>
+                <th>Descrizione</th>
+                <th>Cliente</th>
+                <th>Comune</th>
+                <th>Stato</th>
+                <th class="num">Valore contrattuale</th>
+                <th class="num">Ricavo netto</th>
+                <th class="num">Costo</th>
+                <th class="num">MDC %</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in _elenco)
+            {
+                <tr class="cliccabile" @onclick="@(() => Nav.NavigateTo($"commesse/{c.Id}"))">
+                    <td class="codice">
+                        @c.Codice
+                        @if (c.CodiceEsterno is not null)
+                        {
+                            <span class="testo-secondario">(@c.CodiceEsterno)</span>
+                        }
+                    </td>
+                    <td>@c.Descrizione</td>
+                    <td>@c.Cliente</td>
+                    <td>@c.Comune</td>
+                    <td><EtichettaStato Stato="c.Stato" Archiviata="c.Archiviata" /></td>
+                    <td class="num">@(c.ValoreContrattuale is null ? "" : Formato.Euro(c.ValoreContrattuale))</td>
+                    @* Indicatori della versione corrente del preventivo: disponibili con il Modulo 1. *@
+                    <td class="num testo-secondario">n.d.</td>
+                    <td class="num testo-secondario">n.d.</td>
+                    <td class="num testo-secondario">n.d.</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "cerca")] public string? Cerca { get; set; }
+
+    private IReadOnlyList<CommessaRiepilogo>? _elenco;
+    private StatoCommessa? _stato;
+    private bool _includiArchiviate;
+    private bool _nuova;
+    private string? _descrizioneNuova;
+    private string? _errore;
+
+    protected override Task OnParametersSetAsync() => CaricaAsync();
+
+    private async Task CaricaAsync() => _elenco = await Commesse.ElencoAsync(Cerca, _stato, _includiArchiviate);
+
+    private async Task CreaAsync()
+    {
+        try
+        {
+            var c = await Commesse.CreaAsync(_descrizioneNuova ?? "");
+            Nav.NavigateTo($"commesse/{c.Id}");
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            _errore = ex.Message;
+        }
+    }
+}

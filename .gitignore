@@ -1,0 +1,23 @@
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+*.suo
+TestResults/
+# Dati aziendali e di sviluppo: MAI nel repository
+dati-sviluppo/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+Documenti/
+Backup/
+Log/
+Esempi/
+*.xpwe
+*.XPWE
+*.xlsx
+*.xls
+*.pdf
+publish/

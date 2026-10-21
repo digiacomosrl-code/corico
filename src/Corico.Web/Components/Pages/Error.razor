@@ -1,0 +1,17 @@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Errore — Corico</PageTitle>
+
+<h1>Si è verificato un errore</h1>
+<p>L'operazione non è stata completata. I dettagli tecnici sono nel registro della cartella Log.</p>
+@if (!string.IsNullOrEmpty(RequestId))
+{
+    <p class="testo-secondario">Riferimento: <code>@RequestId</code></p>
+}
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    private string? RequestId { get; set; }
+    protected override void OnInitialized() => RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

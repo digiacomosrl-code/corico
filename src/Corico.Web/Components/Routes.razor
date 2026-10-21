@@ -1,0 +1,15 @@
+@inject RegistroModuli Moduli
+
+<Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="_assemblyModuli" NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>
+
+@code {
+    private System.Reflection.Assembly[] _assemblyModuli = [];
+
+    protected override void OnInitialized() =>
+        _assemblyModuli = Moduli.Attivi.Select(m => m.AssemblyInterfaccia).Distinct().ToArray();
+}

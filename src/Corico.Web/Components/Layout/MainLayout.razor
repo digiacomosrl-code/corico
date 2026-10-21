@@ -1,0 +1,62 @@
+@inherits LayoutComponentBase
+@inject RegistroModuli Moduli
+@inject AvvisiService AvvisiSistema
+@inject NavigationManager Nav
+
+<div class="pagina">
+    <aside class="laterale">
+        <div class="marchio">
+            <span class="marchio-nome">CORICO</span>
+            <span class="marchio-sotto">Pianificazione commesse</span>
+        </div>
+        <nav>
+            <NavLink class="voce" href="" Match="NavLinkMatch.All">Commesse</NavLink>
+            <NavLink class="voce" href="clienti">Clienti</NavLink>
+            <NavLink class="voce" href="documenti">Documenti</NavLink>
+            @foreach (var voce in Moduli.VociMenu)
+            {
+                <NavLink class="voce" href="@voce.Indirizzo">@voce.Titolo</NavLink>
+            }
+            <div class="separatore"></div>
+            <NavLink class="voce voce-admin" href="amministrazione">Amministrazione</NavLink>
+        </nav>
+    </aside>
+
+    <div class="contenuto">
+        <header class="barra">
+            <form class="ricerca-globale" @onsubmit="Cerca">
+                <input type="search" placeholder="Cerca commessa per codice o descrizione…" @bind="_ricerca" aria-label="Ricerca commesse" />
+            </form>
+        </header>
+
+        @foreach (var avviso in _avvisi)
+        {
+            <div class="avviso avviso-@avviso.Gravita.ToString().ToLowerInvariant()">
+                <strong>@avviso.Problema</strong> @avviso.AzioneSuggerita
+                @if (avviso.Indirizzo is not null)
+                {
+                    <a href="@avviso.Indirizzo">Vai</a>
+                }
+            </div>
+        }
+
+        <main>
+            @Body
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Si è verificato un errore imprevisto.
+    <a href="." class="reload">Ricarica la pagina</a>
+    <span class="dismiss">✕</span>
+</div>
+
+@code {
+    private string? _ricerca;
+    private IReadOnlyList<Avviso> _avvisi = [];
+
+    protected override async Task OnInitializedAsync() => _avvisi = await AvvisiSistema.AvvisiDiSistemaAsync();
+
+    private void Cerca() => Nav.NavigateTo("?cerca=" + Uri.EscapeDataString(_ricerca ?? ""));
+}

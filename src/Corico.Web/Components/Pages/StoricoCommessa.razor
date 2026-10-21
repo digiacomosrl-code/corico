@@ -1,0 +1,80 @@
+@using System.Text.Json
+@inject StoricoService Storico
+
+@if (_voci is null)
+{
+    <p>Caricamento…</p>
+}
+else if (_voci.Count == 0)
+{
+    <div class="vuoto">Nessuna modifica registrata.</div>
+}
+else
+{
+    <table class="tabella">
+        <thead>
+            <tr><th>Data e ora</th><th>Utente</th><th>Operazione</th><th>Elemento</th><th>Dati modificati</th><th>Nota</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var v in _voci)
+            {
+                <tr>
+                    <td class="nowrap">@Formato.DataOra(v.DataOra)</td>
+                    <td>@v.Utente</td>
+                    <td>@v.Operazione</td>
+                    <td>@v.Entita</td>
+                    <td>
+                        @foreach (var riga in Differenze(v))
+                        {
+                            <div>@riga</div>
+                        }
+                    </td>
+                    <td>@v.Nota</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+    private IReadOnlyList<VoceStorico>? _voci;
+    protected override async Task OnParametersSetAsync() => _voci = await Storico.PerCommessaAsync(CommessaId);
+
+    /// <summary>Righe leggibili "Campo: prima → dopo"; nei nuovi inserimenti solo i campi compilati.</summary>
+    private static IEnumerable<string> Differenze(VoceStorico v)
+    {
+        var prima = Leggi(v.ValoriPrecedenti);
+        var dopo = Leggi(v.ValoriSuccessivi);
+        foreach (var campo in prima.Keys.Union(dopo.Keys))
+        {
+            if (campo == "Id") continue;
+            var p = Testo(campo, prima.GetValueOrDefault(campo));
+            var d = Testo(campo, dopo.GetValueOrDefault(campo));
+            if (v.Operazione == "Inserimento" && d == "—") continue;
+            yield return v.Operazione switch
+            {
+                "Inserimento" => $"{campo}: {d}",
+                "Eliminazione" => $"{campo}: {p}",
+                _ => $"{campo}: {p} → {d}",
+            };
+        }
+    }
+
+    private static Dictionary<string, JsonElement> Leggi(string? json) =>
+        string.IsNullOrEmpty(json) ? [] : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json) ?? [];
+
+    private static string Testo(string campo, JsonElement valore)
+    {
+        if (valore.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return "—";
+        if (campo == "Stato" && valore.TryGetInt32(out var s)) return EtichettaStato.Testo((StatoCommessa)s);
+        if (campo.EndsWith("Id", StringComparison.Ordinal)) return "(collegamento)";
+        return valore.ValueKind switch
+        {
+            JsonValueKind.True => "sì",
+            JsonValueKind.False => "no",
+            JsonValueKind.Number => valore.GetDecimal().ToString("#,##0.##", Formato.Italiano),
+            _ => valore.ToString(),
+        };
+    }
+}

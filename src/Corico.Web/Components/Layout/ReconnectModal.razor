@@ -1,0 +1,31 @@
+﻿<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
+
+<dialog id="components-reconnect-modal" data-nosnippet>
+    <div class="components-reconnect-container">
+        <div class="components-rejoining-animation" aria-hidden="true">
+            <div></div>
+            <div></div>
+        </div>
+        <p class="components-reconnect-first-attempt-visible">
+            Riconnessione a Corico in corso…
+        </p>
+        <p class="components-reconnect-repeated-attempt-visible">
+            Riconnessione non riuscita: nuovo tentativo tra <span id="components-seconds-to-next-attempt"></span> secondi.
+        </p>
+        <p class="components-reconnect-failed-visible">
+            Impossibile riconnettersi.<br />Verifica che Corico sia avviato e ricarica la pagina.
+        </p>
+        <button id="components-reconnect-button" class="components-reconnect-failed-visible">
+            Riprova
+        </button>
+        <p class="components-pause-visible">
+            La sessione è stata sospesa.
+        </p>
+        <p class="components-resume-failed-visible">
+            Impossibile riprendere la sessione.<br />Ricarica la pagina.
+        </p>
+        <button id="components-resume-button" class="components-pause-visible components-resume-failed-visible">
+            Riprendi
+        </button>
+    </div>
+</dialog>

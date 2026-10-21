@@ -1,0 +1,204 @@
+@page "/amministrazione"
+@using Corico.Core.Backup
+@using Corico.Core.Configurazione
+@inject BackupService Backup
+@inject DocumentiService Documenti
+@inject PercorsiDati Percorsi
+
+<PageTitle>Amministrazione — Corico</PageTitle>
+
+<h1>Amministrazione</h1>
+<p class="testo-secondario">Cartella dati: <code>@Percorsi.Radice</code></p>
+
+<Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+<div class="riquadro">
+    <h3>Backup locale</h3>
+    <p>
+        I backup automatici vengono eseguiti al primo avvio della giornata, ogni 2 ore di utilizzo e alla chiusura.
+        Ultimo backup riuscito: <strong>@(_ultimoLocale is null ? "mai" : Formato.DataOra(_ultimoLocale.DataOra))</strong>
+    </p>
+    <button class="pulsante primario" disabled="@_occupato" @onclick="BackupOraAsync">Esegui backup ora</button>
+</div>
+
+<div class="riquadro">
+    <h3>Backup su disco esterno</h3>
+    <p>
+        Ultimo backup esterno: <strong>@(_ultimoEsterno is null ? "mai" : Formato.DataOra(_ultimoEsterno))</strong>.
+        Collega il disco, indica la lettera dell'unità (es. <code>E:\</code>) ed esegui il backup.
+        Al termine scollega il disco. I dischi devono essere cifrati con BitLocker To Go.
+    </p>
+    <div class="riga-form">
+        <input placeholder="Unità del disco, es. E:\" @bind="_unita" />
+        <button class="pulsante primario" disabled="@_occupato" @onclick="BackupEsternoAsync">Esegui backup esterno</button>
+    </div>
+    <details>
+        <summary>Registra un nuovo disco</summary>
+        <div class="riga-form">
+            <input placeholder="Nome del disco, es. Disco A" @bind="_nomeDisco" />
+            <button class="pulsante" @onclick="RegistraDiscoAsync">Registra il disco nell'unità indicata</button>
+        </div>
+    </details>
+    @if (_dischi.Count > 0)
+    {
+        <p class="testo-secondario">Dischi registrati: @string.Join(", ", _dischi.Select(d => d.Nome))</p>
+    }
+</div>
+
+<div class="riquadro">
+    <h3>Ripristino guidato</h3>
+    <p>
+        Scegli un backup da ripristinare. Prima del ripristino lo stato attuale viene salvato automaticamente,
+        così l'operazione resta reversibile. I documenti dell'archivio non vengono modificati.
+    </p>
+    <table class="tabella">
+        <thead><tr><th>Data e ora</th><th>Motivo</th><th class="num">Dimensione</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var b in _backup.Take(_mostraTutti ? int.MaxValue : 10))
+            {
+                <tr class="@(b == _daRipristinare ? "riga-selezionata" : "")">
+                    <td>@b.DataOra.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                    <td>@b.Motivo</td>
+                    <td class="num">@($"{b.Dimensione / 1024.0:0} KB")</td>
+                    <td class="num"><button class="pulsante piccolo" @onclick="() => _daRipristinare = b">Seleziona</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    @if (_backup.Count > 10 && !_mostraTutti)
+    {
+        <button class="pulsante piccolo" @onclick="() => _mostraTutti = true">Mostra tutti (@_backup.Count)</button>
+    }
+    @if (_daRipristinare is not null)
+    {
+        <div class="conferma">
+            <p>
+                Stai per ripristinare il database al <strong>@_daRipristinare.DataOra.ToString("dd/MM/yyyy HH:mm:ss")</strong>.
+                Tutte le modifiche successive a quel momento non saranno più visibili (restano comunque nel backup automatico
+                dello stato attuale). Per confermare scrivi <strong>RIPRISTINA</strong>.
+            </p>
+            <div class="riga-form">
+                <input @bind="_conferma" @bind:event="oninput" />
+                <button class="pulsante pericolo" disabled="@(_conferma != "RIPRISTINA" || _occupato)" @onclick="RipristinaAsync">Ripristina</button>
+                <button class="pulsante" @onclick="() => { _daRipristinare = null; _conferma = null; }">Annulla</button>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="riquadro">
+    <h3>Verifica dell'archivio documenti</h3>
+    <p>Controlla che ogni documento registrato esista su disco e corrisponda alla sua impronta.</p>
+    <button class="pulsante" disabled="@_occupato" @onclick="VerificaAsync">Esegui verifica</button>
+    @if (_problemi is not null)
+    {
+        @if (_problemi.Count == 0)
+        {
+            <p class="messaggio messaggio-ok">Archivio coerente: nessun problema rilevato.</p>
+        }
+        else
+        {
+            <ul>@foreach (var p in _problemi) { <li>@p.Descrizione <span class="testo-secondario">@p.Percorso</span></li> }</ul>
+        }
+    }
+</div>
+
+<div class="riquadro">
+    <h3>Registro dei backup</h3>
+    <table class="tabella">
+        <thead><tr><th>Data e ora</th><th>Tipo</th><th>Motivo / disco</th><th>Esito</th><th class="num">Nuovi documenti</th><th>Messaggio</th></tr></thead>
+        <tbody>
+            @foreach (var r in _registro)
+            {
+                <tr>
+                    <td class="nowrap">@Formato.DataOra(r.DataOra)</td>
+                    <td>@r.Tipo</td>
+                    <td>@r.Motivo</td>
+                    <td>@(r.Riuscito ? "Riuscito" : "NON riuscito")</td>
+                    <td class="num">@r.DocumentiCopiati</td>
+                    <td>@r.Messaggio</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IReadOnlyList<FileBackup> _backup = [];
+    private IReadOnlyList<RegistroBackup> _registro = [];
+    private IReadOnlyList<DiscoEsterno> _dischi = [];
+    private IReadOnlyList<ProblemaCoerenza>? _problemi;
+    private RegistroBackup? _ultimoLocale;
+    private DateTime? _ultimoEsterno;
+    private FileBackup? _daRipristinare;
+    private string? _messaggio, _unita, _nomeDisco, _conferma;
+    private bool _errore, _occupato, _mostraTutti;
+
+    protected override Task OnInitializedAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync()
+    {
+        _backup = Backup.ElencoBackupLocali();
+        _registro = await Backup.RegistroAsync(30);
+        _dischi = await Backup.DischiRegistratiAsync();
+        _ultimoLocale = await Backup.UltimoAsync(TipoBackup.Locale, soloRiusciti: true);
+        _ultimoEsterno = await Backup.UltimoBackupEsternoAsync();
+    }
+
+    private Task BackupOraAsync() => EseguiAsync(() => Backup.EseguiBackupLocaleAsync(MotivoBackup.Manuale));
+
+    private Task BackupEsternoAsync() =>
+        string.IsNullOrWhiteSpace(_unita) ? Mostra("Indica l'unità del disco esterno.", true)
+            : EseguiAsync(() => Backup.EseguiBackupEsternoAsync(_unita.Trim()));
+
+    private async Task RipristinaAsync()
+    {
+        if (_daRipristinare is null) return;
+        var file = _daRipristinare.Percorso;
+        (_daRipristinare, _conferma) = (null, null);
+        await EseguiAsync(() => Backup.RipristinaAsync(file));
+    }
+
+    private async Task RegistraDiscoAsync()
+    {
+        try
+        {
+            var disco = await Backup.RegistraDiscoAsync(_unita?.Trim() ?? "", _nomeDisco ?? "");
+            await Mostra($"Disco «{disco.Nome}» registrato.", false);
+            await AggiornaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            await Mostra(ex.Message, true);
+        }
+    }
+
+    private async Task VerificaAsync()
+    {
+        _occupato = true;
+        _problemi = await Documenti.VerificaCoerenzaAsync();
+        _occupato = false;
+    }
+
+    private async Task EseguiAsync(Func<Task<EsitoBackup>> operazione)
+    {
+        _occupato = true;
+        StateHasChanged();
+        try
+        {
+            var esito = await operazione();
+            await Mostra(esito.Messaggio, !esito.Riuscito);
+        }
+        finally
+        {
+            _occupato = false;
+            await AggiornaAsync();
+        }
+    }
+
+    private Task Mostra(string testo, bool errore)
+    {
+        (_messaggio, _errore) = (testo, errore);
+        return Task.CompletedTask;
+    }
+}

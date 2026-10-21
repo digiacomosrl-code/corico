@@ -1,0 +1,111 @@
+@inject DocumentiService Documenti
+
+<div class="riquadro">
+    <h3>@(CommessaId is null ? "Carica documenti" : "Documenti della commessa")</h3>
+    <div class="riga-form">
+        <input placeholder="Tipo documento (es. Contratto, Computo, Offerta)" @bind="_tipo" />
+        <label class="pulsante primario carica">
+            Scegli file…
+            <InputFile OnChange="CaricaAsync" multiple />
+        </label>
+        @if (_inCaricamento)
+        {
+            <span>Caricamento in corso…</span>
+        }
+    </div>
+    <p class="testo-secondario">Puoi selezionare più file insieme. I file identici a uno già presente non vengono duplicati.</p>
+    @foreach (var esito in _esiti)
+    {
+        <div class="@(esito.Errore ? "messaggio messaggio-errore" : "messaggio messaggio-ok")">@esito.Testo</div>
+    }
+</div>
+
+<div class="filtri">
+    <input type="search" placeholder="Cerca per nome, tipo o descrizione…" @bind="_cerca" @bind:after="AggiornaAsync" />
+    <label class="spunta"><input type="checkbox" @bind="_archiviati" @bind:after="AggiornaAsync" /> Mostra archiviati</label>
+</div>
+
+@if (_elenco.Count == 0)
+{
+    <div class="vuoto">Nessun documento.</div>
+}
+else
+{
+    <table class="tabella">
+        <thead>
+            <tr>
+                @if (CommessaId is null) { <th>Commessa</th> }
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Caricato il</th>
+                <th>Da</th>
+                <th class="num">Dimensione</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var d in _elenco)
+            {
+                <tr class="@(d.Archiviato ? "riga-archiviata" : "")">
+                    @if (CommessaId is null) { <td class="codice">@d.CodiceCommessa</td> }
+                    <td><a href="documenti/@d.Id/scarica" target="_blank">@d.NomeOriginale</a></td>
+                    <td>@d.Tipo</td>
+                    <td>@Formato.DataOra(d.CaricatoIl)</td>
+                    <td>@d.CaricatoDa</td>
+                    <td class="num">@Dimensione(d.Dimensione)</td>
+                    <td class="num">
+                        <button class="pulsante piccolo" @onclick="() => ArchiviaAsync(d)">@(d.Archiviato ? "Riattiva" : "Archivia")</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public Guid? CommessaId { get; set; }
+
+    private const long DimensioneMassima = 2L * 1024 * 1024 * 1024;
+
+    private IReadOnlyList<DocumentoRiepilogo> _elenco = [];
+    private readonly List<(string Testo, bool Errore)> _esiti = [];
+    private string? _tipo, _cerca;
+    private bool _archiviati, _inCaricamento;
+
+    protected override Task OnParametersSetAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync() => _elenco = await Documenti.ElencoAsync(CommessaId, _cerca, _archiviati);
+
+    private async Task CaricaAsync(InputFileChangeEventArgs e)
+    {
+        _esiti.Clear();
+        _inCaricamento = true;
+        foreach (var file in e.GetMultipleFiles(100))
+        {
+            try
+            {
+                await using var stream = file.OpenReadStream(DimensioneMassima);
+                var esito = await Documenti.CaricaAsync(stream, file.Name, file.ContentType, CommessaId, _tipo);
+                _esiti.Add(esito.GiaPresente
+                    ? ($"«{file.Name}» è identico a un documento già presente ({esito.Documento.NomeOriginale}"
+                       + (esito.Documento.CodiceCommessa is null ? "" : $", commessa {esito.Documento.CodiceCommessa}") + "): non è stato duplicato.", true)
+                    : ($"«{file.Name}» caricato.", false));
+            }
+            catch (Exception ex)
+            {
+                _esiti.Add(($"«{file.Name}» non caricato: {ex.Message}", true));
+            }
+        }
+        _inCaricamento = false;
+        await AggiornaAsync();
+    }
+
+    private async Task ArchiviaAsync(DocumentoRiepilogo d)
+    {
+        await Documenti.ImpostaArchiviazioneAsync(d.Id, !d.Archiviato);
+        await AggiornaAsync();
+    }
+
+    private static string Dimensione(long b) =>
+        b >= 1048576 ? $"{b / 1048576.0:0.#} MB" : b >= 1024 ? $"{b / 1024.0:0.#} KB" : $"{b} B";
+}

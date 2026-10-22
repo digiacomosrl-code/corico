@@ -1,0 +1,279 @@
+@* Scheda "Versioni" della commessa (rilascio 1C): pubblicazione di versioni ufficiali immutabili e confronto. *@
+@inject VersioniService Versioni
+@inject RiepilogoService Riepilogo
+
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@if (_versioni is null || _bozza is null)
+{
+    <p class="testo-secondario">Caricamento…</p>
+    return;
+}
+
+<div class="riquadro">
+    <h3>Pubblica una versione ufficiale</h3>
+    <p class="testo-secondario">
+        La versione è una fotografia completa e immutabile della bozza attuale: voci, prezzi, pacchetti, offerte scelte,
+        spese generali e totali. La bozza resta modificabile.
+    </p>
+    @if (_impatto is null)
+    {
+        <p>
+            Sarà la <strong>prima versione ufficiale</strong>: ricavo @Formato.Euro(_bozza.Totali.Ricavo),
+            costo @Formato.Euro(_bozza.Totali.Costo), risultato @Formato.Euro(_bozza.Totali.Risultato).
+        </p>
+    }
+    else if (_impatto.NessunaDifferenza)
+    {
+        <p class="testo-secondario">La bozza non presenta differenze rispetto alla @_impatto.EtichettaPrima.ToLowerInvariant().</p>
+    }
+    else
+    {
+        <p>Impatto rispetto alla @_impatto.EtichettaPrima.ToLowerInvariant():</p>
+        <TabellaTotaliConfronto Confronto="_impatto" SoloCambiati="true" />
+        <p class="testo-secondario">@_impatto.Pacchetti.Count pacchetti e @_impatto.Voci.Count voci cambiati. Il dettaglio è nel confronto qui sotto.</p>
+    }
+    <div class="griglia-form due-colonne">
+        <label class="largo">
+            Nota della versione (obbligatoria)
+            <textarea rows="2" @bind="_nota" @bind:event="oninput" placeholder="Es. Offerta di gara; revisione dopo trattativa infissi"></textarea>
+        </label>
+    </div>
+    <div class="azioni">
+        @if (!_conferma)
+        {
+            <button class="pulsante primario" disabled="@string.IsNullOrWhiteSpace(_nota)" @onclick="() => _conferma = true">
+                Pubblica la versione n. @(_versioni.Count == 0 ? 1 : _versioni.Max(v => v.Numero) + 1)
+            </button>
+        }
+        else
+        {
+            <span class="testo-differenza">Una volta pubblicata, la versione non potrà essere modificata né eliminata. Confermi?</span>
+            <button class="pulsante primario" disabled="@_inCorso" @onclick="PubblicaAsync">Conferma pubblicazione</button>
+            <button class="pulsante" @onclick="() => _conferma = false">Annulla</button>
+        }
+    </div>
+</div>
+
+<div class="riquadro">
+    <h3>Versioni ufficiali</h3>
+    @if (_versioni.Count == 0)
+    {
+        <p class="testo-secondario">Nessuna versione ufficiale pubblicata.</p>
+    }
+    else
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th>N.</th><th>Data</th><th>Autore</th><th>Nota</th>
+                        <th class="num">Ricavo</th><th class="num">Costo</th><th class="num">MDC</th>
+                        <th class="num">Spese generali</th><th class="num">Risultato</th><th>Stampe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in _versioni)
+                    {
+                        <tr>
+                            <td class="codice">@v.Numero</td>
+                            <td>@Formato.DataOra(v.CreatoIl)</td>
+                            <td>@v.CreatoDa</td>
+                            <td>@v.Nota</td>
+                            <td class="num">@Formato.Euro(v.Ricavo)</td>
+                            <td class="num">@Formato.Euro(v.Costo)</td>
+                            <td class="num">@Formato.Euro(v.Mdc)</td>
+                            <td class="num">@Formato.Euro(v.SpeseGenerali)</td>
+                            <td class="num @(v.Risultato < 0 ? "testo-negativo" : "")">@Formato.Euro(v.Risultato)</td>
+                            <td class="azioni-riga">
+                                <a class="pulsante piccolo" href="@($"preventivo/{CommessaId}/riepilogo.pdf?versione={v.Id}")" target="_blank">PDF</a>
+                                <a class="pulsante piccolo" href="@($"preventivo/{CommessaId}/riepilogo.xlsx?versione={v.Id}")" download>Excel</a>
+                                <a class="pulsante piccolo" href="@($"preventivo/{CommessaId}/computo.xlsx?versione={v.Id}")" download>Computo</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_versioni.Count > 0)
+{
+    <div class="riquadro">
+        <h3>Confronto</h3>
+        <div class="riga-form">
+            <label>
+                Da
+                <select @bind="_primaScelta">
+                    @foreach (var v in _versioni) { <option value="@v.Id">@VersioniService.Etichetta(v)</option> }
+                    <option value="@Guid.Empty">@VersioniService.EtichettaBozza</option>
+                </select>
+            </label>
+            <label>
+                A
+                <select @bind="_dopoScelta">
+                    <option value="@Guid.Empty">@VersioniService.EtichettaBozza</option>
+                    @foreach (var v in _versioni) { <option value="@v.Id">@VersioniService.Etichetta(v)</option> }
+                </select>
+            </label>
+            <button class="pulsante primario" @onclick="ConfrontaAsync">Confronta</button>
+        </div>
+
+        @if (_confronto is { } c)
+        {
+            <h4>@c.EtichettaPrima → @c.EtichettaDopo</h4>
+            @if (c.NessunaDifferenza)
+            {
+                <p class="testo-secondario">Nessuna differenza.</p>
+            }
+            else
+            {
+                <TabellaTotaliConfronto Confronto="c" />
+
+                @if (c.Pacchetti.Count > 0)
+                {
+                    <h4>Pacchetti cambiati (@c.Pacchetti.Count)</h4>
+                    <div class="scorrevole">
+                        <table class="tabella">
+                            <thead>
+                                <tr>
+                                    <th>Pacchetto</th><th>Esito</th><th>Fornitore</th><th>Stato</th>
+                                    <th class="num">Ricavo prima</th><th class="num">Ricavo dopo</th>
+                                    <th class="num">Costo prima</th><th class="num">Costo dopo</th>
+                                    <th class="num">Differenza MDC</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in c.Pacchetti)
+                                {
+                                    <tr class="esito-@p.Esito.ToString().ToLowerInvariant()">
+                                        <td>@p.Descrizione</td>
+                                        <td>@Testi.Esito(p.Esito)</td>
+                                        <td>@Cambio(p.FornitorePrima, p.FornitoreDopo)</td>
+                                        <td>@Cambio(p.StatoPrima is { } sp ? Testi.Stato(sp) : null, p.StatoDopo is { } sd ? Testi.Stato(sd) : null)</td>
+                                        <td class="num">@Importo(p.RicavoPrima)</td>
+                                        <td class="num">@Importo(p.RicavoDopo)</td>
+                                        <td class="num">@Importo(p.CostoPrima)</td>
+                                        <td class="num">@Importo(p.CostoDopo)</td>
+                                        <td class="num">@Importo((p.MdcDopo ?? 0) - (p.MdcPrima ?? 0))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                @if (c.Voci.Count > 0)
+                {
+                    <h4>Voci del computo cambiate (@c.Voci.Count)</h4>
+                    <div class="scorrevole">
+                        <table class="tabella">
+                            <thead>
+                                <tr>
+                                    <th>Tariffa</th><th>Descrizione</th><th>Esito</th>
+                                    <th class="num">Quantità prima</th><th class="num">Quantità dopo</th>
+                                    <th class="num">Prezzo prima</th><th class="num">Prezzo dopo</th>
+                                    <th class="num">Differenza ricavo netto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var v in c.Voci.Take(MassimoVoci))
+                                {
+                                    <tr class="esito-@v.Esito.ToString().ToLowerInvariant()">
+                                        <td class="codice">@v.Tariffa</td>
+                                        <td class="descrizione-breve">@v.Descrizione</td>
+                                        <td>@Testi.Esito(v.Esito)</td>
+                                        <td class="num">@(v.QuantitaPrima is null ? "" : Formato.Numero(v.QuantitaPrima))</td>
+                                        <td class="num">@(v.QuantitaDopo is null ? "" : Formato.Numero(v.QuantitaDopo))</td>
+                                        <td class="num">@Importo(v.PrezzoPrima)</td>
+                                        <td class="num">@Importo(v.PrezzoDopo)</td>
+                                        <td class="num">@Importo((v.NettoDopo ?? 0) - (v.NettoPrima ?? 0))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (c.Voci.Count > MassimoVoci)
+                    {
+                        <p class="testo-secondario">Sono mostrate le prime @MassimoVoci voci su @c.Voci.Count.</p>
+                    }
+                }
+            }
+        }
+    </div>
+}
+
+@code {
+    private const int MassimoVoci = 300;
+
+    [Parameter] public Guid CommessaId { get; set; }
+
+    private IReadOnlyList<VersionePreventivo>? _versioni;
+    private Fotografia? _bozza;
+    private Confronto? _impatto;
+    private Confronto? _confronto;
+    private string? _nota;
+    private bool _conferma;
+    private bool _inCorso;
+    private Guid _primaScelta;
+    private Guid _dopoScelta;
+    private string? _messaggio;
+    private bool _errore;
+
+    protected override Task OnParametersSetAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync()
+    {
+        _versioni = await Versioni.ElencoAsync(CommessaId);
+        _bozza = await Riepilogo.FotografiaAsync(CommessaId);
+        _impatto = await Versioni.ImpattoAsync(CommessaId);
+        _primaScelta = _versioni.FirstOrDefault()?.Id ?? Guid.Empty;
+        _dopoScelta = Guid.Empty;
+    }
+
+    private async Task PubblicaAsync()
+    {
+        _inCorso = true;
+        try
+        {
+            var v = await Versioni.PubblicaAsync(CommessaId, _nota ?? "");
+            (_messaggio, _errore) = ($"Pubblicata la versione ufficiale n. {v.Numero}.", false);
+            (_nota, _conferma, _confronto) = (null, false, null);
+            await AggiornaAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private async Task ConfrontaAsync()
+    {
+        try
+        {
+            _confronto = await Versioni.ConfrontaAsync(CommessaId, Id(_primaScelta), Id(_dopoScelta));
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private static Guid? Id(Guid g) => g == Guid.Empty ? null : g;
+
+    private static string Importo(decimal? v) => v is null ? "" : Formato.Euro(v);
+
+    private static string Cambio(string? prima, string? dopo) =>
+        prima == dopo ? prima ?? "" : $"{prima ?? "—"} → {dopo ?? "—"}";
+}

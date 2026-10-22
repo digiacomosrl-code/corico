@@ -159,7 +159,7 @@
                             <td>@r.RiferimentoOda</td>
                             <td>@r.Fornitore</td>
                             <td><span class="etichetta etichetta-costo-@r.Stato.ToString().ToLowerInvariant()">@r.Stato</span></td>
-                            <td class="num">@Formato.Euro(r.RicavoNetto)</td>
+                            <td class="num">@Formato.Euro(r.Ricavo)</td>
                             <td class="num">@(r.Costo is null ? "—" : Formato.Euro(r.Costo))</td>
                             <td class="num @(r.Mdc < 0 ? "testo-negativo" : "")">@(r.Mdc is null ? "" : Formato.Euro(r.Mdc))</td>
                             <td class="num">@(r.Costo is null ? "" : Formato.Percento(r.MarginePercentuale))</td>

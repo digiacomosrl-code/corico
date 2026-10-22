@@ -1,4 +1,5 @@
 using Corico.Core.Dati;
+using Corico.Core.Dominio;
 using Corico.Core.Utenti;
 using Corico.Modules.Preventivo.Dominio;
 using Microsoft.EntityFrameworkCore;
@@ -25,8 +26,30 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<OffertaVoce> OfferteVoci => Set<OffertaVoce>();
     public DbSet<RigaOfferta> RigheOfferta => Set<RigaOfferta>();
     public DbSet<CostoACorpo> CostiACorpo => Set<CostoACorpo>();
+    public DbSet<SpesaGenerale> SpeseGenerali => Set<SpesaGenerale>();
+    public DbSet<IntegrazioneRicavo> IntegrazioniRicavo => Set<IntegrazioneRicavo>();
+    public DbSet<VersionePreventivo> Versioni => Set<VersionePreventivo>();
 
     protected override bool PossiedeTabelleCore => false;
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ProteggiVersioni();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        ProteggiVersioni();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>Le versioni ufficiali sono immutabili: si possono solo aggiungere.</summary>
+    private void ProteggiVersioni()
+    {
+        if (ChangeTracker.Entries<VersionePreventivo>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new OperazioneNonValidaException("Le versioni ufficiali del preventivo non si possono modificare né eliminare.");
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -130,6 +153,28 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
         });
 
         modelBuilder.Entity<CostoACorpo>(e => e.ToTable("PRV_CostiACorpo"));
+
+        modelBuilder.Entity<SpesaGenerale>(e =>
+        {
+            e.ToTable("PRV_SpeseGenerali");
+            e.HasIndex(x => new { x.CommessaId, x.Ordine });
+            e.Property(x => x.Descrizione).HasMaxLength(300).IsRequired();
+        });
+
+        modelBuilder.Entity<IntegrazioneRicavo>(e =>
+        {
+            e.ToTable("PRV_IntegrazioniRicavo");
+            e.HasIndex(x => x.CommessaId);
+            e.Property(x => x.Descrizione).HasMaxLength(300).IsRequired();
+            e.HasOne<Pacchetto>().WithMany().HasForeignKey(x => x.PacchettoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<VersionePreventivo>(e =>
+        {
+            e.ToTable("PRV_Versioni");
+            e.HasIndex(x => new { x.CommessaId, x.Numero }).IsUnique();
+            e.Property(x => x.Nota).IsRequired();
+        });
 
         base.OnModelCreating(modelBuilder);
     }

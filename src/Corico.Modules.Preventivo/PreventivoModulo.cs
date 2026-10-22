@@ -4,6 +4,9 @@ using Corico.Core.Moduli;
 using Corico.Modules.Preventivo.Dati;
 using Corico.Modules.Preventivo.Interfaccia;
 using Corico.Modules.Preventivo.Servizi;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,6 +25,8 @@ public sealed class PreventivoModulo : ICoricoModulo
     [
         new("Preventivo", typeof(SchedaPreventivo), Ordine: 10),
         new("Pacchetti", typeof(SchedaPacchetti), Ordine: 20),
+        new("Riepilogo economico", typeof(SchedaRiepilogo), Ordine: 30),
+        new("Versioni", typeof(SchedaVersioni), Ordine: 40),
     ];
 
     public void RegistraServizi(IServiceCollection servizi, PercorsiDati percorsi)
@@ -32,6 +37,9 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<ImportazioneComputoService>();
         servizi.AddSingleton<PacchettiService>();
         servizi.AddSingleton<ImportazionePianificazioneService>();
+        servizi.AddSingleton<RiepilogoService>();
+        servizi.AddSingleton<VersioniService>();
+        servizi.AddSingleton<EsportazioniService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)
@@ -39,4 +47,20 @@ public sealed class PreventivoModulo : ICoricoModulo
         await using var db = await servizi.GetRequiredService<IDbContextFactory<PreventivoDbContext>>().CreateDbContextAsync(ct);
         await db.Database.MigrateAsync(ct);
     }
+
+    public void MappaIndirizzi(IEndpointRouteBuilder app)
+    {
+        var gruppo = app.MapGroup("/preventivo/{commessaId:guid}");
+        gruppo.MapGet("/computo.xlsx", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.ComputoExcelAsync(commessaId, versione, ct)));
+        gruppo.MapGet("/riepilogo.xlsx", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.RiepilogoExcelAsync(commessaId, versione, ct)));
+        gruppo.MapGet("/riepilogo.pdf", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.RiepilogoPdfAsync(commessaId, versione, ct)));
+        gruppo.MapGet("/pacchetti/{pacchettoId:guid}.pdf", (Guid commessaId, Guid pacchettoId, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.PacchettoPdfAsync(commessaId, pacchettoId, ct)));
+    }
+
+    private static async Task<IResult> Rispondi(Task<FileEsportato?> esportazione) =>
+        await esportazione is { } f ? Results.File(f.Contenuto, f.TipoContenuto, f.Nome) : Results.NotFound();
 }

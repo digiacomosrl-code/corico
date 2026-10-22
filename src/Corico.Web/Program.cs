@@ -64,5 +64,7 @@ app.MapGet("/documenti/indice.csv", async (DocumentiService documenti, Cancellat
     return Results.File(bytes, "text/csv", $"indice-documenti-{DateTime.Now:yyyyMMdd}.csv");
 });
 
+foreach (var modulo in moduliAttivi) modulo.MappaIndirizzi(app);
+
 app.Logger.LogInformation("Corico avviato su http://127.0.0.1:{Porta} — cartella dati {Cartella}", opzioni.Porta, percorsi.Radice);
 app.Run();

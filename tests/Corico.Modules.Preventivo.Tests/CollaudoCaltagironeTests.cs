@@ -52,5 +52,25 @@ public class CollaudoCaltagironeTests(ITestOutputHelper output)
         Assert.Equal(StatoCosto.Provvisorio, ponteggio.Pacchetto.StatoCosto);
         Assert.Contains(ponteggio.Note, n => n.Iniziali == "DGS" && n.Data == new DateOnly(2024, 11, 25));
         Assert.All(ponteggio.Voci, v => Assert.Equal(100m, v.PercentualeNonSoggetta));
+
+        // Riepilogo di commessa coerente con il tabellone e stampe generate su dati reali.
+        var foto = await amb.Get<RiepilogoService>().FotografiaAsync(commessa.Id);
+        Assert.Equal(Math.Round(tabellone.CostoPacchetti, 2), Math.Round(foto.Totali.Costo, 2));
+        Assert.Equal(Math.Round(tabellone.RicavoPacchetti, 2), Math.Round(foto.Totali.RicavoPacchetti, 2));
+        output.WriteLine($"Ricavo {foto.Totali.Ricavo:N2}, costo {foto.Totali.Costo:N2}, MDC {foto.Totali.Mdc:N2}, senza costo {foto.Totali.RicavoSenzaCosto:N2}");
+
+        var esportazioni = amb.Get<EsportazioniService>();
+        var stampe = new[]
+        {
+            (await esportazioni.RiepilogoPdfAsync(commessa.Id, null))!,
+            (await esportazioni.PacchettoPdfAsync(commessa.Id, Riga("Ponteggio").Id))!,
+            (await esportazioni.PacchettoPdfAsync(commessa.Id, Riga("Vetrate interne").Id))!,
+            (await esportazioni.RiepilogoExcelAsync(commessa.Id, null))!,
+            (await esportazioni.ComputoExcelAsync(commessa.Id, null))!,
+        };
+        // Per controllare le stampe a vista: CORICO_USCITA_STAMPE=<cartella>.
+        if (Environment.GetEnvironmentVariable("CORICO_USCITA_STAMPE") is { Length: > 0 } cartella)
+            foreach (var f in stampe) await File.WriteAllBytesAsync(Path.Combine(cartella, f.Nome), f.Contenuto);
+        Assert.All(stampe, f => Assert.True(f.Contenuto.Length > 1000));
     }
 }

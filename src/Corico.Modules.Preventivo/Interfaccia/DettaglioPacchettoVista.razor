@@ -24,6 +24,7 @@
 
 <div class="riga-form">
     <button class="pulsante" @onclick="OnChiudi">← Tabellone</button>
+    <a class="pulsante" href="@($"preventivo/{CommessaId}/pacchetti/{PacchettoId}.pdf")" target="_blank">Stampa A4</a>
     <h3 class="spazio">@_dettaglio.Pacchetto.Descrizione</h3>
     @if (_dettaglio.Scelta is { } s)
     {

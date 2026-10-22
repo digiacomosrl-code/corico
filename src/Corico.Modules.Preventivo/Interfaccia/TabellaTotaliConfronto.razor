@@ -1,0 +1,24 @@
+@* Totali di due fotografie del preventivo affiancati, con la differenza. *@
+<table class="tabella confronto-totali">
+    <thead>
+        <tr><th>Grandezza</th><th class="num">@Confronto.EtichettaPrima</th><th class="num">@Confronto.EtichettaDopo</th><th class="num">Differenza</th></tr>
+    </thead>
+    <tbody>
+        @foreach (var t in Confronto.Totali.Where(t => !SoloCambiati || t.Cambiata))
+        {
+            <tr class="@(t.Cambiata ? "cambiata" : "")">
+                <td>@t.Grandezza</td>
+                <td class="num">@Valore(t, t.Prima)</td>
+                <td class="num">@Valore(t, t.Dopo)</td>
+                <td class="num">@(t.Cambiata ? Valore(t, t.Differenza) : "")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    [Parameter, EditorRequired] public Confronto Confronto { get; set; } = default!;
+    [Parameter] public bool SoloCambiati { get; set; }
+
+    private static string Valore(DifferenzaTotale t, decimal? v) => t.Percentuale ? Formato.Percento(v) : Formato.Euro(v);
+}

@@ -172,3 +172,20 @@ label.pulsante { display: inline-flex; align-items: center; }
 .etichetta-costo-provvisorio { background: var(--ambra-chiaro); color: var(--ambra); }
 .etichetta-costo-definitivo { background: var(--verde-chiaro); color: var(--verde); }
 .tabella thead th.colonna-scelta { background: var(--verde) !important; color: #fff; }
+
+/* Modulo Preventivo – rilascio 1C: riepilogo economico e versioni */
+.intestazione-riquadro { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.intestazione-riquadro h3 { margin: 0; }
+.azioni-in-linea { display: flex; gap: .5rem; flex-wrap: wrap; }
+.azioni-riga { white-space: nowrap; text-align: right; }
+.colonne-preventivo + .colonne-preventivo { margin-top: 1rem; }
+.colonne-preventivo { margin-bottom: 1rem; }
+.elenco-avvisi .avviso { padding: .45rem .75rem; border: none; border-radius: var(--raggio); margin-bottom: .35rem; }
+.confronto-totali tr.cambiata td:first-child { font-weight: 600; }
+tr.esito-aggiunto td { color: var(--verde); }
+tr.esito-eliminato td { color: var(--testo-secondario); text-decoration: line-through; }
+.descrizione-breve { max-width: 32rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.griglia-form.due-colonne { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.griglia-form.due-colonne input, .griglia-form.due-colonne select, .griglia-form.due-colonne textarea { width: 100%; box-sizing: border-box; }
+.tabella td.num, .tabella th.num { white-space: nowrap; }
+.riquadro .tabella + form { margin-top: .75rem; }

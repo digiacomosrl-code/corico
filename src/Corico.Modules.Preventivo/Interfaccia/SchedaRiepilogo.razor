@@ -1,0 +1,277 @@
+@* Scheda "Riepilogo economico" della commessa (rilascio 1C): ricavi, costi, MDC, spese generali, risultato, obiettivo e avvisi. *@
+@inject RiepilogoService Riepilogo
+
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@if (_foto is null)
+{
+    <p class="testo-secondario">Caricamento…</p>
+    return;
+}
+
+@{ var t = _foto.Totali; }
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Esportazioni</h3>
+        <div class="azioni-in-linea">
+            <a class="pulsante" href="@($"preventivo/{CommessaId}/riepilogo.pdf")" target="_blank">Riepilogo PDF (A4)</a>
+            <a class="pulsante" href="@($"preventivo/{CommessaId}/riepilogo.xlsx")" download>Riepilogo Excel</a>
+            <a class="pulsante" href="@($"preventivo/{CommessaId}/computo.xlsx")" download>Computo Excel</a>
+        </div>
+    </div>
+    <p class="testo-secondario">Le esportazioni riportano la bozza attuale. Le versioni ufficiali si stampano dalla scheda Versioni.</p>
+</div>
+
+@if (_avvisi.Count > 0)
+{
+    <div class="riquadro elenco-avvisi">
+        <h3>Avvisi</h3>
+        @foreach (var a in _avvisi)
+        {
+            <div class="avviso avviso-@a.Gravita.ToString().ToLowerInvariant()"><strong>@a.Problema</strong> @a.AzioneSuggerita</div>
+        }
+    </div>
+}
+
+<div class="colonne-preventivo">
+    <div class="riquadro">
+        <h3>Riepilogo economico</h3>
+        <table class="tabella quadro">
+            <tbody>
+                <tr><td>Ricavo netto da computo (ribasso @Formato.Percento(_foto.RibassoPercentuale))</td><td class="num">@Formato.Euro(t.RicavoNettoComputo)</td></tr>
+                <tr><td>Ricavo dei pacchetti, con quantità di pianificazione e integrazioni</td><td class="num">@Formato.Euro(t.RicavoPacchetti)</td></tr>
+                <tr><td>Ricavo delle voci non assegnate (@t.VociNonAssegnate)</td><td class="num">@Formato.Euro(t.RicavoNonAssegnato)</td></tr>
+                <tr><td>Integrazioni di ricavo di commessa</td><td class="num">@Formato.Euro(t.IntegrazioniCommessa)</td></tr>
+                <tr class="totale"><td>Ricavo di commessa</td><td class="num">@Formato.Euro(t.Ricavo)</td></tr>
+                <tr><td>Costo pianificato (offerte scelte)</td><td class="num">− @Formato.Euro(t.Costo)</td></tr>
+                <tr class="totale"><td>MDC</td><td class="num @(t.Mdc < 0 ? "testo-negativo" : "")">@Formato.Euro(t.Mdc)</td></tr>
+                <tr><td>Spese generali</td><td class="num">− @Formato.Euro(t.SpeseGenerali)</td></tr>
+                <tr class="totale"><td>Risultato</td><td class="num @(t.Risultato < 0 ? "testo-negativo" : "")">@Formato.Euro(t.Risultato)</td></tr>
+            </tbody>
+        </table>
+        @if (t.RicavoSenzaCosto != 0)
+        {
+            <p class="testo-differenza">
+                @Formato.Euro(t.RicavoSenzaCosto) di ricavo non hanno ancora un costo pianificato
+                (@t.PacchettiSenzaCosto pacchetti senza offerta scelta, @t.VociNonAssegnate voci non assegnate): MDC e risultato sono sovrastimati.
+            </p>
+        }
+        @if (Math.Abs(t.Ricavo - t.IntegrazioniCommessa - t.RicavoNettoComputo - _foto.Pacchetti.Sum(p => p.Integrazioni)) >= 0.01m)
+        {
+            <p class="testo-secondario">
+                Il ricavo dei pacchetti differisce dal computo di
+                @Formato.Euro(t.Ricavo - t.IntegrazioniCommessa - _foto.Pacchetti.Sum(p => p.Integrazioni) - t.RicavoNettoComputo)
+                per le quantità di pianificazione diverse da quelle del computo.
+            </p>
+        }
+    </div>
+
+    <div class="riquadro">
+        <h3>Margine e obiettivo</h3>
+        <div class="riga-form">
+            <label>
+                Obiettivo di margine sui ricavi (%)
+                <input type="number" step="0.01" min="0" max="99.99" @bind="_obiettivo" />
+            </label>
+            <button class="pulsante primario" @onclick="SalvaObiettivoAsync" disabled="@(_obiettivo == _foto.ObiettivoMarginePercentuale)">Applica</button>
+        </div>
+        <table class="tabella quadro">
+            <tbody>
+                <tr><td>Margine sui ricavi (MDC / ricavo)</td><td class="num">@Formato.Percento(t.MarginePercentuale)</td></tr>
+                <tr><td>Ricarico sui costi (MDC / costo)</td><td class="num">@Formato.Percento(t.RicaricoPercentuale)</td></tr>
+                <tr><td>Risultato sui ricavi</td><td class="num">@Formato.Percento(t.RisultatoPercentuale)</td></tr>
+                @if (_foto.ObiettivoMarginePercentuale is { } o)
+                {
+                    var scostamento = t.MarginePercentuale - o;
+                    <tr><td>Obiettivo di margine</td><td class="num">@Formato.Percento(o)</td></tr>
+                    <tr class="totale"><td>Scostamento dall'obiettivo</td><td class="num @(scostamento < 0 ? "testo-negativo" : "")">@Formato.Percento(scostamento)</td></tr>
+                }
+            </tbody>
+        </table>
+        <p class="testo-secondario">L'obiettivo si confronta con il margine sui ricavi della commessa e di ogni pacchetto; i pacchetti sotto obiettivo sono segnalati negli avvisi.</p>
+    </div>
+</div>
+
+<div class="colonne-preventivo">
+    <div class="riquadro">
+        <h3>Spese generali</h3>
+        <p class="testo-secondario">Non sono mai ripartite sulle lavorazioni: riducono solo il risultato. La percentuale si applica alla base indicata.</p>
+        @if (_foto.SpeseGenerali.Count > 0)
+        {
+            <table class="tabella">
+                <thead><tr><th>Descrizione</th><th>Calcolo</th><th class="num">Importo</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var s in _foto.SpeseGenerali)
+                    {
+                        <tr>
+                            <td>@s.Descrizione @if (s.Note is not null) { <div class="testo-secondario">@s.Note</div> }</td>
+                            <td>@(s.Modo == ModoSpesaGenerale.Importo ? "Importo" : $"{Formato.Percento(s.Percentuale)} su {Testi.BaseSpesa(s.Base).ToLowerInvariant()}")</td>
+                            <td class="num">@Formato.Euro(s.ImportoCalcolato)</td>
+                            <td class="azioni-riga">
+                                <button class="pulsante piccolo" @onclick="() => ModificaSpesa(s.Id)">Modifica</button>
+                                <button class="pulsante piccolo" @onclick="() => EliminaSpesaAsync(s.Id)">Elimina</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot><tr><td colspan="2">Totale</td><td class="num">@Formato.Euro(t.SpeseGenerali)</td><td></td></tr></tfoot>
+            </table>
+        }
+        <EditForm Model="_spesa" OnValidSubmit="SalvaSpesaAsync" FormName="spesa-generale">
+            <div class="griglia-form due-colonne">
+                <label class="largo">Descrizione <InputText @bind-Value="_spesa.Descrizione" /></label>
+                <label>
+                    Calcolo
+                    <InputSelect @bind-Value="_spesa.Modo">
+                        <option value="@ModoSpesaGenerale.Importo">Importo</option>
+                        <option value="@ModoSpesaGenerale.Percentuale">Percentuale</option>
+                    </InputSelect>
+                </label>
+                @if (_spesa.Modo == ModoSpesaGenerale.Importo)
+                {
+                    <label>Importo (€) <InputNumber @bind-Value="_spesa.Importo" step="0.01" /></label>
+                }
+                else
+                {
+                    <label>Percentuale (%) <InputNumber @bind-Value="_spesa.Percentuale" step="0.01" /></label>
+                    <label class="largo">
+                        Base
+                        <InputSelect @bind-Value="_spesa.Base">
+                            @foreach (var b in Enum.GetValues<BaseSpesaGenerale>())
+                            {
+                                <option value="@b">@Testi.BaseSpesa(b)</option>
+                            }
+                        </InputSelect>
+                    </label>
+                }
+                <label class="largo">Note <InputText @bind-Value="_spesa.Note" /></label>
+            </div>
+            <div class="azioni">
+                <button type="submit" class="pulsante primario">@(_spesa.Id == Guid.Empty ? "Aggiungi spesa" : "Salva modifiche")</button>
+                @if (_spesa.Id != Guid.Empty) { <button type="button" class="pulsante" @onclick="() => _spesa = NuovaSpesa()">Annulla</button> }
+            </div>
+        </EditForm>
+    </div>
+
+    <div class="riquadro">
+        <h3>Integrazioni di ricavo</h3>
+        <p class="testo-secondario">Ricavi a importo non presenti nel computo (es. oneri di discarica da recuperare), di un pacchetto o dell'intera commessa.</p>
+        @if (_foto.Integrazioni.Count > 0)
+        {
+            <table class="tabella">
+                <thead><tr><th>Descrizione</th><th>Pacchetto</th><th class="num">Importo</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var i in _foto.Integrazioni)
+                    {
+                        <tr>
+                            <td>@i.Descrizione @if (i.Note is not null) { <div class="testo-secondario">@i.Note</div> }</td>
+                            <td>@(i.Pacchetto ?? "Commessa")</td>
+                            <td class="num">@Formato.Euro(i.Importo)</td>
+                            <td class="azioni-riga">
+                                <button class="pulsante piccolo" @onclick="() => ModificaIntegrazione(i.Id)">Modifica</button>
+                                <button class="pulsante piccolo" @onclick="() => EliminaIntegrazioneAsync(i.Id)">Elimina</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        <EditForm Model="_integrazione" OnValidSubmit="SalvaIntegrazioneAsync" FormName="integrazione-ricavo">
+            <div class="griglia-form due-colonne">
+                <label class="largo">Descrizione <InputText @bind-Value="_integrazione.Descrizione" /></label>
+                <label>Importo (€) <InputNumber @bind-Value="_integrazione.Importo" step="0.01" /></label>
+                <label>
+                    Pacchetto
+                    <InputSelect @bind-Value="_integrazione.PacchettoId">
+                        <option value="">Intera commessa</option>
+                        @foreach (var p in _foto.Pacchetti)
+                        {
+                            <option value="@p.Id">@p.Ordine. @p.Descrizione</option>
+                        }
+                    </InputSelect>
+                </label>
+                <label class="largo">Note <InputText @bind-Value="_integrazione.Note" /></label>
+            </div>
+            <div class="azioni">
+                <button type="submit" class="pulsante primario">@(_integrazione.Id == Guid.Empty ? "Aggiungi integrazione" : "Salva modifiche")</button>
+                @if (_integrazione.Id != Guid.Empty) { <button type="button" class="pulsante" @onclick="() => _integrazione = NuovaIntegrazione()">Annulla</button> }
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+
+    private Fotografia? _foto;
+    private IReadOnlyList<Avviso> _avvisi = [];
+    private decimal? _obiettivo;
+    private SpesaGenerale _spesa = NuovaSpesa();
+    private IntegrazioneRicavo _integrazione = NuovaIntegrazione();
+    private string? _messaggio;
+    private bool _errore;
+
+    protected override Task OnParametersSetAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync()
+    {
+        _foto = await Riepilogo.FotografiaAsync(CommessaId);
+        _avvisi = await Riepilogo.AvvisiAsync(CommessaId);
+        _obiettivo = _foto.ObiettivoMarginePercentuale;
+    }
+
+    private static SpesaGenerale NuovaSpesa() => new() { Id = Guid.Empty, Modo = ModoSpesaGenerale.Percentuale, Base = BaseSpesaGenerale.RicavoCommessa };
+
+    private static IntegrazioneRicavo NuovaIntegrazione() => new() { Id = Guid.Empty };
+
+    private Task SalvaObiettivoAsync() => Esegui(() => Riepilogo.ImpostaObiettivoAsync(CommessaId, _obiettivo), "Obiettivo di margine aggiornato.");
+
+    private async Task ModificaSpesa(Guid id)
+    {
+        var s = (await Riepilogo.SpeseGeneraliAsync(CommessaId)).FirstOrDefault(x => x.Id == id);
+        if (s is not null) _spesa = s;
+    }
+
+    private Task SalvaSpesaAsync() => Esegui(async () =>
+    {
+        await Riepilogo.SalvaSpesaAsync(CommessaId, _spesa);
+        _spesa = NuovaSpesa();
+    }, "Spesa generale salvata.");
+
+    private Task EliminaSpesaAsync(Guid id) => Esegui(() => Riepilogo.EliminaSpesaAsync(CommessaId, id), "Spesa generale eliminata.");
+
+    private async Task ModificaIntegrazione(Guid id)
+    {
+        var i = (await Riepilogo.IntegrazioniAsync(CommessaId)).FirstOrDefault(x => x.Id == id);
+        if (i is not null) _integrazione = i;
+    }
+
+    private Task SalvaIntegrazioneAsync() => Esegui(async () =>
+    {
+        await Riepilogo.SalvaIntegrazioneAsync(CommessaId, _integrazione);
+        _integrazione = NuovaIntegrazione();
+    }, "Integrazione di ricavo salvata.");
+
+    private Task EliminaIntegrazioneAsync(Guid id) => Esegui(() => Riepilogo.EliminaIntegrazioneAsync(CommessaId, id), "Integrazione eliminata.");
+
+    private async Task Esegui(Func<Task> azione, string esito)
+    {
+        try
+        {
+            await azione();
+            (_messaggio, _errore) = (esito, false);
+            await AggiornaAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+}

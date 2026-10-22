@@ -9,18 +9,20 @@ namespace Corico.Modules.Preventivo.Servizi;
 public sealed record RigaTabellone(
     Guid Id, int Versione, int Ordine, string? Codice, string Descrizione, TipoAffidamento Tipo, string? RiferimentoOda,
     string? Fornitore, StatoCosto Stato, int NumeroVoci, int NumeroOfferte, bool OffertaScelta,
-    decimal RicavoNetto, decimal? Costo, NotaPacchetto? UltimaNota)
+    decimal RicavoNetto, decimal? Costo, NotaPacchetto? UltimaNota, decimal Integrazioni = 0)
 {
-    public decimal? Mdc => Costo is null ? null : RicavoNetto - Costo;
-    public decimal? MarginePercentuale => Importi.MargineSulRicavo(RicavoNetto, Costo);
+    /// <summary>Ricavo del pacchetto (R7): ricavo netto delle voci più integrazioni a importo.</summary>
+    public decimal Ricavo => RicavoNetto + Integrazioni;
+    public decimal? Mdc => Costo is null ? null : Ricavo - Costo;
+    public decimal? MarginePercentuale => Importi.MargineSulRicavo(Ricavo, Costo);
 }
 
 public sealed record Tabellone(IReadOnlyList<RigaTabellone> Righe, decimal RibassoPercentuale,
     int VociNonAssegnate, decimal RicavoNonAssegnato)
 {
-    public decimal RicavoPacchetti => Righe.Sum(r => r.RicavoNetto);
+    public decimal RicavoPacchetti => Righe.Sum(r => r.Ricavo);
     public decimal CostoPacchetti => Righe.Sum(r => r.Costo ?? 0);
-    public decimal RicavoConCosto => Righe.Where(r => r.Costo is not null).Sum(r => r.RicavoNetto);
+    public decimal RicavoConCosto => Righe.Where(r => r.Costo is not null).Sum(r => r.Ricavo);
     public decimal MdcPacchetti => RicavoConCosto - CostoPacchetti;
     public decimal? MarginePercentuale => Importi.MargineSulRicavo(RicavoConCosto, CostoPacchetti);
     public int PacchettiSenzaCosto => Righe.Count(r => r.Costo is null);
@@ -48,6 +50,9 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
         var note = (await db.NotePacchetti.AsNoTracking().Where(n => n.CommessaId == commessaId).ToListAsync(ct))
             .GroupBy(n => n.PacchettoId)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(n => n.Data).ThenByDescending(n => n.CreatoIl).First());
+        var integrazioni = (await db.IntegrazioniRicavo.AsNoTracking()
+                .Where(i => i.CommessaId == commessaId && i.PacchettoId != null).ToListAsync(ct))
+            .GroupBy(i => i.PacchettoId!.Value).ToDictionary(g => g.Key, g => g.Sum(i => i.Importo));
 
         var righe = new List<RigaTabellone>();
         foreach (var p in pacchetti)
@@ -68,7 +73,7 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             }
             righe.Add(new RigaTabellone(p.Id, p.Versione, p.Ordine, p.Codice, p.Descrizione, p.Tipo, p.RiferimentoOda,
                 scelta?.NomeFornitore, p.StatoCosto, vociPacchetto.Count, offertePacchetto.Count, scelta is not null,
-                ricavo, costo, note.GetValueOrDefault(p.Id)));
+                ricavo, costo, note.GetValueOrDefault(p.Id), integrazioni.GetValueOrDefault(p.Id)));
         }
 
         var assegnate = pacchetti.SelectMany(p => p.Voci).Select(v => v.VoceComputoId).ToHashSet();
@@ -386,11 +391,11 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             r.VoceComputoId = null;
     }
 
-    private static async Task<List<Offerta>> CaricaOfferteAsync(PreventivoDbContext db, Guid commessaId, CancellationToken ct) =>
+    internal static async Task<List<Offerta>> CaricaOfferteAsync(PreventivoDbContext db, Guid commessaId, CancellationToken ct) =>
         await db.Offerte.AsNoTracking().AsSplitQuery().Include(o => o.Voci).Include(o => o.Righe).Include(o => o.CostiACorpo)
             .Where(o => o.CommessaId == commessaId).ToListAsync(ct);
 
-    private static async Task<Dictionary<Guid, (VoceDiCalcolo Voce, int Ordine, bool Archiviata)>> VociDiCalcoloAsync(
+    internal static async Task<Dictionary<Guid, (VoceDiCalcolo Voce, int Ordine, bool Archiviata)>> VociDiCalcoloAsync(
         PreventivoDbContext db, Guid commessaId, CancellationToken ct)
     {
         var ids = await db.PacchettiVoci.Where(v => v.CommessaId == commessaId).Select(v => v.VoceComputoId).ToListAsync(ct);
@@ -399,7 +404,7 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             v.PercentualeNonSoggetta), v.Ordine, v.Archiviata));
     }
 
-    private static List<VoceDiCalcolo> VociDel(Pacchetto p, Dictionary<Guid, (VoceDiCalcolo Voce, int Ordine, bool Archiviata)> voci) =>
+    internal static List<VoceDiCalcolo> VociDel(Pacchetto p, Dictionary<Guid, (VoceDiCalcolo Voce, int Ordine, bool Archiviata)> voci) =>
         p.Voci.Select(v => voci.GetValueOrDefault(v.VoceComputoId))
             .Where(v => v.Voce is not null && !v.Archiviata)
             .OrderBy(v => v.Ordine).Select(v => v.Voce).ToList();

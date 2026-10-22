@@ -25,4 +25,27 @@ public static class Testi
         TipoOfferta.Nolo => "Nolo",
         _ => t.ToString(),
     };
+
+    public static string Stato(StatoCosto s) => s switch
+    {
+        StatoCosto.Previsione => "Previsione",
+        StatoCosto.Provvisorio => "Provvisorio",
+        StatoCosto.Definitivo => "Definitivo",
+        _ => s.ToString(),
+    };
+
+    public static string BaseSpesa(BaseSpesaGenerale b) => b switch
+    {
+        BaseSpesaGenerale.RicavoCommessa => "Ricavo di commessa",
+        BaseSpesaGenerale.CostoCommessa => "Costo pianificato",
+        BaseSpesaGenerale.ImportoLavoriLordo => "Importo lavori lordo",
+        _ => b.ToString(),
+    };
+
+    public static string Esito(Servizi.EsitoConfronto e) => e switch
+    {
+        Servizi.EsitoConfronto.Aggiunto => "Aggiunto",
+        Servizi.EsitoConfronto.Eliminato => "Eliminato",
+        _ => "Modificato",
+    };
 }

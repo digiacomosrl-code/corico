@@ -10,6 +10,9 @@ public sealed class Preventivo : EntitaBase
     /// <summary>Ribasso d'asta unico di commessa, in percentuale (es. 21,5). Decisione del 22/10/2026.</summary>
     public decimal RibassoPercentuale { get; set; }
 
+    /// <summary>Obiettivo di margine (MDC sui ricavi, in percentuale); null se non fissato.</summary>
+    public decimal? ObiettivoMarginePercentuale { get; set; }
+
     public string? Note { get; set; }
 }
 

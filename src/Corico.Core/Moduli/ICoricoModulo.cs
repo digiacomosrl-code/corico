@@ -1,5 +1,6 @@
 using System.Reflection;
 using Corico.Core.Configurazione;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Corico.Core.Moduli;
@@ -28,6 +29,9 @@ public interface ICoricoModulo
 
     /// <summary>Applica le migrazioni del modulo (tabelle con il proprio prefisso).</summary>
     Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct);
+
+    /// <summary>Indirizzi HTTP del modulo (es. scaricamento di esportazioni). Facoltativo.</summary>
+    void MappaIndirizzi(IEndpointRouteBuilder app) { }
 }
 
 public sealed record VoceMenu(string Titolo, string Indirizzo, int Ordine = 100);

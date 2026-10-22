@@ -117,7 +117,7 @@ public static class EsportazionePdf
 
         var info = Tabella(sec, ("", 4, false), ("", 9.35, false), ("", 4, false), ("", 9.35, false), intestazioneColonne: false);
         Riga(info, "Affidamento", Testi.Affidamento(p.Tipo), "Stato del costo", Testi.Stato(p.StatoCosto));
-        Riga(info, "Gruppo / ODA", p.RiferimentoOda ?? "—", "Ribasso d'asta", Formato.Percento(d.RibassoPercentuale));
+        Riga(info, "Codice / ODA", $"{p.Codice ?? "—"} / {p.RiferimentoOda ?? "—"}", "Ribasso d'asta", Formato.Percento(d.RibassoPercentuale));
         Riga(info, "Offerta scelta", scelta is null ? "Nessuna" : $"{scelta.Offerta.NomeFornitore} – {Testi.Offerta(scelta.Offerta.Tipo)}",
             "Riferimento offerta", scelta is null ? "—" : Riferimento(scelta.Offerta));
         foreach (var c in info.Rows.Cast<Row>().SelectMany(r => new[] { r.Cells[0], r.Cells[2] })) c.Format.Font.Bold = true;

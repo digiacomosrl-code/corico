@@ -96,8 +96,8 @@ public sealed class PreventivoModulo : ICoricoModulo
         var gruppo = app.MapGroup("/preventivo/{commessaId:guid}");
         gruppo.MapGet("/computo.xlsx", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.ComputoExcelAsync(commessaId, versione, ct)));
-        gruppo.MapGet("/lista-spesa.xlsx", (Guid commessaId, EsportazioniService e, CancellationToken ct) =>
-            Rispondi(e.ListaSpesaExcelAsync(commessaId, ct)));
+        gruppo.MapGet("/lista-spesa.xlsx", (Guid commessaId, string? fornitore, string? cerca, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.ListaSpesaExcelAsync(commessaId, fornitore, cerca, ct)));
         gruppo.MapGet("/riepilogo.xlsx", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.RiepilogoExcelAsync(commessaId, versione, ct)));
         gruppo.MapGet("/riepilogo.pdf", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>

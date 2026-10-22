@@ -37,12 +37,18 @@ public sealed class EsportazioniService(
         return new(EsportazionePdf.Riepilogo(dati.Value.Intestazione, dati.Value.Fotografia, avvisi), TipoPdf, Nome("Riepilogo", dati.Value, "pdf"));
     }
 
-    public async Task<FileEsportato?> ListaSpesaExcelAsync(Guid commessaId, CancellationToken ct = default)
+    public async Task<FileEsportato?> ListaSpesaExcelAsync(Guid commessaId, string? fornitore = null, string? cerca = null, CancellationToken ct = default)
     {
         var commessa = await commesse.OttieniAsync(commessaId, ct);
         if (commessa is null) return null;
-        var lista = await listaSpesa.CalcolaAsync(commessaId, ct);
-        var intestazione = new IntestazioneStampa(NomeCommessa(commessa), $"Bozza al {Formato.DataOra(orologio.GetUtcNow().UtcDateTime)} – offerte scelte");
+        var lista = (await listaSpesa.CalcolaAsync(commessaId, ct)).Filtra(fornitore, cerca);
+        var filtro = string.Join(", ", new[]
+        {
+            string.IsNullOrWhiteSpace(fornitore) ? null : $"fornitore {fornitore}",
+            string.IsNullOrWhiteSpace(cerca) ? null : $"ricerca «{cerca.Trim()}»",
+        }.Where(x => x is not null));
+        var intestazione = new IntestazioneStampa(NomeCommessa(commessa),
+            $"Bozza al {Formato.DataOra(orologio.GetUtcNow().UtcDateTime)} – offerte scelte" + (filtro.Length > 0 ? $" – filtro: {filtro}" : ""));
         return new(EsportazioneExcel.ListaSpesa(intestazione, lista), TipoExcel, $"Lista della Spesa {commessa.Codice} {orologio.GetLocalNow():yyyyMMdd}.xlsx");
     }
 

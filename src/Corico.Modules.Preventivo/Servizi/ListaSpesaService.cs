@@ -35,6 +35,28 @@ public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSen
 {
     public decimal Totale => Righe.Sum(r => r.Importo);
 
+    public IReadOnlyList<string> Fornitori =>
+        Righe.Select(r => r.Fornitore ?? RigaSpesa.DaAssegnare).Distinct().Order(StringComparer.CurrentCultureIgnoreCase).ToList();
+
+    /// <summary>
+    /// Righe del fornitore indicato (tutti se vuoto) il cui codice contiene il testo cercato
+    /// o la cui descrizione contiene tutte le parole cercate.
+    /// </summary>
+    public ListaSpesa Filtra(string? fornitore, string? testo)
+    {
+        var t = testo?.Trim() ?? "";
+        var parole = t.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return this with
+        {
+            Righe = Righe.Where(r =>
+                    (string.IsNullOrEmpty(fornitore) || string.Equals(r.Fornitore ?? RigaSpesa.DaAssegnare, fornitore, StringComparison.OrdinalIgnoreCase))
+                    && (t.Length == 0
+                        || (r.Codice?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false)
+                        || parole.All(w => r.Descrizione.Contains(w, StringComparison.OrdinalIgnoreCase))))
+                .ToList(),
+        };
+    }
+
     public IEnumerable<(CategoriaRisorsa Categoria, decimal Importo)> PerCategoria =>
         Enum.GetValues<CategoriaRisorsa>().Select(c => (c, Righe.Where(r => r.Categoria == c).Sum(r => r.Importo)));
 

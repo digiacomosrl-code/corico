@@ -167,4 +167,25 @@ public class OrdiniTests
         Assert.All(lista.Righe, r => Assert.Equal(RigaSpesa.DaAssegnare, r.Fornitore));
         Assert.All(lista.Aggregata(), r => Assert.Equal(RigaSpesa.DaAssegnare, r.Fornitore));
     }
+
+    [Fact]
+    public async Task Lista_della_spesa_filtrata_per_fornitore_codice_e_descrizione()
+    {
+        var (amb, id, _) = await PreparaAsync();
+        await using var _ = amb;
+        var lista = await amb.Get<ListaSpesaService>().CalcolaAsync(id);
+        Assert.Equal(["Padilla"], lista.Fornitori);
+        Assert.Equal(lista.Righe.Count, lista.Filtra("padilla", null).Righe.Count);
+        Assert.Empty(lista.Filtra(RigaSpesa.DaAssegnare, null).Righe);
+
+        var porta = lista.Filtra(null, "porta");
+        Assert.Equal(2, porta.Righe.Count);            // «Porta a un'anta» e «Porta a due ante»
+        Assert.Single(lista.Filtra(null, "porta anta").Righe);
+        Assert.Equal(5_000m, porta.Totale);
+        var codice = lista.Righe.First(r => r.Descrizione == "Trasporto").Codice!;
+        Assert.Equal("Trasporto", Assert.Single(lista.Filtra(null, codice.ToLowerInvariant()).Righe).Descrizione);
+
+        var excel = await amb.Get<EsportazioniService>().ListaSpesaExcelAsync(id, null, "porta");
+        Assert.NotNull(excel);
+    }
 }

@@ -1,18 +1,19 @@
 @* Scheda "Lista della Spesa" della commessa (rilascio 1D): risorse e costi delle offerte scelte, per categoria e per voce. *@
 @inject ListaSpesaService ListaSpesa
 
-@if (_lista is null)
+@if (_tutta is null)
 {
     <p class="testo-secondario">Caricamento…</p>
     return;
 }
+@{ var lista = _tutta.Filtra(_fornitore, _cerca); var filtrata = _fornitore.Length > 0 || _cerca.Trim().Length > 0; }
 
 <div class="riquadro">
     <div class="intestazione-riquadro">
         <h3>Lista della Spesa</h3>
         <div class="azioni-in-linea">
             <label class="spunta"><input type="checkbox" @bind="_perVoce" /> Dettaglio per voce</label>
-            <a class="pulsante" href="@($"preventivo/{CommessaId}/lista-spesa.xlsx")" download>Esporta in Excel</a>
+            <a class="pulsante" href="@IndirizzoExcel()" download>Esporta in Excel@(filtrata ? " (filtrata)" : "")</a>
         </div>
     </div>
     <p class="testo-secondario">
@@ -20,22 +21,37 @@
         (Fornitura → materiali e forniture, Fornitura e posa → subappalti, Manodopera e noli → manodopera), righe d'offerta e voci a corpo.
         Il totale coincide con il costo pianificato della commessa. Ogni risorsa ha un codice assegnato automaticamente (MAT, MAN, ATT, SUB, TRA, ALT), che non cambia.
     </p>
-    @if (_lista.PacchettiSenzaOfferta > 0)
+    <div class="riga-form">
+        <select @bind="_fornitore" aria-label="Filtro per fornitore">
+            <option value="">Tutti i fornitori</option>
+            @foreach (var f in _tutta.Fornitori)
+            {
+                <option value="@f">@f</option>
+            }
+        </select>
+        <input type="search" class="largo" placeholder="Cerca per codice o descrizione…" @bind="_cerca" @bind:event="oninput" />
+        @if (filtrata)
+        {
+            <button class="pulsante piccolo" @onclick="() => (_fornitore, _cerca) = (string.Empty, string.Empty)">Togli i filtri</button>
+            <span class="testo-secondario">@lista.Righe.Count righe su @_tutta.Righe.Count · totale filtrato @Formato.Euro(lista.Totale) su @Formato.Euro(_tutta.Totale)</span>
+        }
+    </div>
+    @if (lista.PacchettiSenzaOfferta > 0)
     {
-        <div class="segnalazione segnalazione-attenzione">@_lista.PacchettiSenzaOfferta pacchetti senza offerta scelta non compaiono nella lista.</div>
+        <div class="segnalazione segnalazione-attenzione">@lista.PacchettiSenzaOfferta pacchetti senza offerta scelta non compaiono nella lista.</div>
     }
-    @if (_lista.VociNonAssegnate > 0)
+    @if (lista.VociNonAssegnate > 0)
     {
-        <div class="segnalazione segnalazione-attenzione">@_lista.VociNonAssegnate voci del computo non sono assegnate a un pacchetto: il loro costo non è pianificato e non compaiono nella lista.</div>
+        <div class="segnalazione segnalazione-attenzione">@lista.VociNonAssegnate voci del computo non sono assegnate a un pacchetto: il loro costo non è pianificato e non compaiono nella lista.</div>
     }
 
     <table class="tabella quadro riepilogo-categorie">
         <tbody>
-            @foreach (var (categoria, importo) in _lista.PerCategoria)
+            @foreach (var (categoria, importo) in lista.PerCategoria)
             {
                 <tr class="@(importo == 0 ? "testo-secondario" : "")"><td>@Testi.Categoria(categoria)</td><td class="num">@Formato.Euro(importo)</td></tr>
             }
-            <tr class="totale"><td>Totale</td><td class="num">@Formato.Euro(_lista.Totale)</td></tr>
+            <tr class="totale"><td>Totale</td><td class="num">@Formato.Euro(lista.Totale)</td></tr>
         </tbody>
     </table>
 </div>
@@ -48,7 +64,7 @@
                 <thead>
                     <tr><th>Codice</th><th>Descrizione</th><th>Fornitore</th><th>U.M.</th><th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th class="num">Utilizzi</th></tr>
                 </thead>
-                @foreach (var gruppo in _lista.Aggregata().GroupBy(r => r.Categoria))
+                @foreach (var gruppo in lista.Aggregata().GroupBy(r => r.Categoria))
                 {
                     <tbody>
                         <tr class="gruppo"><td colspan="8">@Testi.Categoria(gruppo.Key)</td></tr>
@@ -82,7 +98,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var r in _lista.Righe)
+                    @foreach (var r in lista.Righe)
                     {
                         <tr>
                             <td>@r.Pacchetto</td>
@@ -107,8 +123,17 @@
 @code {
     [Parameter] public Guid CommessaId { get; set; }
 
-    private ListaSpesa? _lista;
+    private ListaSpesa? _tutta;
     private bool _perVoce;
+    private string _fornitore = "", _cerca = "";
 
-    protected override async Task OnParametersSetAsync() => _lista = await ListaSpesa.CalcolaAsync(CommessaId);
+    protected override async Task OnParametersSetAsync() => _tutta = await ListaSpesa.CalcolaAsync(CommessaId);
+
+    private string IndirizzoExcel()
+    {
+        var parametri = new List<string>();
+        if (_fornitore.Length > 0) parametri.Add("fornitore=" + Uri.EscapeDataString(_fornitore));
+        if (_cerca.Trim().Length > 0) parametri.Add("cerca=" + Uri.EscapeDataString(_cerca.Trim()));
+        return $"preventivo/{CommessaId}/lista-spesa.xlsx" + (parametri.Count > 0 ? "?" + string.Join("&", parametri) : "");
+    }
 }

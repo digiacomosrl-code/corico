@@ -53,6 +53,42 @@ public sealed class PreventivoModulo : ICoricoModulo
         await db.Database.MigrateAsync(ct);
     }
 
+    /// <summary>
+    /// Dopo un aggiornamento: ricalcola la bozza di ogni commessa e rilegge ogni versione ufficiale,
+    /// verificando che i totali della fotografia coincidano con quelli registrati alla pubblicazione.
+    /// </summary>
+    public async Task<IReadOnlyList<EsitoControllo>> ControlliDopoAggiornamentoAsync(IServiceProvider servizi, CancellationToken ct)
+    {
+        await using var db = await servizi.GetRequiredService<IDbContextFactory<PreventivoDbContext>>().CreateDbContextAsync(ct);
+        var riepilogo = servizi.GetRequiredService<RiepilogoService>();
+        var errori = new List<string>();
+
+        var commesse = await db.Preventivi.AsNoTracking().Select(p => p.CommessaId).Distinct().ToListAsync(ct);
+        foreach (var id in commesse)
+        {
+            try { await riepilogo.FotografiaAsync(id, ct); }
+            catch (Exception ex) { errori.Add($"commessa {id}: {ex.Message}"); }
+        }
+        var bozze = new EsitoControllo("Ricalcolo dei preventivi", errori.Count == 0,
+            errori.Count == 0 ? $"commesse ricalcolate: {commesse.Count}" : string.Join("; ", errori.Take(5)));
+
+        errori.Clear();
+        var versioni = await db.Versioni.AsNoTracking().ToListAsync(ct);
+        foreach (var v in versioni)
+        {
+            try
+            {
+                var t = VersioniService.Leggi(v).Totali;
+                if (t.Ricavo != v.Ricavo || t.Costo != v.Costo)
+                    errori.Add($"versione n. {v.Numero} della commessa {v.CommessaId}: totali diversi da quelli pubblicati");
+            }
+            catch (Exception ex) { errori.Add($"versione n. {v.Numero} della commessa {v.CommessaId}: {ex.Message}"); }
+        }
+        var ufficiali = new EsitoControllo("Versioni ufficiali", errori.Count == 0,
+            errori.Count == 0 ? $"versioni rilette: {versioni.Count}, totali invariati" : string.Join("; ", errori.Take(5)));
+        return [bozze, ufficiali];
+    }
+
     public void MappaIndirizzi(IEndpointRouteBuilder app)
     {
         var gruppo = app.MapGroup("/preventivo/{commessaId:guid}");

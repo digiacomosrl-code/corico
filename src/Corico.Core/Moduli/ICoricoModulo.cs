@@ -32,7 +32,16 @@ public interface ICoricoModulo
 
     /// <summary>Indirizzi HTTP del modulo (es. scaricamento di esportazioni). Facoltativo.</summary>
     void MappaIndirizzi(IEndpointRouteBuilder app) { }
+
+    /// <summary>
+    /// Controlli del modulo dopo un aggiornamento del programma (sez. 5.3), es. ricalcolo delle commesse
+    /// di riferimento. Un controllo non superato provoca il ritorno alla versione precedente.
+    /// </summary>
+    Task<IReadOnlyList<EsitoControllo>> ControlliDopoAggiornamentoAsync(IServiceProvider servizi, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<EsitoControllo>>([]);
 }
+
+public sealed record EsitoControllo(string Controllo, bool Superato, string Dettaglio);
 
 public sealed record VoceMenu(string Titolo, string Indirizzo, int Ordine = 100);
 

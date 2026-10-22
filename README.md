@@ -44,6 +44,16 @@ dotnet ef migrations add NomeMigrazione -p src/Corico.Core -s src/Corico.Core -o
 La cartella dati (`D:\CORICO`) contiene `Dati\`, `Documenti\`, `Backup\`, `Log\` e `Config\`.
 Reinstallare o aggiornare il programma non modifica mai la cartella dati.
 
+## Aggiornamento
+
+1. `powershell -ExecutionPolicy Bypass -File scripts\pubblica.ps1` — esegue i test e crea il nuovo pacchetto con la scheda `rilascio.json`.
+2. `powershell -ExecutionPolicy Bypass -File scripts\aggiorna.ps1 -Pacchetto publish\Corico` — procedura guidata:
+   arresto di Corico, copia di sicurezza verificata del database, conferma, installazione, migrazioni, controlli
+   (integrità, apertura dati, ricalcolo delle commesse, rilettura delle versioni ufficiali) e avvio.
+   Se un passo non riesce, programma e database tornano automaticamente alla versione precedente.
+
+Per provare il ritorno automatico sull'ambiente di prova: aggiungere `-SimulaErrore`.
+
 ## Aggiungere un modulo
 
 1. Creare un progetto Razor Class Library `src/Corico.Modules.<Nome>` che referenzia `Corico.Core`.

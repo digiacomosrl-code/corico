@@ -15,4 +15,16 @@ Write-Host "Pubblicazione in $Destinazione ..."
 dotnet publish src\Corico.Web\Corico.Web.csproj --configuration Release --runtime win-x64 --self-contained true --output $Destinazione
 if ($LASTEXITCODE -ne 0) { throw "Pubblicazione non riuscita." }
 
-Write-Host "Pacchetto pronto in $Destinazione"
+# Scheda del rilascio, richiesta dall'aggiornamento guidato (scripts\aggiorna.ps1).
+$versione = (Select-Xml -Path "Directory.Build.props" -XPath "//Version").Node.InnerText
+$commit = (git rev-parse --short HEAD)
+$modifiche = (git status --porcelain)
+[ordered]@{
+    Versione      = $versione
+    Commit        = $commit
+    ModificheNonRegistrate = [bool]$modifiche
+    Data          = (Get-Date).ToString("yyyy-MM-dd HH:mm")
+    TestSuperati  = $true
+} | ConvertTo-Json | Set-Content -Path (Join-Path $Destinazione "rilascio.json") -Encoding UTF8
+
+Write-Host "Pacchetto $versione ($commit) pronto in $Destinazione"

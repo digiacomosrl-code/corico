@@ -1,5 +1,6 @@
 using System.Net;
 using Corico.Core;
+using Corico.Core.Aggiornamento;
 using Corico.Core.Backup;
 using Corico.Core.Configurazione;
 using Corico.Core.Moduli;
@@ -9,7 +10,10 @@ using Corico.Web.Components;
 using Corico.Web.Infrastruttura;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 
-var builder = WebApplication.CreateBuilder(args);
+// "--aggiornamento <comando>": passi dell'aggiornamento guidato, senza avviare il server web (scripts\aggiorna.ps1).
+var comandoAggiornamento = args.Length > 0 && args[0] == ControlliAggiornamento.Argomento ? args[1..] : null;
+
+var builder = WebApplication.CreateBuilder(comandoAggiornamento is null ? args : []);
 
 // Configurazione e cartella dati (separata dalla cartella del programma, sez. 3.3).
 builder.Services.Configure<CoricoOpzioni>(builder.Configuration.GetSection(CoricoOpzioni.Sezione));
@@ -34,6 +38,12 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
+
+if (comandoAggiornamento is not null)
+{
+    Environment.ExitCode = await ControlliAggiornamento.EseguiAsync(app.Services, comandoAggiornamento, Console.Out);
+    return;
+}
 
 await app.Services.GetRequiredService<IMigrazioniDatabase>().ApplicaAsync();
 

@@ -27,6 +27,7 @@ public sealed class PreventivoModulo : ICoricoModulo
         new("Preventivo", typeof(SchedaPreventivo), Ordine: 10),
         new("Pacchetti", typeof(SchedaPacchetti), Ordine: 20),
         new("Lista della Spesa", typeof(SchedaListaSpesa), Ordine: 25),
+        new("Ordini", typeof(SchedaOrdini), Ordine: 27),
         new("Riepilogo economico", typeof(SchedaRiepilogo), Ordine: 30),
         new("Versioni", typeof(SchedaVersioni), Ordine: 40),
     ];
@@ -45,6 +46,7 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<EsportazioniService>();
         servizi.AddSingleton<AnalisiService>();
         servizi.AddSingleton<ListaSpesaService>();
+        servizi.AddSingleton<OrdiniService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)
@@ -102,6 +104,8 @@ public sealed class PreventivoModulo : ICoricoModulo
             Rispondi(e.RiepilogoPdfAsync(commessaId, versione, ct)));
         gruppo.MapGet("/pacchetti/{pacchettoId:guid}.pdf", (Guid commessaId, Guid pacchettoId, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.PacchettoPdfAsync(commessaId, pacchettoId, ct)));
+        gruppo.MapGet("/ordini/{ordineId:guid}.pdf", (Guid commessaId, Guid ordineId, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.OrdinePdfAsync(commessaId, ordineId, ct)));
     }
 
     private static async Task<IResult> Rispondi(Task<FileEsportato?> esportazione) =>

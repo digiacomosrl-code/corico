@@ -1,0 +1,104 @@
+@* Scheda "Ordini" della commessa: ordini di acquisto emessi dai pacchetti, con stampa e annullamento. *@
+@inject OrdiniService Ordini
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Ordini di acquisto</h3>
+    </div>
+    <p class="testo-secondario">
+        Gli ordini si emettono dal dettaglio del pacchetto, dall'offerta scelta (scheda Pacchetti → pacchetto → «Emetti ordine…»).
+        Un ordine emesso non si modifica: si annulla indicando il motivo e se ne emette uno nuovo. La numerazione è progressiva per anno.
+    </p>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (_elenco is null)
+    {
+        <p class="testo-secondario">Caricamento…</p>
+    }
+    else if (_elenco.Count == 0)
+    {
+        <p class="testo-secondario">Nessun ordine emesso per questa commessa.</p>
+    }
+    else
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr><th>Numero</th><th>Data</th><th>Fornitore</th><th>Pacchetto</th><th>Stato</th><th class="num">Totale</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in _elenco)
+                    {
+                        var annullato = o.Stato == StatoOrdine.Annullato;
+                        <tr class="@(annullato ? "testo-secondario" : "")">
+                            <td class="nowrap"><strong>@o.Numero</strong></td>
+                            <td>@Formato.Data(o.Data)</td>
+                            <td>@o.Fornitore</td>
+                            <td class="descrizione-breve" title="@o.Oggetto">@o.Pacchetto</td>
+                            <td>@(annullato ? $"Annullato il {Formato.Data(o.AnnullatoIl)}: {o.MotivoAnnullamento}" : "Emesso")</td>
+                            <td class="num">@Formato.Euro(o.Totale)</td>
+                            <td class="nowrap">
+                                <a class="pulsante piccolo" href="@($"preventivo/{CommessaId}/ordini/{o.Id}.pdf")" target="_blank">PDF</a>
+                                @if (!annullato && _daAnnullare != o.Id)
+                                {
+                                    <button class="pulsante piccolo" @onclick="() => (_daAnnullare, _motivo) = (o.Id, null)">Annulla…</button>
+                                }
+                            </td>
+                        </tr>
+                        @if (_daAnnullare == o.Id)
+                        {
+                            <tr>
+                                <td colspan="7">
+                                    <div class="riga-form">
+                                        <input class="largo" placeholder="Motivo dell'annullamento (obbligatorio)" @bind="_motivo" />
+                                        <button class="pulsante pericolo" @onclick="() => AnnullaAsync(o.Id)">Conferma annullamento</button>
+                                        <button class="pulsante" @onclick="() => _daAnnullare = null">Indietro</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="totale">
+                        <td colspan="5">Totale ordini emessi (esclusi gli annullati)</td>
+                        <td class="num">@Formato.Euro(_elenco.Where(o => o.Stato == StatoOrdine.Emesso).Sum(o => o.Totale))</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+
+    private IReadOnlyList<RigaElencoOrdini>? _elenco;
+    private Guid? _daAnnullare;
+    private string? _motivo, _messaggio;
+    private bool _errore;
+
+    protected override async Task OnParametersSetAsync() => _elenco = await Ordini.ElencoAsync(CommessaId);
+
+    private async Task AnnullaAsync(Guid id)
+    {
+        try
+        {
+            await Ordini.AnnullaAsync(CommessaId, id, _motivo ?? "");
+            (_messaggio, _errore, _daAnnullare, _motivo) = ("Ordine annullato: il pacchetto torna a costo Provvisorio.", false, null, null);
+            _elenco = await Ordini.ElencoAsync(CommessaId);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+}

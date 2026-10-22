@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@using Corico.Core.Aggiornamento
 @inject RegistroModuli Moduli
 @inject AvvisiService AvvisiSistema
 @inject NavigationManager Nav
@@ -28,6 +29,7 @@
             <form class="ricerca-globale" @onsubmit="Cerca">
                 <input type="search" placeholder="Cerca commessa per codice o descrizione…" @bind="_ricerca" aria-label="Ricerca commesse" />
             </form>
+            <span class="versione-programma" title="Versione installata: @ControlliAggiornamento.VersioneProgramma">Corico versione @ControlliAggiornamento.VersioneBreve</span>
         </header>
 
         @foreach (var avviso in _avvisi)

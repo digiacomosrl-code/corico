@@ -33,6 +33,9 @@ public static class ControlliAggiornamento
         }
     }
 
+    /// <summary>Numero di versione senza il commit, es. "0.9.2", mostrato nella barra del programma.</summary>
+    public static string VersioneBreve => VersioneProgramma.Split('+')[0];
+
     public static async Task<int> EseguiAsync(IServiceProvider servizi, string[] argomenti, TextWriter uscita, CancellationToken ct = default)
     {
         var percorsi = servizi.GetRequiredService<PercorsiDati>();

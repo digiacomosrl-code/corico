@@ -4,6 +4,7 @@
 @inject BackupService Backup
 @inject DocumentiService Documenti
 @inject PercorsiDati Percorsi
+@inject ImpostazioniService Impostazioni
 
 <PageTitle>Amministrazione — Corico</PageTitle>
 
@@ -11,6 +12,29 @@
 <p class="testo-secondario">Cartella dati: <code>@Percorsi.Radice</code></p>
 
 <Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+<div class="riquadro" id="dati-impresa">
+    <h3>Dati dell'impresa</h3>
+    <p class="testo-secondario">Intestazione degli ordini di acquisto e dei documenti per i fornitori.</p>
+    <div class="griglia-form">
+        <label class="largo">Ragione sociale <input @bind="_azienda.RagioneSociale" /></label>
+        <label class="largo">Indirizzo <input @bind="_azienda.Indirizzo" /></label>
+        <label>CAP <input @bind="_azienda.Cap" /></label>
+        <label>Comune <input @bind="_azienda.Comune" /></label>
+        <label>Provincia <input @bind="_azienda.Provincia" maxlength="2" /></label>
+        <label>Partita IVA <input @bind="_azienda.PartitaIva" /></label>
+        <label>Codice fiscale <input @bind="_azienda.CodiceFiscale" /></label>
+        <label>Telefono <input @bind="_azienda.Telefono" /></label>
+        <label>E-mail <input @bind="_azienda.Email" /></label>
+        <label>PEC <input @bind="_azienda.Pec" /></label>
+        <label class="largo">Condizioni generali stampate in fondo agli ordini (una per riga)
+            <textarea rows="5" @bind="_azienda.CondizioniOrdine"></textarea>
+        </label>
+    </div>
+    <div class="azioni">
+        <button class="pulsante primario" @onclick="SalvaAziendaAsync">Salva dati dell'impresa</button>
+    </div>
+</div>
 
 <div class="riquadro">
     <h3>Backup locale</h3>
@@ -134,7 +158,19 @@
     private string? _messaggio, _unita, _nomeDisco, _conferma;
     private bool _errore, _occupato, _mostraTutti;
 
-    protected override Task OnInitializedAsync() => AggiornaAsync();
+    private DatiAzienda _azienda = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _azienda = await Impostazioni.LeggiAziendaAsync();
+        await AggiornaAsync();
+    }
+
+    private async Task SalvaAziendaAsync()
+    {
+        await Impostazioni.SalvaAziendaAsync(_azienda);
+        await Mostra("Dati dell'impresa salvati.", false);
+    }
 
     private async Task AggiornaAsync()
     {

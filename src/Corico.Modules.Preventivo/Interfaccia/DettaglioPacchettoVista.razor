@@ -159,6 +159,9 @@
     }
 </div>
 
+<PannelloOrdine CommessaId="CommessaId" PacchettoId="PacchettoId" OnCambiato="AggiornaAsync"
+                Chiave="@($"{_dettaglio.Pacchetto.Versione}|{_dettaglio.Pacchetto.OffertaSceltaId}|{_dettaglio.Scelta?.Risultato.Costo}|{_dettaglio.Scelta?.Offerta.Versione}")" />
+
 <div class="riquadro">
     <div class="riga-form">
         <h3 class="spazio">Voci del computo nel pacchetto (@_dettaglio.Voci.Count)</h3>

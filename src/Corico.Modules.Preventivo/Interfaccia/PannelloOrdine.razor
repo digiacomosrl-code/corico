@@ -1,0 +1,188 @@
+@* Ordine di acquisto del pacchetto: emissione dall'offerta scelta, stampa e annullamento. *@
+@inject OrdiniService Ordini
+
+<div class="riquadro">
+    <div class="riga-form">
+        <h3 class="spazio">Ordine di acquisto</h3>
+        @if (_emesso is null && _anteprima is null)
+        {
+            <button class="pulsante primario" @onclick="ApriEmissioneAsync">Emetti ordine…</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (_emesso is { } e)
+    {
+        <p>
+            <strong>@e.Numero</strong> del @Formato.Data(e.Data) a <strong>@e.Fornitore</strong>, totale @Formato.Euro(e.Totale).
+            Il costo del pacchetto è Definitivo.
+        </p>
+        <div class="riga-form">
+            <a class="pulsante" href="@($"preventivo/{CommessaId}/ordini/{e.Id}.pdf")" target="_blank">Stampa ordine (PDF)</a>
+            @if (!_annulla)
+            {
+                <button class="pulsante" @onclick="() => _annulla = true">Annulla ordine…</button>
+            }
+        </div>
+        @if (_annulla)
+        {
+            <div class="riga-form">
+                <input class="largo" placeholder="Motivo dell'annullamento (obbligatorio)" @bind="_motivo" />
+                <button class="pulsante pericolo" @onclick="AnnullaAsync">Conferma annullamento</button>
+                <button class="pulsante" @onclick="() => _annulla = false">Indietro</button>
+            </div>
+            <p class="testo-secondario">L'ordine resta nell'elenco come annullato; il pacchetto torna a costo Provvisorio e potrà emettere un nuovo ordine.</p>
+        }
+    }
+    else if (_anteprima is { } a)
+    {
+        @foreach (var i in a.Impedimenti)
+        {
+            <div class="segnalazione segnalazione-attenzione">@i</div>
+        }
+        @if (!a.AziendaCompilata)
+        {
+            <div class="segnalazione segnalazione-attenzione">
+                I dati dell'impresa per l'intestazione non sono compilati: li inserisca in <a href="amministrazione">Amministrazione → Dati dell'impresa</a>.
+            </div>
+        }
+        @if (a.Righe.Count > 0)
+        {
+            <p>Fornitore: <strong>@a.Fornitore</strong>@(a.RiferimentoOfferta is null ? "" : $" – {a.RiferimentoOfferta}")</p>
+            <div class="griglia-form">
+                <label>Data <input type="date" @bind="a.Proposta.Data" /></label>
+                <label class="largo">Oggetto <input @bind="a.Proposta.Oggetto" /></label>
+                <label class="largo">Luogo di consegna <input @bind="a.Proposta.LuogoConsegna" /></label>
+                <label>Consegna (tempi) <input @bind="a.Proposta.Consegna" /></label>
+                <label>Pagamento <input @bind="a.Proposta.Pagamento" /></label>
+                <label class="largo">Note <textarea rows="2" @bind="a.Proposta.Note"></textarea></label>
+            </div>
+            <div class="scorrevole">
+                <table class="tabella">
+                    <thead>
+                        <tr><th>N.</th><th>Codice</th><th>Descrizione</th><th>U.M.</th><th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in a.Righe)
+                        {
+                            <tr>
+                                <td>@r.Ordine</td>
+                                <td class="codice">@r.Codice</td>
+                                <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
+                                <td>@r.Unita</td>
+                                <td class="num">@Formato.Numero(r.Quantita)</td>
+                                <td class="num">@Formato.Numero(r.Prezzo, r.Prezzo == Math.Round(r.Prezzo, 2) ? 2 : 4)</td>
+                                <td class="num">@Formato.Euro(r.Importo)</td>
+                            </tr>
+                        }
+                        <tr class="totale"><td colspan="6">Totale imponibile (IVA esclusa)</td><td class="num">@Formato.Euro(a.Totale)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        }
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@(!a.Emettibile || _occupato)" @onclick="EmettiAsync">Emetti ordine</button>
+            <button class="pulsante" @onclick="() => _anteprima = null">Chiudi</button>
+            <span class="testo-secondario">All'emissione il numero è definitivo, l'ordine non si modifica e il pacchetto passa a costo Definitivo.</span>
+        </div>
+    }
+    else
+    {
+        <p class="testo-secondario">Nessun ordine emesso. L'ordine si emette dall'offerta scelta del pacchetto.</p>
+    }
+
+    @if (_annullati.Count > 0)
+    {
+        <p class="testo-secondario">
+            Ordini annullati:
+            @foreach (var o in _annullati)
+            {
+                <a href="@($"preventivo/{CommessaId}/ordini/{o.Id}.pdf")" target="_blank">@o.Numero</a>
+                <span> (@o.MotivoAnnullamento) </span>
+            }
+        </p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Guid PacchettoId { get; set; }
+
+    /// <summary>Cambia quando cambiano pacchetto o offerta scelta: l'anteprima aperta va ricalcolata.</summary>
+    [Parameter] public string? Chiave { get; set; }
+
+    [Parameter] public EventCallback OnCambiato { get; set; }
+
+    private OrdineAcquisto? _emesso;
+    private List<OrdineAcquisto> _annullati = [];
+    private AnteprimaOrdine? _anteprima;
+    private string? _chiave, _messaggio, _motivo;
+    private bool _errore, _annulla, _occupato;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_chiave == Chiave && _chiave is not null) return;
+        _chiave = Chiave;
+        await CaricaAsync();
+        if (_anteprima is not null) _anteprima = await Ordini.AnteprimaAsync(CommessaId, PacchettoId);
+    }
+
+    private async Task CaricaAsync()
+    {
+        var ordini = await Ordini.PerPacchettoAsync(CommessaId, PacchettoId);
+        _emesso = ordini.FirstOrDefault(o => o.Stato == StatoOrdine.Emesso);
+        _annullati = ordini.Where(o => o.Stato == StatoOrdine.Annullato).ToList();
+    }
+
+    private async Task ApriEmissioneAsync()
+    {
+        _messaggio = null;
+        _anteprima = await Ordini.AnteprimaAsync(CommessaId, PacchettoId);
+    }
+
+    private async Task EmettiAsync()
+    {
+        if (_anteprima is null) return;
+        _occupato = true;
+        try
+        {
+            var o = await Ordini.EmettiAsync(CommessaId, PacchettoId, _anteprima.Proposta);
+            (_messaggio, _errore) = ($"Ordine {o.Numero} emesso. Lo stampi con «Stampa ordine (PDF)».", false);
+            _anteprima = null;
+            await CaricaAsync();
+            await OnCambiato.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task AnnullaAsync()
+    {
+        if (_emesso is null) return;
+        try
+        {
+            await Ordini.AnnullaAsync(CommessaId, _emesso.Id, _motivo ?? "");
+            (_messaggio, _errore) = ($"Ordine {_emesso.Numero} annullato.", false);
+            (_annulla, _motivo) = (false, null);
+            await CaricaAsync();
+            await OnCambiato.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+}

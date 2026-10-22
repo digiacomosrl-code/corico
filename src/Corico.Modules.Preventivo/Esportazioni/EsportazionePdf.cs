@@ -219,28 +219,141 @@ public static class EsportazionePdf
         return Rendi(doc);
     }
 
+    /// <summary>Ordine di acquisto al fornitore, A4 verticale, con l'intestazione dell'impresa.</summary>
+    public static byte[] Ordine(DatiAzienda azienda, Dominio.OrdineAcquisto o, string commessa)
+    {
+        var (doc, sec) = Pagina($"Ordine {o.Numero}", orizzontale: false);
+
+        // Intestazione: impresa a sinistra, estremi dell'ordine a destra.
+        var testa = sec.AddTable();
+        testa.AddColumn(Unit.FromCentimeter(10.5));
+        testa.AddColumn(Unit.FromCentimeter(7.5)).Format.Alignment = ParagraphAlignment.Right;
+        var rt = testa.AddRow();
+        var righeAzienda = azienda.Intestazione().ToList();
+        if (righeAzienda.Count == 0) righeAzienda.Add("Dati dell'impresa non compilati (Amministrazione → Dati dell'impresa)");
+        for (var i = 0; i < righeAzienda.Count; i++)
+        {
+            var par = rt.Cells[0].AddParagraph(righeAzienda[i]);
+            if (i == 0) { par.Format.Font.Size = 12; par.Format.Font.Bold = true; par.Format.Font.Color = Colore(Stile.Primario); }
+            else par.Format.Font.Size = 8;
+        }
+        var tit = rt.Cells[1].AddParagraph("ORDINE DI ACQUISTO");
+        tit.Format.Font.Size = 13;
+        tit.Format.Font.Bold = true;
+        tit.Format.Font.Color = Colore(Stile.Primario);
+        var num = rt.Cells[1].AddParagraph($"{o.Numero} del {Formato.Data(o.Data)}");
+        num.Format.Font.Size = 11;
+        num.Format.Font.Bold = true;
+        rt.Borders.Bottom.Width = Unit.FromPoint(0.75);
+        rt.Borders.Bottom.Color = Colore(Stile.Primario);
+        rt.BottomPadding = Unit.FromPoint(6);
+
+        if (o.Stato == Dominio.StatoOrdine.Annullato)
+        {
+            var ann = sec.AddParagraph($"ORDINE ANNULLATO il {Formato.Data(o.AnnullatoIl)}: {o.MotivoAnnullamento}");
+            ann.Format.Font.Size = 11;
+            ann.Format.Font.Bold = true;
+            ann.Format.Font.Color = Colore(Stile.Negativo);
+            ann.Format.SpaceBefore = Unit.FromPoint(6);
+        }
+
+        // Destinatario e riferimenti.
+        var dest = sec.AddTable();
+        dest.TopPadding = Unit.FromPoint(8);
+        dest.AddColumn(Unit.FromCentimeter(9));
+        dest.AddColumn(Unit.FromCentimeter(9));
+        var rd = dest.AddRow();
+        rd.Cells[0].AddParagraph("Spett.le").Format.Font.Color = Colore(Stile.TestoSecondario);
+        var f = rd.Cells[0].AddParagraph(o.Fornitore);
+        f.Format.Font.Bold = true;
+        f.Format.Font.Size = 10;
+        foreach (var l in (o.DatiFornitore ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            rd.Cells[0].AddParagraph(l).Format.Font.Size = 8.5;
+        void Rif(string etichetta, string? valore)
+        {
+            if (string.IsNullOrWhiteSpace(valore)) return;
+            var par = rd.Cells[1].AddParagraph();
+            par.AddFormattedText(etichetta + ": ", TextFormat.Bold);
+            par.AddText(valore);
+            par.Format.SpaceAfter = Unit.FromPoint(1.5);
+        }
+        Rif("Commessa", commessa);
+        Rif("Riferimento", o.RiferimentoOfferta);
+
+        var ogg = sec.AddParagraph();
+        ogg.Format.SpaceBefore = Unit.FromPoint(10);
+        ogg.Format.SpaceAfter = Unit.FromPoint(6);
+        ogg.AddFormattedText("Oggetto: ", TextFormat.Bold);
+        ogg.AddText(o.Oggetto);
+        sec.AddParagraph("Con la presente Vi ordiniamo quanto segue, alle condizioni indicate:").Format.SpaceAfter = Unit.FromPoint(4);
+
+        var tab = Tabella(sec, ("N.", 0.7, false), ("Codice", 2.1, false), ("Descrizione", 7.2, false), ("U.M.", 1.5, false),
+            ("Quantità", 1.8, true), ("Prezzo", 2.1, true), ("Importo", 2.6, true));
+        tab.Format.Font.Size = 8;
+        foreach (var r in o.Righe.OrderBy(r => r.Ordine))
+            Riga(tab, r.Ordine.ToString(), r.Codice ?? "", Breve(r.Descrizione, 600), r.Unita ?? "", Formato.Numero(r.Quantita),
+                Formato.Numero(r.Prezzo, r.Prezzo == Math.Round(r.Prezzo, 2) ? 2 : 4), Formato.Euro(r.Importo));
+        RigaTotale(tab, "", "", "Totale imponibile (IVA esclusa)", "", "", "", Formato.Euro(o.Totale));
+
+        Titoletto(sec, "Condizioni");
+        var cond = Tabella(sec, [("", 4.5, false), ("", 13.5, false)], intestazioneColonne: false);
+        void Condizione(string etichetta, string? valore)
+        {
+            var r = Riga(cond, etichetta, string.IsNullOrWhiteSpace(valore) ? "—" : valore);
+            r.Cells[0].Format.Font.Bold = true;
+        }
+        Condizione("Pagamento", o.Pagamento);
+        Condizione("Consegna", o.Consegna);
+        Condizione("Luogo di consegna", o.LuogoConsegna);
+        if (!string.IsNullOrWhiteSpace(o.Note)) Condizione("Note", o.Note);
+
+        if (!string.IsNullOrWhiteSpace(o.Condizioni))
+        {
+            Titoletto(sec, "Condizioni generali");
+            foreach (var l in o.Condizioni.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var par = sec.AddParagraph(l);
+                par.Format.Font.Size = 7.5;
+                par.Format.SpaceAfter = Unit.FromPoint(1.5);
+            }
+        }
+
+        var firme = sec.AddTable();
+        firme.KeepTogether = true;
+        firme.AddColumn(Unit.FromCentimeter(9)).Format.Alignment = ParagraphAlignment.Center;
+        firme.AddColumn(Unit.FromCentimeter(9)).Format.Alignment = ParagraphAlignment.Center;
+        var rf = firme.AddRow();
+        rf.TopPadding = Unit.FromPoint(24);
+        rf.Cells[0].AddParagraph(azienda.Compilati ? $"Per {azienda.RagioneSociale}" : "Per l'impresa");
+        rf.Cells[1].AddParagraph("Per accettazione (timbro e firma del fornitore)");
+        var linea = firme.AddRow();
+        linea.TopPadding = Unit.FromPoint(28);
+        foreach (var cella in new[] { linea.Cells[0], linea.Cells[1] })
+        {
+            var par = cella.AddParagraph("______________________________");
+            par.Format.Font.Color = Colore(Stile.TestoSecondario);
+        }
+        var nota = sec.AddParagraph("Si prega di restituire copia del presente ordine firmata per accettazione. " +
+                                    "Citare il numero d'ordine su documenti di trasporto e fatture.");
+        nota.Format.Font.Size = 7.5;
+        nota.Format.Font.Italic = true;
+        nota.Format.SpaceBefore = Unit.FromPoint(10);
+
+        var piede = sec.Footers.Primary.AddParagraph();
+        piede.Format.Font.Size = 7.5;
+        piede.Format.Font.Color = Colore(Stile.TestoSecondario);
+        piede.AddText($"Ordine {o.Numero} del {Formato.Data(o.Data)} – {o.Fornitore} – pagina ");
+        piede.AddPageField();
+        piede.AddText(" di ");
+        piede.AddNumPagesField();
+        return Rendi(doc);
+    }
+
     // ---- Struttura comune ----
 
     private static (Document, Section) Documento(IntestazioneStampa intestazione, string titolo, bool orizzontale)
     {
-        var doc = new Document();
-        doc.Info.Title = titolo;
-        doc.Info.Author = "Corico";
-        var normale = doc.Styles[StyleNames.Normal]!;
-        normale.Font.Name = Carattere;
-        normale.Font.Size = 9;
-
-        var sec = doc.AddSection();
-        sec.PageSetup = doc.DefaultPageSetup.Clone();
-        // Dimensioni esplicite: con PDFsharp 6 l'orientamento da solo non ruota il formato A4.
-        sec.PageSetup.PageFormat = PageFormat.A4;
-        sec.PageSetup.Orientation = Orientation.Portrait;
-        sec.PageSetup.PageWidth = Unit.FromCentimeter(orizzontale ? 29.7 : 21);
-        sec.PageSetup.PageHeight = Unit.FromCentimeter(orizzontale ? 21 : 29.7);
-        sec.PageSetup.LeftMargin = sec.PageSetup.RightMargin = Unit.FromCentimeter(1.5);
-        sec.PageSetup.TopMargin = Unit.FromCentimeter(1.5);
-        sec.PageSetup.BottomMargin = Unit.FromCentimeter(1.6);
-        sec.PageSetup.FooterDistance = Unit.FromCentimeter(0.7);
+        var (doc, sec) = Pagina(titolo, orizzontale);
 
         var t = sec.AddParagraph(titolo);
         t.Format.Font.Size = 14;
@@ -262,6 +375,29 @@ public static class EsportazionePdf
         piede.AddPageField();
         piede.AddText(" di ");
         piede.AddNumPagesField();
+        return (doc, sec);
+    }
+
+    private static (Document, Section) Pagina(string titolo, bool orizzontale)
+    {
+        var doc = new Document();
+        doc.Info.Title = titolo;
+        doc.Info.Author = "Corico";
+        var normale = doc.Styles[StyleNames.Normal]!;
+        normale.Font.Name = Carattere;
+        normale.Font.Size = 9;
+
+        var sec = doc.AddSection();
+        sec.PageSetup = doc.DefaultPageSetup.Clone();
+        // Dimensioni esplicite: con PDFsharp 6 l'orientamento da solo non ruota il formato A4.
+        sec.PageSetup.PageFormat = PageFormat.A4;
+        sec.PageSetup.Orientation = Orientation.Portrait;
+        sec.PageSetup.PageWidth = Unit.FromCentimeter(orizzontale ? 29.7 : 21);
+        sec.PageSetup.PageHeight = Unit.FromCentimeter(orizzontale ? 21 : 29.7);
+        sec.PageSetup.LeftMargin = sec.PageSetup.RightMargin = Unit.FromCentimeter(1.5);
+        sec.PageSetup.TopMargin = Unit.FromCentimeter(1.5);
+        sec.PageSetup.BottomMargin = Unit.FromCentimeter(1.6);
+        sec.PageSetup.FooterDistance = Unit.FromCentimeter(0.7);
         return (doc, sec);
     }
 
@@ -343,10 +479,10 @@ public static class EsportazionePdf
 
     private static string Importo(decimal? v) => v is null or 0 ? "" : Formato.Euro(v);
 
-    private static string Breve(string testo)
+    private static string Breve(string testo, int massimo = 220)
     {
         var t = testo.ReplaceLineEndings(" ").Trim();
-        return t.Length <= 220 ? t : t[..217].TrimEnd() + "…";
+        return t.Length <= massimo ? t : t[..(massimo - 3)].TrimEnd() + "…";
     }
 
     private static Color Colore(string esadecimale)

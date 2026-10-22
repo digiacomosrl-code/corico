@@ -33,6 +33,8 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<AnalisiAziendale> AnalisiAziendali => Set<AnalisiAziendale>();
     public DbSet<RigaAnalisiAziendale> RigheAnalisiAziendali => Set<RigaAnalisiAziendale>();
     public DbSet<CodiceRisorsa> CodiciRisorse => Set<CodiceRisorsa>();
+    public DbSet<OrdineAcquisto> Ordini => Set<OrdineAcquisto>();
+    public DbSet<RigaOrdine> RigheOrdine => Set<RigaOrdine>();
 
     protected override bool PossiedeTabelleCore => false;
 
@@ -53,6 +55,18 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     {
         if (ChangeTracker.Entries<VersionePreventivo>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new OperazioneNonValidaException("Le versioni ufficiali del preventivo non si possono modificare né eliminare.");
+
+        // Ordini di acquisto: dopo l'emissione cambiano solo lo stato e i dati dell'annullamento.
+        string[] ammessi = [nameof(OrdineAcquisto.Stato), nameof(OrdineAcquisto.MotivoAnnullamento), nameof(OrdineAcquisto.AnnullatoIl),
+            nameof(EntitaBase.Versione), nameof(EntitaBase.ModificatoIl), nameof(EntitaBase.ModificatoDa)];
+        foreach (var e in ChangeTracker.Entries<OrdineAcquisto>())
+        {
+            if (e.State == EntityState.Deleted
+                || (e.State == EntityState.Modified && e.Properties.Any(p => p.IsModified && !ammessi.Contains(p.Metadata.Name))))
+                throw new OperazioneNonValidaException("Un ordine emesso non si modifica: va annullato ed emesso di nuovo.");
+        }
+        if (ChangeTracker.Entries<RigaOrdine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new OperazioneNonValidaException("Le righe di un ordine emesso non si modificano.");
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -175,6 +189,27 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.ToTable("PRV_RigheAnalisiAziendali");
             e.HasIndex(x => new { x.AnalisiId, x.Ordine });
             e.Property(x => x.Descrizione).HasMaxLength(500).IsRequired();
+            e.Property(x => x.Unita).HasMaxLength(30);
+        });
+
+        modelBuilder.Entity<OrdineAcquisto>(e =>
+        {
+            e.ToTable("PRV_OrdiniAcquisto");
+            e.HasIndex(x => new { x.Anno, x.Progressivo }).IsUnique();
+            e.HasIndex(x => x.CommessaId);
+            e.HasIndex(x => x.PacchettoId);
+            e.Property(x => x.Numero).HasMaxLength(30).IsRequired();
+            e.Property(x => x.Fornitore).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Oggetto).HasMaxLength(500).IsRequired();
+            e.HasMany(x => x.Righe).WithOne().HasForeignKey(r => r.OrdineId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RigaOrdine>(e =>
+        {
+            e.ToTable("PRV_RigheOrdine");
+            e.HasIndex(x => new { x.OrdineId, x.Ordine });
+            e.Property(x => x.Descrizione).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Codice).HasMaxLength(60);
             e.Property(x => x.Unita).HasMaxLength(30);
         });
 

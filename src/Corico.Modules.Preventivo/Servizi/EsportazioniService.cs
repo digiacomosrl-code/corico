@@ -9,7 +9,7 @@ public sealed record FileEsportato(byte[] Contenuto, string TipoContenuto, strin
 /// <summary>Esportazioni del preventivo: Excel del computo e del riepilogo, PDF A4 del riepilogo e delle schede pacchetto.</summary>
 public sealed class EsportazioniService(
     RiepilogoService riepilogo, VersioniService versioni, PacchettiService pacchetti, ListaSpesaService listaSpesa,
-    CommesseService commesse, TimeProvider orologio)
+    OrdiniService ordini, CommesseService commesse, ImpostazioniService impostazioni, TimeProvider orologio)
 {
     public const string TipoExcel = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public const string TipoPdf = "application/pdf";
@@ -54,6 +54,16 @@ public sealed class EsportazioniService(
         var intestazione = new IntestazioneStampa(NomeCommessa(commessa), $"Bozza al {Formato.DataOra(orologio.GetUtcNow().UtcDateTime)}");
         var nome = $"Pacchetto {dettaglio.Pacchetto.Ordine} {Pulisci(dettaglio.Pacchetto.Descrizione)} – {commessa.Codice}.pdf";
         return new(EsportazionePdf.Pacchetto(intestazione, dettaglio), TipoPdf, nome);
+    }
+
+    public async Task<FileEsportato?> OrdinePdfAsync(Guid commessaId, Guid ordineId, CancellationToken ct = default)
+    {
+        var commessa = await commesse.OttieniAsync(commessaId, ct);
+        var ordine = await ordini.OttieniAsync(commessaId, ordineId, ct);
+        if (commessa is null || ordine is null) return null;
+        var azienda = await impostazioni.LeggiAziendaAsync(ct);
+        var nome = $"{ordine.Numero.Replace('/', '-')} {Pulisci(ordine.Fornitore)}{(ordine.Stato == Dominio.StatoOrdine.Annullato ? " ANNULLATO" : "")}.pdf";
+        return new(EsportazionePdf.Ordine(azienda, ordine, NomeCommessa(commessa)), TipoPdf, nome);
     }
 
     private async Task<(IntestazioneStampa Intestazione, Fotografia Fotografia, string Riferimento, string Codice)?> DatiAsync(

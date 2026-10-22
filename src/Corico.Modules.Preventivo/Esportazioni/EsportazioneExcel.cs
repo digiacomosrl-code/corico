@@ -160,7 +160,7 @@ public static class EsportazioneExcel
         using var wb = new XLWorkbook();
 
         var ws = wb.AddWorksheet("Per categoria");
-        string[] titoli = ["Categoria", "Codice", "Descrizione", "U.M.", "Quantità", "Prezzo", "Importo", "Utilizzi"];
+        string[] titoli = ["Categoria", "Codice", "Descrizione", "Fornitore", "U.M.", "Quantità", "Prezzo", "Importo", "Utilizzi"];
         var riga = Intestazione(ws, intestazione, "Lista della Spesa", titoli.Length);
         riga = Titoli(ws, riga, titoli);
         var primo = riga;
@@ -172,26 +172,28 @@ public static class EsportazioneExcel
                 ws.Cell(riga, 1).Value = Testi.Categoria(r.Categoria);
                 ws.Cell(riga, 2).Value = r.Codice;
                 ws.Cell(riga, 3).Value = r.Descrizione;
-                ws.Cell(riga, 4).Value = r.Unita;
-                ws.Cell(riga, 5).Value = r.Quantita;
-                if (r.Prezzo is { } p) ws.Cell(riga, 6).Value = p;
-                ws.Cell(riga, 7).Value = r.Importo;
-                ws.Cell(riga, 8).Value = r.Utilizzi;
+                ws.Cell(riga, 4).Value = r.Fornitore;
+                ws.Cell(riga, 5).Value = r.Unita;
+                ws.Cell(riga, 6).Value = r.Quantita;
+                if (r.Prezzo is { } p) ws.Cell(riga, 7).Value = p;
+                ws.Cell(riga, 8).Value = r.Importo;
+                ws.Cell(riga, 9).Value = r.Utilizzi;
                 riga++;
             }
             StileCorpo(ws.Range(inizio, 1, riga - 1, titoli.Length));
             ws.Cell(riga, 3).Value = "Totale " + Testi.Categoria(gruppo.Key).ToLowerInvariant();
-            ws.Cell(riga, 7).FormulaA1 = $"SUM(G{inizio}:G{riga - 1})";
+            ws.Cell(riga, 8).FormulaA1 = $"SUM(H{inizio}:H{riga - 1})";
             StileTotale(ws.Range(riga, 1, riga, titoli.Length));
             riga++;
         }
         ws.Cell(riga, 3).Value = "Totale Lista della Spesa";
-        ws.Cell(riga, 7).Value = lista.Totale;
+        ws.Cell(riga, 8).Value = lista.Totale;
         StileTotale(ws.Range(riga, 1, riga, titoli.Length));
-        ws.Range(primo, 5, riga, 5).Style.NumberFormat.Format = FormatoNumero;
-        foreach (var c in new[] { 6, 7 }) ws.Range(primo, c, riga, c).Style.NumberFormat.Format = FormatoEuro;
-        Larghezze(ws, 24, 10, 58, 8, 13, 13, 15, 9);
+        ws.Range(primo, 6, riga, 6).Style.NumberFormat.Format = FormatoNumero;
+        foreach (var c in new[] { 7, 8 }) ws.Range(primo, c, riga, c).Style.NumberFormat.Format = FormatoEuro;
+        Larghezze(ws, 22, 10, 50, 24, 8, 13, 13, 15, 9);
         ws.Column(3).Style.Alignment.WrapText = true;
+        ws.Column(4).Style.Alignment.WrapText = true;
         ws.SheetView.FreezeRows(primo - 1);
         Pagina(ws, orizzontale: true, primo - 1);
 

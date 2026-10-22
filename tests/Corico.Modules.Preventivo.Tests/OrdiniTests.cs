@@ -149,4 +149,22 @@ public class OrdiniTests
         Assert.Equal(pacchetto, perVoce[voci[0].Id]);
         Assert.Equal(nuovo, perVoce[voci[1].Id]);
     }
+
+    [Fact]
+    public async Task Lista_della_spesa_con_fornitore_o_da_assegnare()
+    {
+        var (amb, id, pacchetto) = await PreparaAsync();
+        await using var _ = amb;
+        var lista = await amb.Get<ListaSpesaService>().CalcolaAsync(id);
+        Assert.All(lista.Righe, r => Assert.Equal("Padilla", r.Fornitore));
+
+        var pacchetti = amb.Get<PacchettiService>();
+        var d = (await pacchetti.DettaglioAsync(id, pacchetto))!;
+        var offerta = (await pacchetti.OffertaAsync(id, d.Scelta!.Offerta.Id))!;
+        offerta.Tipo = TipoOfferta.StimaInterna;
+        await pacchetti.SalvaOffertaAsync(id, offerta);
+        lista = await amb.Get<ListaSpesaService>().CalcolaAsync(id);
+        Assert.All(lista.Righe, r => Assert.Equal(RigaSpesa.DaAssegnare, r.Fornitore));
+        Assert.All(lista.Aggregata(), r => Assert.Equal(RigaSpesa.DaAssegnare, r.Fornitore));
+    }
 }

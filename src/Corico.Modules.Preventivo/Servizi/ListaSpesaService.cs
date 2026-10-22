@@ -21,12 +21,15 @@ public sealed record RigaSpesa(
     CategoriaRisorsa Categoria, string Descrizione, string? Unita, decimal Quantita, decimal? Prezzo, decimal Importo,
     OrigineRigaSpesa Origine, string Pacchetto, string? Fornitore, string? Tariffa, string? Voce, string? Fonte, string? Codice = null)
 {
+    /// <summary>Fornitore indicato quando l'offerta scelta è una stima interna o non ha il fornitore.</summary>
+    public const string DaAssegnare = "Da assegnare";
+
     /// <summary>Descrizione e unità normalizzate: identificano la stessa risorsa in voci diverse.</summary>
     public string Chiave => Descrizione.Trim().ToLowerInvariant() + "|" + (Unita ?? "").Trim().ToLowerInvariant();
 }
 
 public sealed record RigaSpesaAggregata(CategoriaRisorsa Categoria, string? Codice, string Descrizione, string? Unita, decimal Quantita,
-    decimal? Prezzo, decimal Importo, int Utilizzi);
+    decimal? Prezzo, decimal Importo, int Utilizzi, string? Fornitore = null);
 
 public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSenzaOfferta, int VociNonAssegnate = 0)
 {
@@ -40,10 +43,10 @@ public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSen
     /// si sommano in un'unica riga con la quantità totale da acquistare.
     /// </summary>
     public IReadOnlyList<RigaSpesaAggregata> Aggregata() =>
-        Righe.GroupBy(r => (r.Categoria, r.Chiave, r.Prezzo))
+        Righe.GroupBy(r => (r.Categoria, r.Chiave, r.Prezzo, r.Fornitore))
             .Select(g => new RigaSpesaAggregata(g.Key.Categoria, g.First().Codice, g.First().Descrizione, g.First().Unita,
-                g.Sum(r => r.Quantita), g.Key.Prezzo, g.Sum(r => r.Importo), g.Count()))
-            .OrderBy(r => r.Categoria).ThenBy(r => r.Codice).ThenBy(r => r.Prezzo).ToList();
+                g.Sum(r => r.Quantita), g.Key.Prezzo, g.Sum(r => r.Importo), g.Count(), g.Key.Fornitore))
+            .OrderBy(r => r.Categoria).ThenBy(r => r.Codice).ThenBy(r => r.Fornitore).ThenBy(r => r.Prezzo).ToList();
 }
 
 /// <summary>
@@ -70,10 +73,11 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
             var vociPacchetto = PacchettiService.VociDel(p, voci);
             var calcolo = CalcoloPacchetti.Calcola(scelta, vociPacchetto, 0);
             var perVoce = scelta.Voci.ToDictionary(v => v.VoceComputoId);
+            var fornitore = Fornitore(p, scelta);
 
             RigaSpesa Riga(CategoriaRisorsa c, string descrizione, string? unita, decimal q, decimal? prezzo, decimal importo,
                 OrigineRigaSpesa origine, VoceDiCalcolo? voce, string? fonte) =>
-                new(c, descrizione, unita, q, prezzo, importo, origine, p.Descrizione, scelta.NomeFornitore, voce?.Tariffa, voce?.Descrizione, fonte);
+                new(c, descrizione, unita, q, prezzo, importo, origine, p.Descrizione, fornitore, voce?.Tariffa, voce?.Descrizione, fonte);
 
             foreach (var vc in calcolo.Voci)
             {
@@ -120,6 +124,15 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
         righe = await AssegnaCodiciAsync(db, commessaId, righe, ct);
         return new ListaSpesa(righe, senzaOfferta, attive.Count(id => !assegnate.Contains(id)));
     }
+
+    /// <summary>
+    /// Fornitore della riga: quello dell'offerta scelta; «Esecuzione diretta» se l'impresa esegue in proprio;
+    /// «Da assegnare» se l'offerta scelta è una stima interna o non indica il fornitore.
+    /// </summary>
+    public static string Fornitore(Pacchetto p, Offerta scelta) =>
+        p.Tipo == TipoAffidamento.EsecuzioneDiretta ? "Esecuzione diretta"
+        : scelta.Tipo == TipoOfferta.StimaInterna || string.IsNullOrWhiteSpace(scelta.NomeFornitore) ? RigaSpesa.DaAssegnare
+        : scelta.NomeFornitore.Trim();
 
     /// <summary>Prefisso del codice risorsa per categoria.</summary>
     public static string Prefisso(CategoriaRisorsa c) => c switch

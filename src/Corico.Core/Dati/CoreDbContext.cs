@@ -11,6 +11,7 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
 
     public DbSet<Commessa> Commesse => Set<Commessa>();
     public DbSet<Cliente> Clienti => Set<Cliente>();
+    public DbSet<Fornitore> Fornitori => Set<Fornitore>();
     public DbSet<Documento> Documenti => Set<Documento>();
     public DbSet<ContatoreCodice> ContatoriCodice => Set<ContatoreCodice>();
     public DbSet<Impostazione> Impostazioni => Set<Impostazione>();
@@ -42,6 +43,16 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
             e.Property(x => x.Provincia).HasMaxLength(5);
             e.HasIndex(x => x.PartitaIva);
             e.HasIndex(x => x.CodiceFiscale);
+        });
+
+        modelBuilder.Entity<Fornitore>(e =>
+        {
+            e.ToTable("CORE_Fornitori");
+            e.Property(x => x.Denominazione).HasMaxLength(300).IsRequired();
+            e.Property(x => x.PartitaIva).HasMaxLength(20);
+            e.Property(x => x.CodiceFiscale).HasMaxLength(20);
+            e.Property(x => x.Provincia).HasMaxLength(5);
+            e.HasIndex(x => x.PartitaIva);
         });
 
         modelBuilder.Entity<Documento>(e =>

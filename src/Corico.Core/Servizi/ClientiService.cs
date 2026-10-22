@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.RegularExpressions;
 using Corico.Core.Dati;
 using Corico.Core.Dominio;
 using Microsoft.EntityFrameworkCore;
@@ -29,9 +27,8 @@ public sealed class DatiCliente
     };
 }
 
-public sealed record PossibileDuplicato(Guid Id, string Denominazione, string Motivo);
 
-public sealed partial class ClientiService(IDbContextFactory<CoreDbContext> fabbrica)
+public sealed class ClientiService(IDbContextFactory<CoreDbContext> fabbrica)
 {
     public async Task<IReadOnlyList<DatiCliente>> ElencoAsync(string? testo = null, bool includiArchiviati = false, CancellationToken ct = default)
     {
@@ -65,21 +62,8 @@ public sealed partial class ClientiService(IDbContextFactory<CoreDbContext> fabb
         await using var db = await fabbrica.CreateDbContextAsync(ct);
         var altri = await db.Clienti.AsNoTracking().Where(c => c.Id != dati.Id).ToListAsync(ct);
 
-        var piva = NormalizzaCodice(dati.PartitaIva);
-        var cf = NormalizzaCodice(dati.CodiceFiscale);
-        var nome = NormalizzaNome(dati.Denominazione);
-        var risultato = new List<PossibileDuplicato>();
-
-        foreach (var c in altri)
-        {
-            if (piva is not null && NormalizzaCodice(c.PartitaIva) == piva)
-                risultato.Add(new(c.Id, c.Denominazione, "Stessa partita IVA"));
-            else if (cf is not null && NormalizzaCodice(c.CodiceFiscale) == cf)
-                risultato.Add(new(c.Id, c.Denominazione, "Stesso codice fiscale"));
-            else if (nome.Length >= 3 && NomiSimili(nome, NormalizzaNome(c.Denominazione)))
-                risultato.Add(new(c.Id, c.Denominazione, "Denominazione simile"));
-        }
-        return risultato;
+        return ControlloDuplicati.Cerca(dati.Denominazione, dati.PartitaIva, dati.CodiceFiscale,
+            altri.Select(c => (c.Id, c.Denominazione, c.PartitaIva, c.CodiceFiscale)));
     }
 
     public async Task<DatiCliente> SalvaAsync(DatiCliente dati, CancellationToken ct = default)
@@ -126,31 +110,5 @@ public sealed partial class ClientiService(IDbContextFactory<CoreDbContext> fabb
         return DatiCliente.Da(c);
     }
 
-    internal static string? NormalizzaCodice(string? codice)
-    {
-        if (string.IsNullOrWhiteSpace(codice)) return null;
-        var s = new string(codice.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
-        if (s.StartsWith("IT") && s.Length == 13) s = s[2..];
-        return s.Length == 0 ? null : s;
-    }
-
-    internal static string NormalizzaNome(string? nome)
-    {
-        if (string.IsNullOrWhiteSpace(nome)) return "";
-        var s = nome.ToLowerInvariant().Normalize(NormalizationForm.FormD);
-        s = new string(s.Where(ch => char.IsLetterOrDigit(ch) || char.IsWhiteSpace(ch)).ToArray());
-        s = FormeGiuridiche().Replace(" " + s + " ", " ");
-        return SpaziMultipli().Replace(s, " ").Trim();
-    }
-
-    internal static bool NomiSimili(string a, string b) =>
-        a.Length > 0 && b.Length > 0 && (a == b || a.Contains(b) || b.Contains(a));
-
     private static string? Pulisci(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-
-    [GeneratedRegex(@"\s(srl|srls|spa|sas|snc|sapa|scarl|scrl|soc|coop|societa|cooperativa|ditta|impresa)(?=\s)")]
-    private static partial Regex FormeGiuridiche();
-
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex SpaziMultipli();
 }

@@ -9,11 +9,11 @@ public class ClientiTests
     [InlineData("Impresa Rossi", "Rossi s.a.s.")]
     [InlineData("Società Città", "Societa Citta")]
     public void Nomi_simili_riconosciuti(string a, string b) =>
-        Assert.True(ClientiService.NomiSimili(ClientiService.NormalizzaNome(a), ClientiService.NormalizzaNome(b)));
+        Assert.True(ControlloDuplicati.NomiSimili(ControlloDuplicati.NormalizzaNome(a), ControlloDuplicati.NormalizzaNome(b)));
 
     [Fact]
     public void Partita_iva_normalizzata() =>
-        Assert.Equal(ClientiService.NormalizzaCodice("01234567890"), ClientiService.NormalizzaCodice("IT 012 345 678 90"));
+        Assert.Equal(ControlloDuplicati.NormalizzaCodice("01234567890"), ControlloDuplicati.NormalizzaCodice("IT 012 345 678 90"));
 
     [Fact]
     public async Task Possibili_duplicati_segnalati_ma_non_bloccanti()

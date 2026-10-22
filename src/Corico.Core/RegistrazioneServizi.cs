@@ -28,6 +28,7 @@ public static class RegistrazioneServizi
         servizi.AddSingleton<IMigrazioniDatabase, MigrazioniDatabase>();
         servizi.AddSingleton<CommesseService>();
         servizi.AddSingleton<ClientiService>();
+        servizi.AddSingleton<FornitoriService>();
         servizi.AddSingleton<DocumentiService>();
         servizi.AddSingleton<StoricoService>();
         servizi.AddSingleton<ImpostazioniService>();

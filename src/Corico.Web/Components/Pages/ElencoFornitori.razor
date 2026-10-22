@@ -1,0 +1,123 @@
+@page "/fornitori"
+@inject FornitoriService Fornitori
+
+<PageTitle>Fornitori — Corico</PageTitle>
+
+<div class="intestazione">
+    <h1>Fornitori</h1>
+    <button class="pulsante primario" @onclick="() => Modifica(new DatiFornitore())">Nuovo fornitore</button>
+</div>
+
+<Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+@if (_modifica is not null)
+{
+    <EditForm Model="_modifica" OnValidSubmit="SalvaAsync" class="riquadro">
+        <h3>@(_modifica.Id == Guid.Empty ? "Nuovo fornitore" : "Modifica fornitore")</h3>
+        <div class="griglia-form">
+            <label class="largo">Denominazione <InputText @bind-Value="_modifica.Denominazione" /></label>
+            <label>Partita IVA <InputText @bind-Value="_modifica.PartitaIva" /></label>
+            <label>Codice fiscale <InputText @bind-Value="_modifica.CodiceFiscale" /></label>
+            <label class="largo">Indirizzo <InputText @bind-Value="_modifica.Indirizzo" /></label>
+            <label>Comune <InputText @bind-Value="_modifica.Comune" /></label>
+            <label>Provincia <InputText @bind-Value="_modifica.Provincia" maxlength="2" /></label>
+            <label>Email <InputText @bind-Value="_modifica.Email" /></label>
+            <label>Telefono <InputText @bind-Value="_modifica.Telefono" /></label>
+            <label class="largo">Lavorazioni / forniture (es. Infissi, Ponteggi) <InputText @bind-Value="_modifica.Categorie" /></label>
+            <label class="largo">Note <InputTextArea @bind-Value="_modifica.Note" rows="2" /></label>
+        </div>
+        @if (_duplicati.Count > 0)
+        {
+            <div class="nota-mancanti">
+                Attenzione, possibili duplicati:
+                <ul>@foreach (var d in _duplicati) { <li>@d.Denominazione — @d.Motivo</li> }</ul>
+                Se si tratta di un fornitore diverso, premi di nuovo «Salva».
+            </div>
+        }
+        <div class="azioni">
+            <button type="submit" class="pulsante primario">Salva</button>
+            <button type="button" class="pulsante" @onclick="() => _modifica = null">Annulla</button>
+            @if (_modifica.Id != Guid.Empty)
+            {
+                <span class="spazio"></span>
+                <button type="button" class="pulsante" @onclick="ArchiviaAsync">@(_modifica.Archiviato ? "Riattiva" : "Archivia")</button>
+            }
+        </div>
+    </EditForm>
+}
+
+<div class="filtri">
+    <input type="search" placeholder="Cerca per denominazione, partita IVA o lavorazione…" @bind="_cerca" @bind:after="CaricaAsync" />
+    <label class="spunta"><input type="checkbox" @bind="_archiviati" @bind:after="CaricaAsync" /> Mostra archiviati</label>
+</div>
+
+<table class="tabella">
+    <thead><tr><th>Denominazione</th><th>Partita IVA</th><th>Lavorazioni</th><th>Comune</th><th>Telefono</th></tr></thead>
+    <tbody>
+        @foreach (var c in _elenco)
+        {
+            <tr class="cliccabile @(c.Archiviato ? "riga-archiviata" : "")" @onclick="() => Modifica(c)">
+                <td>@c.Denominazione</td><td>@c.PartitaIva</td>
+                <td>@c.Categorie</td><td>@c.Comune @(c.Provincia is null ? "" : $"({c.Provincia})")</td><td>@c.Telefono</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<DatiFornitore> _elenco = [];
+    private DatiFornitore? _modifica;
+    private IReadOnlyList<PossibileDuplicato> _duplicati = [];
+    private string? _cerca, _messaggio;
+    private bool _archiviati, _errore, _duplicatiConfermati;
+
+    protected override Task OnInitializedAsync() => CaricaAsync();
+
+    private async Task CaricaAsync() => _elenco = await Fornitori.ElencoAsync(_cerca, _archiviati);
+
+    private void Modifica(DatiFornitore c)
+    {
+        _modifica = c.Clona();
+        _duplicati = [];
+        _duplicatiConfermati = false;
+    }
+
+    private async Task SalvaAsync()
+    {
+        if (_modifica is null) return;
+        if (!_duplicatiConfermati)
+        {
+            _duplicati = await Fornitori.PossibiliDuplicatiAsync(_modifica);
+            if (_duplicati.Count > 0)
+            {
+                _duplicatiConfermati = true;
+                return;
+            }
+        }
+        try
+        {
+            await Fornitori.SalvaAsync(_modifica);
+            (_messaggio, _errore, _modifica) = ("Fornitore salvato.", false, null);
+            await CaricaAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task ArchiviaAsync()
+    {
+        if (_modifica is null) return;
+        try
+        {
+            await Fornitori.ImpostaArchiviazioneAsync(_modifica.Id, _modifica.Versione, !_modifica.Archiviato);
+            (_messaggio, _errore, _modifica) = ("Operazione eseguita.", false, null);
+            await CaricaAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+}

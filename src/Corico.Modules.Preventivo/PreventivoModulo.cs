@@ -1,7 +1,10 @@
 using System.Reflection;
 using Corico.Core.Configurazione;
 using Corico.Core.Moduli;
+using Corico.Modules.Preventivo.Dati;
 using Corico.Modules.Preventivo.Interfaccia;
+using Corico.Modules.Preventivo.Servizi;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Corico.Modules.Preventivo;
@@ -22,7 +25,15 @@ public sealed class PreventivoModulo : ICoricoModulo
 
     public void RegistraServizi(IServiceCollection servizi, PercorsiDati percorsi)
     {
+        servizi.AddDbContextFactory<PreventivoDbContext>(o => o.UseSqlite(percorsi.StringaConnessione,
+            s => s.MigrationsHistoryTable(PreventivoDbContext.TabellaMigrazioni)));
+        servizi.AddSingleton<PreventivoService>();
+        servizi.AddSingleton<ImportazioneComputoService>();
     }
 
-    public Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct) => Task.CompletedTask;
+    public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)
+    {
+        await using var db = await servizi.GetRequiredService<IDbContextFactory<PreventivoDbContext>>().CreateDbContextAsync(ct);
+        await db.Database.MigrateAsync(ct);
+    }
 }

@@ -14,6 +14,10 @@ dati-sviluppo/
 Documenti/
 Backup/
 Log/
+# ...ma le cartelle di codice sorgente con questi nomi vanno incluse
+!src/**/Backup/
+!src/**/Documenti/
+!src/**/Log/
 Esempi/
 *.xpwe
 *.XPWE

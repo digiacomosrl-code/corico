@@ -8,7 +8,8 @@ public sealed record FileEsportato(byte[] Contenuto, string TipoContenuto, strin
 
 /// <summary>Esportazioni del preventivo: Excel del computo e del riepilogo, PDF A4 del riepilogo e delle schede pacchetto.</summary>
 public sealed class EsportazioniService(
-    RiepilogoService riepilogo, VersioniService versioni, PacchettiService pacchetti, CommesseService commesse, TimeProvider orologio)
+    RiepilogoService riepilogo, VersioniService versioni, PacchettiService pacchetti, ListaSpesaService listaSpesa,
+    CommesseService commesse, TimeProvider orologio)
 {
     public const string TipoExcel = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public const string TipoPdf = "application/pdf";
@@ -34,6 +35,15 @@ public sealed class EsportazioniService(
         // Gli avvisi descrivono lo stato attuale: si stampano solo con la bozza.
         var avvisi = versioneId is null ? await riepilogo.AvvisiAsync(commessaId, ct) : null;
         return new(EsportazionePdf.Riepilogo(dati.Value.Intestazione, dati.Value.Fotografia, avvisi), TipoPdf, Nome("Riepilogo", dati.Value, "pdf"));
+    }
+
+    public async Task<FileEsportato?> ListaSpesaExcelAsync(Guid commessaId, CancellationToken ct = default)
+    {
+        var commessa = await commesse.OttieniAsync(commessaId, ct);
+        if (commessa is null) return null;
+        var lista = await listaSpesa.CalcolaAsync(commessaId, ct);
+        var intestazione = new IntestazioneStampa(NomeCommessa(commessa), $"Bozza al {Formato.DataOra(orologio.GetUtcNow().UtcDateTime)} – offerte scelte");
+        return new(EsportazioneExcel.ListaSpesa(intestazione, lista), TipoExcel, $"Lista della Spesa {commessa.Codice} {orologio.GetLocalNow():yyyyMMdd}.xlsx");
     }
 
     public async Task<FileEsportato?> PacchettoPdfAsync(Guid commessaId, Guid pacchettoId, CancellationToken ct = default)

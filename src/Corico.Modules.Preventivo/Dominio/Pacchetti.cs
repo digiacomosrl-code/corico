@@ -114,7 +114,7 @@ public sealed class Offerta : EntitaBase
 }
 
 /// <summary>
-/// Costo di una voce del pacchetto secondo un'offerta, a livello sintetico (sez. 13.1): costo unitario in tre colonne.
+/// Costo di una voce del pacchetto secondo un'offerta (sez. 13.1): tre colonne del livello sintetico oppure risorse del livello analitico.
 /// La quantità di pianificazione, se indicata, sostituisce quella del computo per ricavo e costo (decisione 2: nota obbligatoria).
 /// </summary>
 public sealed class OffertaVoce : EntitaBase
@@ -129,6 +129,9 @@ public sealed class OffertaVoce : EntitaBase
     public decimal Fornitura { get; set; }
     public decimal FornituraEPosa { get; set; }
     public decimal ManodoperaENoli { get; set; }
+
+    /// <summary>Risorse del livello analitico; se presenti sostituiscono le tre colonne del livello sintetico.</summary>
+    public List<RisorsaVoce> Risorse { get; } = [];
 }
 
 /// <summary>Riga dell'offerta del fornitore, assegnabile a una voce del computo (più righe per la stessa voce).</summary>

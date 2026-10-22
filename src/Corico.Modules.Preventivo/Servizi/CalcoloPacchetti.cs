@@ -17,7 +17,8 @@ public sealed record VoceOffertaCalcolata(
     decimal CostoUnitarioSintetico,
     decimal CostoSintetico,
     decimal CostoRighe,
-    int NumeroRighe)
+    int NumeroRighe,
+    bool Analitico = false)
 {
     public decimal Costo => CostoSintetico + CostoRighe;
     public decimal? CostoUnitario => Quantita == 0 ? null : Costo / Quantita;
@@ -69,12 +70,12 @@ public static class CalcoloPacchetti
         {
             perVoce.TryGetValue(v.Id, out var ov);
             var quantita = ov?.QuantitaPianificazione ?? v.Quantita;
-            var unitario = ov is null ? 0 : ov.Fornitura + ov.FornituraEPosa + ov.ManodoperaENoli;
+            var unitario = CostoUnitario(ov);
             righePerVoce.TryGetValue(v.Id, out var righe);
             voci.Add(new VoceOffertaCalcolata(v, quantita,
                 ov?.QuantitaPianificazione is { } qp && qp != v.Quantita, ov?.NotaQuantita,
                 CalcoloRicavi.Voce(quantita, v.Prezzo, ribassoPercentuale, v.PercentualeNonSoggetta),
-                unitario, quantita * unitario, righe.Importo, righe.Numero));
+                unitario, quantita * unitario, righe.Importo, righe.Numero, ov is { Risorse.Count: > 0 }));
         }
 
         var idVoci = vociPacchetto.Select(v => v.Id).ToHashSet();
@@ -86,6 +87,15 @@ public static class CalcoloPacchetti
             nonAssegnate.Sum(r => ImportoRiga(r.Quantita, r.PrezzoListino, r.ScontoPercentuale)), nonAssegnate.Count,
             offerta.CostiACorpo.Where(c => !c.Incluso).Sum(c => c.Importo), totaleRighe);
     }
+
+    /// <summary>
+    /// Costo unitario della voce secondo l'offerta: somma delle risorse (livello analitico) se presenti,
+    /// altrimenti Fornitura + Fornitura e posa + Manodopera e noli (livello sintetico). Mai entrambi.
+    /// </summary>
+    public static decimal CostoUnitario(OffertaVoce? ov) =>
+        ov is null ? 0
+        : ov.Risorse.Count > 0 ? ov.Risorse.Sum(Risorse.CostoUnitario)
+        : ov.Fornitura + ov.FornituraEPosa + ov.ManodoperaENoli;
 
     /// <summary>Ricavo del pacchetto senza offerta: quantità del computo.</summary>
     public static (decimal Lordo, decimal Netto) RicavoDaComputo(IEnumerable<VoceDiCalcolo> voci, decimal ribassoPercentuale)

@@ -1,0 +1,106 @@
+@* Scheda "Lista della Spesa" della commessa (rilascio 1D): risorse e costi delle offerte scelte, per categoria e per voce. *@
+@inject ListaSpesaService ListaSpesa
+
+@if (_lista is null)
+{
+    <p class="testo-secondario">Caricamento…</p>
+    return;
+}
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Lista della Spesa</h3>
+        <div class="azioni-in-linea">
+            <label class="spunta"><input type="checkbox" @bind="_perVoce" /> Dettaglio per voce</label>
+            <a class="pulsante" href="@($"preventivo/{CommessaId}/lista-spesa.xlsx")" download>Esporta in Excel</a>
+        </div>
+    </div>
+    <p class="testo-secondario">
+        Risorse e costi delle offerte scelte: risorse del livello analitico, colonne del livello sintetico
+        (Fornitura → materiali, Fornitura e posa → subappalti, Manodopera e noli → manodopera), righe d'offerta e voci a corpo.
+        Il totale coincide con il costo pianificato della commessa.
+    </p>
+    @if (_lista.PacchettiSenzaOfferta > 0)
+    {
+        <div class="segnalazione segnalazione-attenzione">@_lista.PacchettiSenzaOfferta pacchetti senza offerta scelta non compaiono nella lista.</div>
+    }
+
+    <table class="tabella quadro riepilogo-categorie">
+        <tbody>
+            @foreach (var (categoria, importo) in _lista.PerCategoria)
+            {
+                <tr class="@(importo == 0 ? "testo-secondario" : "")"><td>@Testi.Categoria(categoria)</td><td class="num">@Formato.Euro(importo)</td></tr>
+            }
+            <tr class="totale"><td>Totale</td><td class="num">@Formato.Euro(_lista.Totale)</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="riquadro">
+    @if (!_perVoce)
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr><th>Descrizione</th><th>U.M.</th><th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th class="num">Utilizzi</th></tr>
+                </thead>
+                @foreach (var gruppo in _lista.Aggregata().GroupBy(r => r.Categoria))
+                {
+                    <tbody>
+                        <tr class="gruppo"><td colspan="6">@Testi.Categoria(gruppo.Key)</td></tr>
+                        @foreach (var r in gruppo)
+                        {
+                            <tr>
+                                <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
+                                <td>@r.Unita</td>
+                                <td class="num">@Formato.Numero(r.Quantita)</td>
+                                <td class="num">@(r.Prezzo is null ? "" : Formato.Euro(r.Prezzo))</td>
+                                <td class="num">@Formato.Euro(r.Importo)</td>
+                                <td class="num">@r.Utilizzi</td>
+                            </tr>
+                        }
+                        <tr class="subtotale"><td colspan="4">Totale @Testi.Categoria(gruppo.Key).ToLowerInvariant()</td><td class="num">@Formato.Euro(gruppo.Sum(r => r.Importo))</td><td></td></tr>
+                    </tbody>
+                }
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th>Pacchetto</th><th>Voce</th><th>Categoria</th><th>Descrizione</th><th>U.M.</th>
+                        <th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th>Origine</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _lista.Righe)
+                    {
+                        <tr>
+                            <td>@r.Pacchetto</td>
+                            <td class="codice">@r.Tariffa</td>
+                            <td>@Testi.Categoria(r.Categoria)</td>
+                            <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
+                            <td>@r.Unita</td>
+                            <td class="num">@Formato.Numero(r.Quantita)</td>
+                            <td class="num">@(r.Prezzo is null ? "" : Formato.Euro(r.Prezzo))</td>
+                            <td class="num">@Formato.Euro(r.Importo)</td>
+                            <td>@Testi.OrigineSpesa(r.Origine)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+
+    private ListaSpesa? _lista;
+    private bool _perVoce;
+
+    protected override async Task OnParametersSetAsync() => _lista = await ListaSpesa.CalcolaAsync(CommessaId);
+}

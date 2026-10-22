@@ -29,6 +29,9 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<SpesaGenerale> SpeseGenerali => Set<SpesaGenerale>();
     public DbSet<IntegrazioneRicavo> IntegrazioniRicavo => Set<IntegrazioneRicavo>();
     public DbSet<VersionePreventivo> Versioni => Set<VersionePreventivo>();
+    public DbSet<RisorsaVoce> RisorseVoci => Set<RisorsaVoce>();
+    public DbSet<AnalisiAziendale> AnalisiAziendali => Set<AnalisiAziendale>();
+    public DbSet<RigaAnalisiAziendale> RigheAnalisiAziendali => Set<RigaAnalisiAziendale>();
 
     protected override bool PossiedeTabelleCore => false;
 
@@ -144,6 +147,34 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
         {
             e.ToTable("PRV_OfferteVoci");
             e.HasIndex(x => new { x.OffertaId, x.VoceComputoId }).IsUnique();
+            e.HasMany(x => x.Risorse).WithOne().HasForeignKey(x => x.OffertaVoceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RisorsaVoce>(e =>
+        {
+            e.ToTable("PRV_RisorseVoci");
+            e.HasIndex(x => new { x.OffertaVoceId, x.Ordine });
+            e.HasIndex(x => x.CommessaId);
+            e.Property(x => x.Descrizione).HasMaxLength(500).IsRequired();
+            e.Property(x => x.Unita).HasMaxLength(30);
+        });
+
+        // Analisi aziendali: non appartengono a una commessa, sono riutilizzabili in tutte.
+        modelBuilder.Entity<AnalisiAziendale>(e =>
+        {
+            e.ToTable("PRV_AnalisiAziendali");
+            e.HasIndex(x => x.Codice);
+            e.Property(x => x.Descrizione).HasMaxLength(500).IsRequired();
+            e.Property(x => x.Unita).HasMaxLength(30);
+            e.HasMany(x => x.Righe).WithOne().HasForeignKey(x => x.AnalisiId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RigaAnalisiAziendale>(e =>
+        {
+            e.ToTable("PRV_RigheAnalisiAziendali");
+            e.HasIndex(x => new { x.AnalisiId, x.Ordine });
+            e.Property(x => x.Descrizione).HasMaxLength(500).IsRequired();
+            e.Property(x => x.Unita).HasMaxLength(30);
         });
 
         modelBuilder.Entity<RigaOfferta>(e =>

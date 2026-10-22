@@ -232,7 +232,7 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
     public async Task<Offerta?> OffertaAsync(Guid commessaId, Guid offertaId, CancellationToken ct = default)
     {
         await using var db = await fabbrica.CreateDbContextAsync(ct);
-        var o = await db.Offerte.AsNoTracking().AsSplitQuery().Include(x => x.Voci).Include(x => x.Righe).Include(x => x.CostiACorpo)
+        var o = await db.Offerte.AsNoTracking().AsSplitQuery().Include(x => x.Voci).ThenInclude(v => v.Risorse).Include(x => x.Righe).Include(x => x.CostiACorpo)
             .FirstOrDefaultAsync(x => x.Id == offertaId && x.CommessaId == commessaId, ct);
         if (o is null) return null;
         // Le voci aggiunte al pacchetto dopo l'inserimento dell'offerta compaiono con costo zero.
@@ -268,7 +268,7 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
         }
         else
         {
-            o = await db.Offerte.AsSplitQuery().Include(x => x.Voci).Include(x => x.Righe).Include(x => x.CostiACorpo)
+            o = await db.Offerte.AsSplitQuery().Include(x => x.Voci).ThenInclude(v => v.Risorse).Include(x => x.Righe).Include(x => x.CostiACorpo)
                 .FirstOrDefaultAsync(x => x.Id == dati.Id && x.CommessaId == commessaId, ct)
                 ?? throw new OperazioneNonValidaException("L'offerta non esiste.");
             db.Entry(o).Property(x => x.Versione).OriginalValue = dati.Versione;
@@ -299,6 +299,20 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             a.Fornitura = b.Fornitura;
             a.FornituraEPosa = b.FornituraEPosa;
             a.ManodoperaENoli = b.ManodoperaENoli;
+            var ordineRisorse = 0;
+            Sincronizza(db, a.Risorse, b.Risorse, (x, y) =>
+            {
+                x.Ordine = ++ordineRisorse;
+                x.Categoria = y.Categoria;
+                x.Descrizione = y.Descrizione.Trim();
+                x.Unita = Importazione.UnitaMisura.Normalizza(y.Unita);
+                x.Fabbisogno = y.Fabbisogno;
+                x.SfridoPercentuale = y.SfridoPercentuale;
+                x.Prezzo = y.Prezzo;
+                x.Fonte = Pulisci(y.Fonte);
+                x.Note = Pulisci(y.Note);
+                x.AnalisiId = y.AnalisiId;
+            }, commessaId);
         }, commessaId);
         var ordine = 0;
         Sincronizza(db, o.Righe, dati.Righe, (a, b) =>
@@ -354,6 +368,11 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             throw new OperazioneNonValidaException("Lo sconto deve essere compreso tra 0 e 100%.");
         if (o.CostiACorpo.Any(c => string.IsNullOrWhiteSpace(c.Descrizione)))
             throw new OperazioneNonValidaException("Ogni voce a corpo deve avere una descrizione.");
+        var risorse = o.Voci.SelectMany(v => v.Risorse).ToList();
+        if (risorse.Any(r => string.IsNullOrWhiteSpace(r.Descrizione)))
+            throw new OperazioneNonValidaException("Ogni risorsa deve avere una descrizione.");
+        if (risorse.Any(r => r.Fabbisogno < 0 || r.Prezzo < 0 || r.SfridoPercentuale < 0))
+            throw new OperazioneNonValidaException("Fabbisogno, sfrido e prezzo delle risorse non possono essere negativi.");
         if (o.ValiditaGiorni is < 0)
             throw new OperazioneNonValidaException("La validità non può essere negativa.");
     }
@@ -392,7 +411,7 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
     }
 
     internal static async Task<List<Offerta>> CaricaOfferteAsync(PreventivoDbContext db, Guid commessaId, CancellationToken ct) =>
-        await db.Offerte.AsNoTracking().AsSplitQuery().Include(o => o.Voci).Include(o => o.Righe).Include(o => o.CostiACorpo)
+        await db.Offerte.AsNoTracking().AsSplitQuery().Include(o => o.Voci).ThenInclude(v => v.Risorse).Include(o => o.Righe).Include(o => o.CostiACorpo)
             .Where(o => o.CommessaId == commessaId).ToListAsync(ct);
 
     internal static async Task<Dictionary<Guid, (VoceDiCalcolo Voce, int Ordine, bool Archiviata)>> VociDiCalcoloAsync(

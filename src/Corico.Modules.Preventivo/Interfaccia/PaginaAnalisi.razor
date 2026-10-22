@@ -1,0 +1,141 @@
+@page "/analisi"
+@* Analisi prezzi aziendali (sez. 15): elenco, modifica, conferma e archiviazione. *@
+@inject AnalisiService Analisi
+
+<PageTitle>Analisi prezzi — Corico</PageTitle>
+
+<div class="intestazione">
+    <h1>Analisi prezzi</h1>
+    <button class="pulsante primario" @onclick="Nuova">Nuova analisi</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@if (_modifica is not null)
+{
+    <div class="riquadro">
+        <h3>@(_modifica.Id == Guid.Empty ? "Nuova analisi" : $"Analisi {_modifica.Codice} – {Testi.StatoAnalisi(_modifica.Stato)}")</h3>
+        <div class="griglia-form">
+            <label>Codice <input @bind="_modifica.Codice" placeholder="es. AN.INT.01" /></label>
+            <label class="largo">Lavorazione <input @bind="_modifica.Descrizione" /></label>
+            <label>Unità della lavorazione <input @bind="_modifica.Unita" placeholder="es. mq" /></label>
+            <label class="largo">Fonte <input @bind="_modifica.Fonte" placeholder="es. commessa 214, prezzario SIC 2024" /></label>
+            <label class="largo">Note <input @bind="_modifica.Note" /></label>
+        </div>
+        <h4>Risorse per @(_modifica.Unita ?? "unità") di lavorazione</h4>
+        <div class="scorrevole">
+            <EditorRisorse TRisorsa="RigaAnalisiAziendale" Risorse="_modifica.Righe" UnitaLavorazione="@_modifica.Unita" />
+        </div>
+        <div class="azioni">
+            <button class="pulsante primario" @onclick="SalvaAsync">Salva</button>
+            @if (_modifica.Id != Guid.Empty && _modifica.Stato != StatoAnalisi.Confermata)
+            {
+                <button class="pulsante" @onclick="() => CambiaStatoAsync(StatoAnalisi.Confermata)">Salva e conferma</button>
+            }
+            @if (_modifica.Stato == StatoAnalisi.Confermata)
+            {
+                <button class="pulsante" @onclick="() => CambiaStatoAsync(StatoAnalisi.Bozza)">Riporta in bozza</button>
+            }
+            @if (_modifica.Id != Guid.Empty && _modifica.Stato != StatoAnalisi.Archiviata)
+            {
+                <button class="pulsante" @onclick="() => CambiaStatoAsync(StatoAnalisi.Archiviata)">Archivia</button>
+            }
+            <button class="pulsante" @onclick="() => _modifica = null">Chiudi</button>
+        </div>
+        <p class="testo-secondario">
+            Solo le analisi confermate si possono applicare alle voci delle offerte. Applicarle ne copia le risorse:
+            modificare l'analisi in seguito non cambia i preventivi in cui è già stata usata.
+        </p>
+    </div>
+}
+
+<div class="riquadro">
+    <div class="riga-form">
+        <input class="largo" placeholder="Cerca per codice o lavorazione…" @bind="_testo" @bind:event="oninput" @bind:after="AggiornaAsync" />
+        <label class="spunta"><input type="checkbox" @bind="_archiviate" @bind:after="AggiornaAsync" /> Mostra archiviate</label>
+    </div>
+    @if (_elenco.Count == 0)
+    {
+        <p class="testo-secondario">Nessuna analisi. Creane una qui oppure salva come analisi le risorse di una voce da una scheda offerta.</p>
+    }
+    else
+    {
+        <table class="tabella">
+            <thead><tr><th>Codice</th><th>Lavorazione</th><th>U.M.</th><th class="num">Risorse</th><th class="num">Costo unitario</th><th>Stato</th><th>Aggiornata</th></tr></thead>
+            <tbody>
+                @foreach (var a in _elenco)
+                {
+                    <tr class="cliccabile" @onclick="() => ApriAsync(a.Id)">
+                        <td class="codice">@a.Codice</td>
+                        <td>@a.Descrizione</td>
+                        <td>@a.Unita</td>
+                        <td class="num">@a.Risorse</td>
+                        <td class="num">@Formato.Euro(a.CostoUnitario)</td>
+                        <td><span class="etichetta etichetta-analisi-@a.Stato.ToString().ToLowerInvariant()">@Testi.StatoAnalisi(a.Stato)</span></td>
+                        <td>@Formato.DataOra(a.ModificataIl)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<RiepilogoAnalisi> _elenco = [];
+    private AnalisiAziendale? _modifica;
+    private string? _testo;
+    private bool _archiviate;
+    private string? _messaggio;
+    private bool _errore;
+
+    protected override Task OnInitializedAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync() => _elenco = await Analisi.ElencoAsync(_testo, includiArchiviate: _archiviate);
+
+    private void Nuova() => _modifica = new AnalisiAziendale { Id = Guid.Empty };
+
+    private async Task ApriAsync(Guid id) => _modifica = await Analisi.OttieniAsync(id);
+
+    private async Task<bool> SalvaInternoAsync()
+    {
+        try
+        {
+            var id = await Analisi.SalvaAsync(_modifica!);
+            _modifica = await Analisi.OttieniAsync(id);
+            await AggiornaAsync();
+            return true;
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+            return false;
+        }
+    }
+
+    private async Task SalvaAsync()
+    {
+        if (await SalvaInternoAsync()) (_messaggio, _errore) = ("Analisi salvata.", false);
+    }
+
+    private async Task CambiaStatoAsync(StatoAnalisi stato)
+    {
+        if (!await SalvaInternoAsync()) return;
+        try
+        {
+            await Analisi.CambiaStatoAsync(_modifica!.Id, stato);
+            _modifica = await Analisi.OttieniAsync(_modifica.Id);
+            (_messaggio, _errore) = ($"Analisi: {Testi.StatoAnalisi(stato).ToLowerInvariant()}.", false);
+            await AggiornaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+}

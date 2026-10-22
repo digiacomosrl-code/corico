@@ -2,6 +2,7 @@
 @inject PacchettiService Pacchetti
 @inject FornitoriService Fornitori
 @inject DocumentiService Documenti
+@inject AnalisiService Analisi
 
 @if (!string.IsNullOrEmpty(_messaggio))
 {
@@ -81,8 +82,8 @@
 <div class="riquadro">
     <h3>Costi per voce del computo</h3>
     <p class="testo-secondario">
-        Costo unitario in tre colonne (livello sintetico) e/o righe dell'offerta assegnate alla voce.
-        La quantità di pianificazione sostituisce quella del computo per ricavo e costo, con nota obbligatoria.
+        Costo unitario in tre colonne (livello sintetico) oppure dalle risorse della voce (livello analitico, pulsante «Risorse»),
+        più le righe dell'offerta assegnate alla voce. La quantità di pianificazione sostituisce quella del computo per ricavo e costo, con nota obbligatoria.
     </p>
     <div class="scorrevole">
         <table class="tabella">
@@ -90,7 +91,7 @@
                 <tr>
                     <th>Voce</th><th>U.M.</th><th class="num">Q. computo</th><th class="num">Q. pianificazione</th><th>Nota quantità</th>
                     <th class="num">Fornitura</th><th class="num">Forn. e posa</th><th class="num">M.O. e noli</th>
-                    <th class="num">Righe assegnate</th><th class="num">Costo</th><th class="num">Ricavo netto</th><th class="num">MDC</th>
+                    <th class="num">Righe assegnate</th><th class="num">Costo</th><th class="num">Ricavo netto</th><th class="num">MDC</th><th>Livello</th>
                 </tr>
             </thead>
             <tbody>
@@ -103,14 +104,54 @@
                         <td class="num">@Formato.Numero(c.Voce.Quantita)</td>
                         <td class="num"><input type="number" step="any" class="compatto" @bind="ov.QuantitaPianificazione" /></td>
                         <td><input @bind="ov.NotaQuantita" class="@(c.QuantitaModificata && string.IsNullOrWhiteSpace(ov.NotaQuantita) ? "campo-errato" : "")" /></td>
-                        <td class="num"><input type="number" step="any" class="compatto" @bind="ov.Fornitura" /></td>
-                        <td class="num"><input type="number" step="any" class="compatto" @bind="ov.FornituraEPosa" /></td>
-                        <td class="num"><input type="number" step="any" class="compatto" @bind="ov.ManodoperaENoli" /></td>
+                        @if (c.Analitico)
+                        {
+                            <td class="num analitico" colspan="3">analitico: @Formato.Numero(c.CostoUnitarioSintetico, 4) / @(c.Voce.Unita ?? "unità")</td>
+                        }
+                        else
+                        {
+                            <td class="num"><input type="number" step="any" class="compatto" @bind="ov.Fornitura" /></td>
+                            <td class="num"><input type="number" step="any" class="compatto" @bind="ov.FornituraEPosa" /></td>
+                            <td class="num"><input type="number" step="any" class="compatto" @bind="ov.ManodoperaENoli" /></td>
+                        }
                         <td class="num">@(c.NumeroRighe == 0 ? "" : $"{c.NumeroRighe} · {Formato.Numero(c.CostoRighe)}")</td>
                         <td class="num">@Formato.Numero(c.Costo)</td>
                         <td class="num">@Formato.Numero(c.Ricavo.Netto)</td>
                         <td class="num @(c.Mdc < 0 ? "testo-negativo" : "")">@Formato.Numero(c.Mdc)</td>
+                        <td>
+                            <button class="pulsante piccolo @(_risorseAperte.Contains(c.Voce.Id) ? "attivo" : "")" @onclick="() => ApriRisorse(c.Voce.Id)">
+                                Risorse@(ov.Risorse.Count > 0 ? $" ({ov.Risorse.Count})" : "")
+                            </button>
+                        </td>
                     </tr>
+                    @if (_risorseAperte.Contains(c.Voce.Id))
+                    {
+                        <tr class="riga-risorse">
+                            <td colspan="13">
+                                <div class="riga-form">
+                                    <strong class="spazio">Risorse per @(c.Voce.Unita ?? "unità") di «@Accorcia(c.Voce.Descrizione, 70)»</strong>
+                                    <select @bind="_analisiScelta">
+                                        <option value="@Guid.Empty">— applica un'analisi confermata —</option>
+                                        @foreach (var a in _analisi)
+                                        {
+                                            <option value="@a.Id">@a.Codice @Accorcia(a.Descrizione, 50) (@a.Unita, @Formato.Euro(a.CostoUnitario))</option>
+                                        }
+                                    </select>
+                                    <button class="pulsante piccolo" disabled="@(_analisiScelta == Guid.Empty)" @onclick="() => ApplicaAnalisiAsync(ov)">Applica</button>
+                                    <button class="pulsante piccolo" disabled="@(ov.Risorse.Count == 0)" @onclick="() => SalvaComeAnalisiAsync(c.Voce, ov)">Salva come analisi</button>
+                                </div>
+                                <EditorRisorse TRisorsa="RisorsaVoce" Risorse="ov.Risorse" UnitaLavorazione="@c.Voce.Unita"
+                                               Prepara="r => r.CommessaId = CommessaId" OnCambiato="StateHasChanged" />
+                                @if (ov.Risorse.Count > 0 && ov.Fornitura + ov.FornituraEPosa + ov.ManodoperaENoli != 0)
+                                {
+                                    <div class="segnalazione segnalazione-informazione">
+                                        Con le risorse il costo della voce è calcolato a livello analitico: le tre colonne del livello sintetico
+                                        (@Formato.Euro(ov.Fornitura + ov.FornituraEPosa + ov.ManodoperaENoli) / @(c.Voce.Unita ?? "unità")) non vengono più sommate.
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
@@ -240,6 +281,9 @@
     private IReadOnlyList<DatiFornitore> _fornitori = [];
     private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
     private decimal _scontoPredefinito;
+    private readonly HashSet<Guid> _risorseAperte = [];
+    private IReadOnlyList<RiepilogoAnalisi> _analisi = [];
+    private Guid _analisiScelta;
     private bool _confermaElimina;
     private string? _messaggio;
     private bool _errore;
@@ -248,6 +292,7 @@
     {
         _fornitori = await Fornitori.ElencoAsync();
         _documenti = await Documenti.ElencoAsync(CommessaId);
+        _analisi = await Analisi.ElencoAsync(soloConfermate: true);
         _scontoPredefinito = Offerta.Righe.LastOrDefault()?.ScontoPercentuale ?? 0;
     }
 
@@ -260,6 +305,38 @@
             Offerta.Voci.Add(ov);
         }
         return ov;
+    }
+
+    private void ApriRisorse(Guid voceId)
+    {
+        if (!_risorseAperte.Remove(voceId)) _risorseAperte.Add(voceId);
+    }
+
+    private async Task ApplicaAnalisiAsync(OffertaVoce ov)
+    {
+        try
+        {
+            ov.Risorse.AddRange(await Analisi.RisorseDaApplicareAsync(_analisiScelta, CommessaId));
+            (_messaggio, _errore) = ("Risorse dell'analisi aggiunte alla voce: verificale e salva l'offerta.", false);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task SalvaComeAnalisiAsync(VoceDiCalcolo voce, OffertaVoce ov)
+    {
+        try
+        {
+            await Analisi.CreaDaRisorseAsync(voce.Descrizione, voce.Unita, ov.Risorse,
+                $"Offerta {Offerta.NomeFornitore} {Offerta.Numero}".Trim());
+            (_messaggio, _errore) = ("Analisi creata in bozza: confermala dal menu «Analisi prezzi» per riutilizzarla.", false);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
     }
 
     private void ScegliFornitore(ChangeEventArgs e)

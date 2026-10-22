@@ -189,3 +189,15 @@ tr.esito-eliminato td { color: var(--testo-secondario); text-decoration: line-th
 .griglia-form.due-colonne input, .griglia-form.due-colonne select, .griglia-form.due-colonne textarea { width: 100%; box-sizing: border-box; }
 .tabella td.num, .tabella th.num { white-space: nowrap; }
 .riquadro .tabella + form { margin-top: .75rem; }
+
+/* Modulo Preventivo – rilascio 1D: risorse, analisi e Lista della Spesa */
+td.analitico { color: var(--blu); font-style: italic; }
+tr.riga-risorse > td { background: var(--grigio-sfondo); padding: .75rem; }
+.tabella.risorse { background: #fff; }
+.pulsante.attivo { background: var(--blu-chiaro); border-color: var(--blu); }
+.tabella tr.gruppo td { font-weight: 600; background: var(--grigio-sfondo); color: var(--blu); }
+.tabella tr.subtotale td { font-weight: 600; border-top: 1px solid var(--grigio-bordo); }
+.riepilogo-categorie { max-width: 32rem; }
+.etichetta-analisi-bozza { color: var(--ambra); background: var(--ambra-chiaro); }
+.etichetta-analisi-confermata { color: var(--verde); background: var(--verde-chiaro); }
+.etichetta-analisi-archiviata { color: var(--testo-secondario); background: var(--grigio-sfondo); }

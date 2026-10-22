@@ -48,4 +48,32 @@ public static class Testi
         Servizi.EsitoConfronto.Eliminato => "Eliminato",
         _ => "Modificato",
     };
+
+    public static string Categoria(CategoriaRisorsa c) => c switch
+    {
+        CategoriaRisorsa.Materiali => "Materiali e forniture",
+        CategoriaRisorsa.Manodopera => "Manodopera",
+        CategoriaRisorsa.Attrezzature => "Attrezzature e mezzi",
+        CategoriaRisorsa.Subappalti => "Subappalti e lavorazioni esterne",
+        CategoriaRisorsa.TrasportiESmaltimenti => "Trasporti e smaltimenti",
+        CategoriaRisorsa.AltriCosti => "Altri costi diretti",
+        _ => c.ToString(),
+    };
+
+    public static string StatoAnalisi(StatoAnalisi s) => s switch
+    {
+        Dominio.StatoAnalisi.Bozza => "Bozza",
+        Dominio.StatoAnalisi.Confermata => "Confermata",
+        Dominio.StatoAnalisi.Archiviata => "Archiviata",
+        _ => s.ToString(),
+    };
+
+    public static string OrigineSpesa(Servizi.OrigineRigaSpesa o) => o switch
+    {
+        Servizi.OrigineRigaSpesa.Risorsa => "Risorsa",
+        Servizi.OrigineRigaSpesa.Sintetico => "Costo sintetico",
+        Servizi.OrigineRigaSpesa.RigaOfferta => "Riga d'offerta",
+        Servizi.OrigineRigaSpesa.ACorpo => "A corpo",
+        _ => o.ToString(),
+    };
 }

@@ -155,6 +155,79 @@ public static class EsportazioneExcel
         return Salva(wb);
     }
 
+    public static byte[] ListaSpesa(IntestazioneStampa intestazione, ListaSpesa lista)
+    {
+        using var wb = new XLWorkbook();
+
+        var ws = wb.AddWorksheet("Per categoria");
+        var riga = Intestazione(ws, intestazione, "Lista della Spesa", 7);
+        string[] titoli = ["Categoria", "Descrizione", "U.M.", "Quantità", "Prezzo", "Importo", "Utilizzi"];
+        riga = Titoli(ws, riga, titoli);
+        var primo = riga;
+        foreach (var gruppo in lista.Aggregata().GroupBy(r => r.Categoria))
+        {
+            var inizio = riga;
+            foreach (var r in gruppo)
+            {
+                ws.Cell(riga, 1).Value = Testi.Categoria(r.Categoria);
+                ws.Cell(riga, 2).Value = r.Descrizione;
+                ws.Cell(riga, 3).Value = r.Unita;
+                ws.Cell(riga, 4).Value = r.Quantita;
+                if (r.Prezzo is { } p) ws.Cell(riga, 5).Value = p;
+                ws.Cell(riga, 6).Value = r.Importo;
+                ws.Cell(riga, 7).Value = r.Utilizzi;
+                riga++;
+            }
+            StileCorpo(ws.Range(inizio, 1, riga - 1, titoli.Length));
+            ws.Cell(riga, 2).Value = "Totale " + Testi.Categoria(gruppo.Key).ToLowerInvariant();
+            ws.Cell(riga, 6).FormulaA1 = $"SUM(F{inizio}:F{riga - 1})";
+            StileTotale(ws.Range(riga, 1, riga, titoli.Length));
+            riga++;
+        }
+        ws.Cell(riga, 2).Value = "Totale Lista della Spesa";
+        ws.Cell(riga, 6).Value = lista.Totale;
+        StileTotale(ws.Range(riga, 1, riga, titoli.Length));
+        ws.Range(primo, 4, riga, 4).Style.NumberFormat.Format = FormatoNumero;
+        foreach (var c in new[] { 5, 6 }) ws.Range(primo, c, riga, c).Style.NumberFormat.Format = FormatoEuro;
+        Larghezze(ws, 26, 60, 8, 13, 13, 15, 9);
+        ws.Column(2).Style.Alignment.WrapText = true;
+        ws.SheetView.FreezeRows(primo - 1);
+        Pagina(ws, orizzontale: true, primo - 1);
+
+        var wv = wb.AddWorksheet("Per voce");
+        string[] colonne = ["Pacchetto", "Fornitore", "Tariffa", "Voce", "Categoria", "Descrizione", "U.M.", "Quantità", "Prezzo", "Importo", "Origine", "Fonte"];
+        var rv = Titoli(wv, 1, colonne);
+        var primaV = rv;
+        foreach (var r in lista.Righe)
+        {
+            wv.Cell(rv, 1).Value = r.Pacchetto;
+            wv.Cell(rv, 2).Value = r.Fornitore;
+            wv.Cell(rv, 3).Value = r.Tariffa;
+            wv.Cell(rv, 4).Value = r.Voce;
+            wv.Cell(rv, 5).Value = Testi.Categoria(r.Categoria);
+            wv.Cell(rv, 6).Value = r.Descrizione;
+            wv.Cell(rv, 7).Value = r.Unita;
+            wv.Cell(rv, 8).Value = r.Quantita;
+            if (r.Prezzo is { } p) wv.Cell(rv, 9).Value = p;
+            wv.Cell(rv, 10).Value = r.Importo;
+            wv.Cell(rv, 11).Value = Testi.OrigineSpesa(r.Origine);
+            wv.Cell(rv, 12).Value = r.Fonte;
+            rv++;
+        }
+        wv.Cell(rv, 6).Value = "Totale";
+        wv.Cell(rv, 10).FormulaA1 = $"SUM(J{primaV}:J{rv - 1})";
+        StileCorpo(wv.Range(primaV, 1, rv - 1, colonne.Length));
+        StileTotale(wv.Range(rv, 1, rv, colonne.Length));
+        wv.Range(primaV, 8, rv, 8).Style.NumberFormat.Format = FormatoNumero;
+        foreach (var c in new[] { 9, 10 }) wv.Range(primaV, c, rv, c).Style.NumberFormat.Format = FormatoEuro;
+        Larghezze(wv, 26, 22, 12, 40, 22, 45, 8, 12, 12, 14, 14, 18);
+        wv.SheetView.FreezeRows(1);
+        wv.RangeUsed()?.SetAutoFilter();
+        Pagina(wv, orizzontale: true, 1);
+
+        return Salva(wb);
+    }
+
     // ---- Stile comune ----
 
     private static int Intestazione(IXLWorksheet ws, IntestazioneStampa i, string titolo, int colonne)

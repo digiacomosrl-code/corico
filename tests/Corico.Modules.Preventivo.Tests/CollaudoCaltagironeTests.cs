@@ -59,6 +59,10 @@ public class CollaudoCaltagironeTests(ITestOutputHelper output)
         Assert.Equal(Math.Round(tabellone.RicavoPacchetti, 2), Math.Round(foto.Totali.RicavoPacchetti, 2));
         output.WriteLine($"Ricavo {foto.Totali.Ricavo:N2}, costo {foto.Totali.Costo:N2}, MDC {foto.Totali.Mdc:N2}, senza costo {foto.Totali.RicavoSenzaCosto:N2}");
 
+        // La Lista della Spesa ripartisce esattamente il costo pianificato.
+        var lista = await amb.Get<ListaSpesaService>().CalcolaAsync(commessa.Id);
+        Assert.Equal(Math.Round(foto.Totali.Costo, 2), Math.Round(lista.Totale, 2));
+
         var esportazioni = amb.Get<EsportazioniService>();
         var stampe = new[]
         {
@@ -67,6 +71,7 @@ public class CollaudoCaltagironeTests(ITestOutputHelper output)
             (await esportazioni.PacchettoPdfAsync(commessa.Id, Riga("Vetrate interne").Id))!,
             (await esportazioni.RiepilogoExcelAsync(commessa.Id, null))!,
             (await esportazioni.ComputoExcelAsync(commessa.Id, null))!,
+            (await esportazioni.ListaSpesaExcelAsync(commessa.Id))!,
         };
         // Per controllare le stampe a vista: CORICO_USCITA_STAMPE=<cartella>.
         if (Environment.GetEnvironmentVariable("CORICO_USCITA_STAMPE") is { Length: > 0 } cartella)

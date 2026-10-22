@@ -19,12 +19,13 @@ public sealed class PreventivoModulo : ICoricoModulo
     public string Nome => "Preventivo";
     public Assembly AssemblyInterfaccia => typeof(PreventivoModulo).Assembly;
 
-    public IReadOnlyList<VoceMenu> VociMenu { get; } = [];
+    public IReadOnlyList<VoceMenu> VociMenu { get; } = [new("Analisi prezzi", "analisi", Ordine: 40)];
 
     public IReadOnlyList<SchedaCommessa> SchedeCommessa { get; } =
     [
         new("Preventivo", typeof(SchedaPreventivo), Ordine: 10),
         new("Pacchetti", typeof(SchedaPacchetti), Ordine: 20),
+        new("Lista della Spesa", typeof(SchedaListaSpesa), Ordine: 25),
         new("Riepilogo economico", typeof(SchedaRiepilogo), Ordine: 30),
         new("Versioni", typeof(SchedaVersioni), Ordine: 40),
     ];
@@ -40,6 +41,8 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<RiepilogoService>();
         servizi.AddSingleton<VersioniService>();
         servizi.AddSingleton<EsportazioniService>();
+        servizi.AddSingleton<AnalisiService>();
+        servizi.AddSingleton<ListaSpesaService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)
@@ -53,6 +56,8 @@ public sealed class PreventivoModulo : ICoricoModulo
         var gruppo = app.MapGroup("/preventivo/{commessaId:guid}");
         gruppo.MapGet("/computo.xlsx", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.ComputoExcelAsync(commessaId, versione, ct)));
+        gruppo.MapGet("/lista-spesa.xlsx", (Guid commessaId, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.ListaSpesaExcelAsync(commessaId, ct)));
         gruppo.MapGet("/riepilogo.xlsx", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.RiepilogoExcelAsync(commessaId, versione, ct)));
         gruppo.MapGet("/riepilogo.pdf", (Guid commessaId, Guid? versione, EsportazioniService e, CancellationToken ct) =>

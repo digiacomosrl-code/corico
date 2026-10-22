@@ -1,0 +1,129 @@
+using Corico.Modules.Preventivo.Dati;
+using Corico.Modules.Preventivo.Dominio;
+using Microsoft.EntityFrameworkCore;
+
+namespace Corico.Modules.Preventivo.Servizi;
+
+/// <summary>Origine di una riga della Lista della Spesa: dice quanto il dato è dettagliato.</summary>
+public enum OrigineRigaSpesa
+{
+    /// <summary>Risorsa del livello analitico.</summary>
+    Risorsa,
+    /// <summary>Colonna del livello sintetico (Fornitura, Fornitura e posa, Manodopera e noli).</summary>
+    Sintetico,
+    /// <summary>Riga dell'offerta del fornitore.</summary>
+    RigaOfferta,
+    /// <summary>Voce a corpo dell'offerta.</summary>
+    ACorpo,
+}
+
+public sealed record RigaSpesa(
+    CategoriaRisorsa Categoria, string Descrizione, string? Unita, decimal Quantita, decimal? Prezzo, decimal Importo,
+    OrigineRigaSpesa Origine, string Pacchetto, string? Fornitore, string? Tariffa, string? Voce, string? Fonte);
+
+public sealed record RigaSpesaAggregata(CategoriaRisorsa Categoria, string Descrizione, string? Unita, decimal Quantita,
+    decimal? Prezzo, decimal Importo, int Utilizzi);
+
+public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSenzaOfferta)
+{
+    public decimal Totale => Righe.Sum(r => r.Importo);
+
+    public IEnumerable<(CategoriaRisorsa Categoria, decimal Importo)> PerCategoria =>
+        Enum.GetValues<CategoriaRisorsa>().Select(c => (c, Righe.Where(r => r.Categoria == c).Sum(r => r.Importo)));
+
+    /// <summary>
+    /// Righe aggregate per categoria: le risorse uguali (descrizione, unità e prezzo) di voci diverse
+    /// si sommano in un'unica riga con la quantità totale da acquistare.
+    /// </summary>
+    public IReadOnlyList<RigaSpesaAggregata> Aggregata() =>
+        Righe.GroupBy(r => (r.Categoria, Chiave: r.Descrizione.Trim().ToLowerInvariant(), r.Unita, r.Prezzo))
+            .Select(g => new RigaSpesaAggregata(g.Key.Categoria, g.First().Descrizione, g.Key.Unita, g.Sum(r => r.Quantita),
+                g.Key.Prezzo, g.Sum(r => r.Importo), g.Count()))
+            .OrderBy(r => r.Categoria).ThenByDescending(r => r.Importo).ToList();
+}
+
+/// <summary>
+/// Lista della Spesa di commessa (sez. 13.2): tutte le risorse e i costi delle offerte scelte, per categoria e per voce.
+/// Livello sintetico e analitico confluiscono negli stessi totali senza doppi conteggi: il totale coincide
+/// con il costo pianificato della commessa.
+/// </summary>
+public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fabbrica)
+{
+    public async Task<ListaSpesa> CalcolaAsync(Guid commessaId, CancellationToken ct = default)
+    {
+        await using var db = await fabbrica.CreateDbContextAsync(ct);
+        var pacchetti = await db.Pacchetti.AsNoTracking().Include(p => p.Voci)
+            .Where(p => p.CommessaId == commessaId && !p.Archiviato).OrderBy(p => p.Ordine).ToListAsync(ct);
+        var offerte = await PacchettiService.CaricaOfferteAsync(db, commessaId, ct);
+        var voci = await PacchettiService.VociDiCalcoloAsync(db, commessaId, ct);
+
+        var righe = new List<RigaSpesa>();
+        var senzaOfferta = 0;
+        foreach (var p in pacchetti)
+        {
+            var scelta = offerte.FirstOrDefault(o => o.Id == p.OffertaSceltaId);
+            if (scelta is null) { senzaOfferta++; continue; }
+            var vociPacchetto = PacchettiService.VociDel(p, voci);
+            var calcolo = CalcoloPacchetti.Calcola(scelta, vociPacchetto, 0);
+            var perVoce = scelta.Voci.ToDictionary(v => v.VoceComputoId);
+
+            RigaSpesa Riga(CategoriaRisorsa c, string descrizione, string? unita, decimal q, decimal? prezzo, decimal importo,
+                OrigineRigaSpesa origine, VoceDiCalcolo? voce, string? fonte) =>
+                new(c, descrizione, unita, q, prezzo, importo, origine, p.Descrizione, scelta.NomeFornitore, voce?.Tariffa, voce?.Descrizione, fonte);
+
+            foreach (var vc in calcolo.Voci)
+            {
+                if (!perVoce.TryGetValue(vc.Voce.Id, out var ov)) continue;
+                var q = vc.Quantita;
+                if (ov.Risorse.Count > 0)
+                {
+                    foreach (var r in ov.Risorse.OrderBy(r => r.Ordine))
+                        righe.Add(Riga(r.Categoria, r.Descrizione, r.Unita, q * Risorse.FabbisognoEffettivo(r), r.Prezzo,
+                            q * Risorse.CostoUnitario(r), OrigineRigaSpesa.Risorsa, vc.Voce, r.Fonte));
+                    continue;
+                }
+                // Livello sintetico: ogni colonna diventa una riga nella categoria corrispondente.
+                if (ov.Fornitura != 0)
+                    righe.Add(Riga(CategoriaRisorsa.Materiali, "Fornitura – " + vc.Voce.Descrizione, vc.Voce.Unita, q, ov.Fornitura,
+                        q * ov.Fornitura, OrigineRigaSpesa.Sintetico, vc.Voce, null));
+                if (ov.FornituraEPosa != 0)
+                    righe.Add(Riga(CategoriaRisorsa.Subappalti, "Fornitura e posa – " + vc.Voce.Descrizione, vc.Voce.Unita, q, ov.FornituraEPosa,
+                        q * ov.FornituraEPosa, OrigineRigaSpesa.Sintetico, vc.Voce, null));
+                if (ov.ManodoperaENoli != 0)
+                    righe.Add(Riga(CategoriaRisorsa.Manodopera, "Manodopera e noli – " + vc.Voce.Descrizione, vc.Voce.Unita, q, ov.ManodoperaENoli,
+                        q * ov.ManodoperaENoli, OrigineRigaSpesa.Sintetico, vc.Voce, null));
+            }
+
+            var vociPerId = vociPacchetto.ToDictionary(v => v.Id);
+            foreach (var r in scelta.Righe.OrderBy(r => r.Ordine))
+            {
+                var voce = r.VoceComputoId is { } id ? vociPerId.GetValueOrDefault(id) : null;
+                righe.Add(Riga(CategoriaRighe(scelta.Tipo), r.Descrizione, r.Unita, r.Quantita,
+                    CalcoloPacchetti.PrezzoNetto(r.PrezzoListino, r.ScontoPercentuale),
+                    CalcoloPacchetti.ImportoRiga(r.Quantita, r.PrezzoListino, r.ScontoPercentuale), OrigineRigaSpesa.RigaOfferta, voce,
+                    scelta.Numero is null ? null : $"Offerta {scelta.Numero}"));
+            }
+            foreach (var c in scelta.CostiACorpo.Where(c => !c.Incluso).OrderBy(c => c.Ordine))
+                righe.Add(Riga(CategoriaCorpo(c.Descrizione), c.Descrizione, "a corpo", 1, c.Importo, c.Importo, OrigineRigaSpesa.ACorpo, null,
+                    scelta.Numero is null ? null : $"Offerta {scelta.Numero}"));
+        }
+        return new ListaSpesa(righe, senzaOfferta);
+    }
+
+    /// <summary>Categoria delle righe d'offerta secondo il tipo di offerta.</summary>
+    public static CategoriaRisorsa CategoriaRighe(TipoOfferta tipo) => tipo switch
+    {
+        TipoOfferta.SolaFornitura => CategoriaRisorsa.Materiali,
+        TipoOfferta.FornituraEPosa or TipoOfferta.SolaPosa => CategoriaRisorsa.Subappalti,
+        TipoOfferta.Nolo => CategoriaRisorsa.Attrezzature,
+        _ => CategoriaRisorsa.AltriCosti,
+    };
+
+    /// <summary>Le voci a corpo di trasporto, scarico e smaltimento vanno nella loro categoria; le altre tra gli altri costi diretti.</summary>
+    public static CategoriaRisorsa CategoriaCorpo(string descrizione)
+    {
+        var d = descrizione.ToLowerInvariant();
+        string[] trasporti = ["traspor", "scaric", "smalt", "discaric", "consegn", "spediz", "imball"];
+        return trasporti.Any(d.Contains) ? CategoriaRisorsa.TrasportiESmaltimenti : CategoriaRisorsa.AltriCosti;
+    }
+}

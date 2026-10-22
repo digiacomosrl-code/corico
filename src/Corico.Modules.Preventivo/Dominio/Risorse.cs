@@ -96,3 +96,19 @@ public sealed class RigaAnalisiAziendale : EntitaBase, IRisorsa
     public string? Fonte { get; set; }
     public string? Note { get; set; }
 }
+
+/// <summary>
+/// Codice di una risorsa nella Lista della Spesa della commessa (es. «MAT.001»), assegnato automaticamente
+/// alla prima comparsa e mai riutilizzato: resta lo stesso anche quando la lista cambia.
+/// </summary>
+public sealed class CodiceRisorsa : EntitaBase
+{
+    public Guid CommessaId { get; set; }
+    public CategoriaRisorsa Categoria { get; set; }
+
+    /// <summary>Descrizione e unità normalizzate che identificano la risorsa.</summary>
+    public string Chiave { get; set; } = "";
+
+    public int Numero { get; set; }
+    public string Codice { get; set; } = "";
+}

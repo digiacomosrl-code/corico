@@ -17,8 +17,8 @@
     </div>
     <p class="testo-secondario">
         Risorse e costi delle offerte scelte: risorse del livello analitico, colonne del livello sintetico
-        (Fornitura → materiali, Fornitura e posa → subappalti, Manodopera e noli → manodopera), righe d'offerta e voci a corpo.
-        Il totale coincide con il costo pianificato della commessa.
+        (Fornitura → materiali e forniture, Fornitura e posa → subappalti, Manodopera e noli → manodopera), righe d'offerta e voci a corpo.
+        Il totale coincide con il costo pianificato della commessa. Ogni risorsa ha un codice assegnato automaticamente (MAT, MAN, ATT, SUB, TRA, ALT), che non cambia.
     </p>
     @if (_lista.PacchettiSenzaOfferta > 0)
     {
@@ -46,15 +46,16 @@
         <div class="scorrevole">
             <table class="tabella">
                 <thead>
-                    <tr><th>Descrizione</th><th>U.M.</th><th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th class="num">Utilizzi</th></tr>
+                    <tr><th>Codice</th><th>Descrizione</th><th>U.M.</th><th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th class="num">Utilizzi</th></tr>
                 </thead>
                 @foreach (var gruppo in _lista.Aggregata().GroupBy(r => r.Categoria))
                 {
                     <tbody>
-                        <tr class="gruppo"><td colspan="6">@Testi.Categoria(gruppo.Key)</td></tr>
+                        <tr class="gruppo"><td colspan="7">@Testi.Categoria(gruppo.Key)</td></tr>
                         @foreach (var r in gruppo)
                         {
                             <tr>
+                                <td class="codice">@r.Codice</td>
                                 <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
                                 <td>@r.Unita</td>
                                 <td class="num">@Formato.Numero(r.Quantita)</td>
@@ -63,7 +64,7 @@
                                 <td class="num">@r.Utilizzi</td>
                             </tr>
                         }
-                        <tr class="subtotale"><td colspan="4">Totale @Testi.Categoria(gruppo.Key).ToLowerInvariant()</td><td class="num">@Formato.Euro(gruppo.Sum(r => r.Importo))</td><td></td></tr>
+                        <tr class="subtotale"><td colspan="5">Totale @Testi.Categoria(gruppo.Key).ToLowerInvariant()</td><td class="num">@Formato.Euro(gruppo.Sum(r => r.Importo))</td><td></td></tr>
                     </tbody>
                 }
             </table>
@@ -75,7 +76,7 @@
             <table class="tabella">
                 <thead>
                     <tr>
-                        <th>Pacchetto</th><th>Voce</th><th>Categoria</th><th>Descrizione</th><th>U.M.</th>
+                        <th>Pacchetto</th><th>Voce</th><th>Categoria</th><th>Codice</th><th>Descrizione</th><th>U.M.</th>
                         <th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th>Origine</th>
                     </tr>
                 </thead>
@@ -86,6 +87,7 @@
                             <td>@r.Pacchetto</td>
                             <td class="codice">@r.Tariffa</td>
                             <td>@Testi.Categoria(r.Categoria)</td>
+                            <td class="codice">@r.Codice</td>
                             <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
                             <td>@r.Unita</td>
                             <td class="num">@Formato.Numero(r.Quantita)</td>

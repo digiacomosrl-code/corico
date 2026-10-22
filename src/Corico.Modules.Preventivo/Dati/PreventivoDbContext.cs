@@ -32,6 +32,7 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<RisorsaVoce> RisorseVoci => Set<RisorsaVoce>();
     public DbSet<AnalisiAziendale> AnalisiAziendali => Set<AnalisiAziendale>();
     public DbSet<RigaAnalisiAziendale> RigheAnalisiAziendali => Set<RigaAnalisiAziendale>();
+    public DbSet<CodiceRisorsa> CodiciRisorse => Set<CodiceRisorsa>();
 
     protected override bool PossiedeTabelleCore => false;
 
@@ -175,6 +176,15 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.HasIndex(x => new { x.AnalisiId, x.Ordine });
             e.Property(x => x.Descrizione).HasMaxLength(500).IsRequired();
             e.Property(x => x.Unita).HasMaxLength(30);
+        });
+
+        modelBuilder.Entity<CodiceRisorsa>(e =>
+        {
+            e.ToTable("PRV_CodiciRisorse");
+            e.HasIndex(x => new { x.CommessaId, x.Categoria, x.Chiave }).IsUnique();
+            e.HasIndex(x => new { x.CommessaId, x.Codice }).IsUnique();
+            e.Property(x => x.Chiave).HasMaxLength(600).IsRequired();
+            e.Property(x => x.Codice).HasMaxLength(20).IsRequired();
         });
 
         modelBuilder.Entity<RigaOfferta>(e =>

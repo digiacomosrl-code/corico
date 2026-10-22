@@ -177,4 +177,31 @@ public class RiepilogoEVersioniTests
         Assert.Equal(0, lista.PacchettiSenzaOfferta);
         Assert.Equal(1, lista.VociNonAssegnate);    // la voce C
     }
+
+    [Fact]
+    public async Task Le_risorse_della_lista_hanno_un_codice_stabile_e_la_descrizione_senza_il_gruppo()
+    {
+        var (amb, id, _, _) = await PreparaAsync();
+        await using var _ = amb;
+        var servizio = amb.Get<ListaSpesaService>();
+        var lista = await servizio.CalcolaAsync(id);
+        Assert.Equal(["MAT.001", "MAT.002"], lista.Righe.Select(r => r.Codice).ToArray());
+        Assert.Equal("Porta a un'anta", lista.Righe[0].Descrizione);
+
+        // Una nuova voce nel pacchetto riceve il codice successivo; quelle esistenti non cambiano.
+        var prv = amb.Get<PreventivoService>();
+        var pacchetti = amb.Get<PacchettiService>();
+        await prv.SalvaVoceAsync(id, new DatiVoce { Tariffa = "D", Descrizione = "Maniglione antipanico", Unita = "cad", Quantita = 4, Prezzo = 300 });
+        var d = (await prv.VociAsync(id)).Single(v => v.Tariffa == "D");
+        var pacchetto = (await pacchetti.TabelloneAsync(id)).Righe.Single().Id;
+        await pacchetti.AssegnaVociAsync(id, pacchetto, [d.Id]);
+        var dettaglio = (await pacchetti.DettaglioAsync(id, pacchetto))!;
+        var offerta = (await pacchetti.OffertaAsync(id, dettaglio.Scelta!.Offerta.Id))!;
+        offerta.Voci.Single(v => v.VoceComputoId == d.Id).Fornitura = 200;
+        await pacchetti.SalvaOffertaAsync(id, offerta);
+
+        var dopo = (await servizio.CalcolaAsync(id)).Aggregata();
+        Assert.Equal(["MAT.001", "MAT.002", "MAT.003"], dopo.Select(r => r.Codice).ToArray());
+        Assert.Equal("Maniglione antipanico", dopo.Single(r => r.Codice == "MAT.003").Descrizione);
+    }
 }

@@ -173,6 +173,61 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.ToTable("PRV_Categorie", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.CodiceRisorsa", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Categoria")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Chiave")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Codice")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Numero")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommessaId", "Codice")
+                        .IsUnique();
+
+                    b.HasIndex("CommessaId", "Categoria", "Chiave")
+                        .IsUnique();
+
+                    b.ToTable("PRV_CodiciRisorse", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Computo", b =>
                 {
                     b.Property<Guid>("Id")

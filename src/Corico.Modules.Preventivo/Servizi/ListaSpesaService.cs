@@ -19,9 +19,13 @@ public enum OrigineRigaSpesa
 
 public sealed record RigaSpesa(
     CategoriaRisorsa Categoria, string Descrizione, string? Unita, decimal Quantita, decimal? Prezzo, decimal Importo,
-    OrigineRigaSpesa Origine, string Pacchetto, string? Fornitore, string? Tariffa, string? Voce, string? Fonte);
+    OrigineRigaSpesa Origine, string Pacchetto, string? Fornitore, string? Tariffa, string? Voce, string? Fonte, string? Codice = null)
+{
+    /// <summary>Descrizione e unità normalizzate: identificano la stessa risorsa in voci diverse.</summary>
+    public string Chiave => Descrizione.Trim().ToLowerInvariant() + "|" + (Unita ?? "").Trim().ToLowerInvariant();
+}
 
-public sealed record RigaSpesaAggregata(CategoriaRisorsa Categoria, string Descrizione, string? Unita, decimal Quantita,
+public sealed record RigaSpesaAggregata(CategoriaRisorsa Categoria, string? Codice, string Descrizione, string? Unita, decimal Quantita,
     decimal? Prezzo, decimal Importo, int Utilizzi);
 
 public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSenzaOfferta, int VociNonAssegnate = 0)
@@ -36,10 +40,10 @@ public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSen
     /// si sommano in un'unica riga con la quantità totale da acquistare.
     /// </summary>
     public IReadOnlyList<RigaSpesaAggregata> Aggregata() =>
-        Righe.GroupBy(r => (r.Categoria, Chiave: r.Descrizione.Trim().ToLowerInvariant(), r.Unita, r.Prezzo))
-            .Select(g => new RigaSpesaAggregata(g.Key.Categoria, g.First().Descrizione, g.Key.Unita, g.Sum(r => r.Quantita),
-                g.Key.Prezzo, g.Sum(r => r.Importo), g.Count()))
-            .OrderBy(r => r.Categoria).ThenByDescending(r => r.Importo).ToList();
+        Righe.GroupBy(r => (r.Categoria, r.Chiave, r.Prezzo))
+            .Select(g => new RigaSpesaAggregata(g.Key.Categoria, g.First().Codice, g.First().Descrizione, g.First().Unita,
+                g.Sum(r => r.Quantita), g.Key.Prezzo, g.Sum(r => r.Importo), g.Count()))
+            .OrderBy(r => r.Categoria).ThenBy(r => r.Codice).ThenBy(r => r.Prezzo).ToList();
 }
 
 /// <summary>
@@ -84,13 +88,13 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
                 }
                 // Livello sintetico: ogni colonna diventa una riga nella categoria corrispondente.
                 if (ov.Fornitura != 0)
-                    righe.Add(Riga(CategoriaRisorsa.Materiali, "Fornitura – " + vc.Voce.Descrizione, vc.Voce.Unita, q, ov.Fornitura,
+                    righe.Add(Riga(CategoriaRisorsa.Materiali, vc.Voce.Descrizione, vc.Voce.Unita, q, ov.Fornitura,
                         q * ov.Fornitura, OrigineRigaSpesa.Sintetico, vc.Voce, null));
                 if (ov.FornituraEPosa != 0)
-                    righe.Add(Riga(CategoriaRisorsa.Subappalti, "Fornitura e posa – " + vc.Voce.Descrizione, vc.Voce.Unita, q, ov.FornituraEPosa,
+                    righe.Add(Riga(CategoriaRisorsa.Subappalti, vc.Voce.Descrizione, vc.Voce.Unita, q, ov.FornituraEPosa,
                         q * ov.FornituraEPosa, OrigineRigaSpesa.Sintetico, vc.Voce, null));
                 if (ov.ManodoperaENoli != 0)
-                    righe.Add(Riga(CategoriaRisorsa.Manodopera, "Manodopera e noli – " + vc.Voce.Descrizione, vc.Voce.Unita, q, ov.ManodoperaENoli,
+                    righe.Add(Riga(CategoriaRisorsa.Manodopera, vc.Voce.Descrizione, vc.Voce.Unita, q, ov.ManodoperaENoli,
                         q * ov.ManodoperaENoli, OrigineRigaSpesa.Sintetico, vc.Voce, null));
             }
 
@@ -113,7 +117,47 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
             .Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
         var attive = await db.VociComputo.AsNoTracking().Where(v => v.ComputoId == computoAttivo && !v.Archiviata)
             .Select(v => v.Id).ToListAsync(ct);
+        righe = await AssegnaCodiciAsync(db, commessaId, righe, ct);
         return new ListaSpesa(righe, senzaOfferta, attive.Count(id => !assegnate.Contains(id)));
+    }
+
+    /// <summary>Prefisso del codice risorsa per categoria.</summary>
+    public static string Prefisso(CategoriaRisorsa c) => c switch
+    {
+        CategoriaRisorsa.Materiali => "MAT",
+        CategoriaRisorsa.Manodopera => "MAN",
+        CategoriaRisorsa.Attrezzature => "ATT",
+        CategoriaRisorsa.Subappalti => "SUB",
+        CategoriaRisorsa.TrasportiESmaltimenti => "TRA",
+        _ => "ALT",
+    };
+
+    /// <summary>
+    /// Codici delle risorse: quelli già assegnati nella commessa restano; le risorse nuove ricevono il numero
+    /// successivo della loro categoria, nell'ordine in cui compaiono. I codici non vengono mai riutilizzati.
+    /// </summary>
+    private static async Task<List<RigaSpesa>> AssegnaCodiciAsync(PreventivoDbContext db, Guid commessaId, List<RigaSpesa> righe, CancellationToken ct)
+    {
+        var esistenti = await db.CodiciRisorse.Where(c => c.CommessaId == commessaId).ToListAsync(ct);
+        var codici = esistenti.ToDictionary(c => (c.Categoria, c.Chiave), c => c.Codice);
+        var ultimo = esistenti.GroupBy(c => c.Categoria).ToDictionary(g => g.Key, g => g.Max(c => c.Numero));
+        var nuovi = false;
+        foreach (var r in righe)
+        {
+            if (codici.ContainsKey((r.Categoria, r.Chiave))) continue;
+            var numero = ultimo.GetValueOrDefault(r.Categoria) + 1;
+            ultimo[r.Categoria] = numero;
+            var codice = $"{Prefisso(r.Categoria)}.{numero:000}";
+            codici[(r.Categoria, r.Chiave)] = codice;
+            db.CodiciRisorse.Add(new CodiceRisorsa { CommessaId = commessaId, Categoria = r.Categoria, Chiave = r.Chiave, Numero = numero, Codice = codice });
+            nuovi = true;
+        }
+        if (nuovi)
+        {
+            db.InserimentiSoloInRiepilogo = true;   // codici tecnici: nessuna voce di storico
+            await db.SaveChangesAsync(ct);
+        }
+        return righe.Select(r => r with { Codice = codici[(r.Categoria, r.Chiave)] }).ToList();
     }
 
     /// <summary>Categoria delle righe d'offerta secondo il tipo di offerta.</summary>

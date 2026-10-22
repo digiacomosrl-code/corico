@@ -49,7 +49,7 @@ public sealed class IntegrazioneRicavo : EntitaBase
 /// Versione ufficiale del preventivo: fotografia completa e immutabile della bozza al momento
 /// della pubblicazione, con prezzi congelati e totali calcolati.
 /// </summary>
-public sealed class VersionePreventivo : EntitaBase
+public sealed class VersionePreventivo : EntitaBase, IImmutabile
 {
     public Guid CommessaId { get; set; }
     public int Numero { get; set; }

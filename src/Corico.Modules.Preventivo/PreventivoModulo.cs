@@ -1,5 +1,6 @@
 using System.Reflection;
 using Corico.Core.Configurazione;
+using Corico.Core.Dati;
 using Corico.Core.Moduli;
 using Corico.Modules.Preventivo.Dati;
 using Corico.Modules.Preventivo.Interfaccia;
@@ -34,6 +35,7 @@ public sealed class PreventivoModulo : ICoricoModulo
     {
         servizi.AddDbContextFactory<PreventivoDbContext>(o => o.UseSqlite(percorsi.StringaConnessione,
             s => s.MigrationsHistoryTable(PreventivoDbContext.TabellaMigrazioni)));
+        servizi.AggiungiContestoAnnullabile<PreventivoDbContext>();
         servizi.AddSingleton<PreventivoService>();
         servizi.AddSingleton<ImportazioneComputoService>();
         servizi.AddSingleton<PacchettiService>();

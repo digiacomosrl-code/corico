@@ -34,7 +34,7 @@ else
             <DocumentiCommessa CommessaId="_commessa.Id" />
             break;
         case "Storico":
-            <StoricoCommessa CommessaId="_commessa.Id" />
+            <StoricoCommessa CommessaId="_commessa.Id" OnAnnullato="RicaricaAsync" />
             break;
         default:
             var scheda = Moduli.SchedeCommessa.FirstOrDefault(s => s.Titolo == _schedaAttiva);
@@ -58,6 +58,9 @@ else
         _commessa = await Commesse.OttieniAsync(Id);
         _caricata = true;
     }
+
+    /// <summary>Dopo un annullamento dallo storico i dati della commessa possono essere cambiati.</summary>
+    private async Task RicaricaAsync() => _commessa = await Commesse.OttieniAsync(Id) ?? _commessa;
 
     private IEnumerable<string> Schede() =>
         new[] { "Dati generali" }

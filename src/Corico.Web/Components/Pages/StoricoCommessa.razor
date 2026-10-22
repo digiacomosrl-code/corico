@@ -1,5 +1,6 @@
 @using System.Text.Json
 @inject StoricoService Storico
+@inject AnnullamentoService Annullamento
 
 @if (_voci is null)
 {
@@ -11,9 +12,20 @@ else if (_voci.Count == 0)
 }
 else
 {
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+    <p class="testo-secondario">
+        Le modifiche di dati si possono annullare singolarmente con «Annulla…»: prima di ripristinare, Corico mostra i valori attuali
+        e quelli da ripristinare. L'annullamento viene registrato a sua volta qui sotto.
+    </p>
     <table class="tabella">
         <thead>
-            <tr><th>Data e ora</th><th>Utente</th><th>Operazione</th><th>Elemento</th><th>Dati modificati</th><th>Nota</th></tr>
+            <tr><th>Data e ora</th><th>Utente</th><th>Operazione</th><th>Elemento</th><th>Dati modificati</th><th>Nota</th><th></th></tr>
         </thead>
         <tbody>
             @foreach (var v in _voci)
@@ -30,7 +42,55 @@ else
                         }
                     </td>
                     <td>@v.Nota</td>
+                    <td>
+                        @if (AnnullamentoService.Annullabile(v))
+                        {
+                            <button class="pulsante piccolo @(_anteprima?.VoceId == v.Id ? "attivo" : "")" @onclick="() => ApriAsync(v.Id)">Annulla…</button>
+                        }
+                    </td>
                 </tr>
+                @if (_anteprima?.VoceId == v.Id)
+                {
+                    <tr class="dettaglio-annullamento">
+                        <td colspan="7">
+                            @if (!_anteprima.Possibile)
+                            {
+                                <div class="segnalazione segnalazione-attenzione">Annullamento non possibile: @_anteprima.Motivo</div>
+                                <button class="pulsante piccolo" @onclick="() => _anteprima = null">Chiudi</button>
+                            }
+                            else
+                            {
+                                <table class="tabella quadro">
+                                    <thead><tr><th>Campo</th><th>Valore attuale</th><th>Valore da ripristinare</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var c in _anteprima.Campi)
+                                        {
+                                            <tr>
+                                                <td>@c.Campo</td>
+                                                <td class="@(c.CambiatoDopo ? "campo-cambiato" : "")">@Testo(c.Campo, c.Attuale)@(c.CambiatoDopo ? " (modificato in seguito)" : "")</td>
+                                                <td>@Testo(c.Campo, c.DaRipristinare)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                                @if (_anteprima.RichiedeConfermaAggiuntiva)
+                                {
+                                    <div class="segnalazione segnalazione-attenzione">
+                                        Dopo questa operazione alcuni campi sono stati modificati di nuovo: l'annullamento sovrascrive anche quelle modifiche.
+                                    </div>
+                                }
+                                else if (_anteprima.ModificheSuccessive > 0)
+                                {
+                                    <p class="testo-secondario">Dopo questa operazione l'elemento ha avuto altre @_anteprima.ModificheSuccessive modifiche, su campi diversi: restano invariate.</p>
+                                }
+                                <div class="azioni-in-linea">
+                                    <button class="pulsante primario piccolo" @onclick="AnnullaAsync">Ripristina i valori precedenti</button>
+                                    <button class="pulsante piccolo" @onclick="() => _anteprima = null">Chiudi</button>
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
             }
         </tbody>
     </table>
@@ -38,8 +98,32 @@ else
 
 @code {
     [Parameter] public Guid CommessaId { get; set; }
+    [Parameter] public EventCallback OnAnnullato { get; set; }
     private IReadOnlyList<VoceStorico>? _voci;
+    private AnteprimaAnnullamento? _anteprima;
+    private string? _messaggio;
+    private bool _errore;
+
     protected override async Task OnParametersSetAsync() => _voci = await Storico.PerCommessaAsync(CommessaId);
+
+    private async Task ApriAsync(long id) =>
+        _anteprima = _anteprima?.VoceId == id ? null : await Annullamento.AnteprimaAsync(id);
+
+    private async Task AnnullaAsync()
+    {
+        try
+        {
+            await Annullamento.AnnullaAsync(_anteprima!.VoceId, confermaSovrascrittura: true);
+            (_messaggio, _errore) = ("Valori precedenti ripristinati. L'annullamento è registrato nello storico.", false);
+            _anteprima = null;
+            _voci = await Storico.PerCommessaAsync(CommessaId);
+            await OnAnnullato.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
 
     /// <summary>Righe leggibili "Campo: prima → dopo"; nei nuovi inserimenti solo i campi compilati.</summary>
     private static IEnumerable<string> Differenze(VoceStorico v)

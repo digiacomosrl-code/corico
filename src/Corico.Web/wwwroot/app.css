@@ -201,3 +201,8 @@ tr.riga-risorse > td { background: var(--grigio-sfondo); padding: .75rem; }
 .etichetta-analisi-bozza { color: var(--ambra); background: var(--ambra-chiaro); }
 .etichetta-analisi-confermata { color: var(--verde); background: var(--verde-chiaro); }
 .etichetta-analisi-archiviata { color: var(--testo-secondario); background: var(--grigio-sfondo); }
+
+/* Annullamento selettivo (storico) */
+tr.dettaglio-annullamento > td { background: var(--blu-chiaro); padding: .75rem 1rem; }
+tr.dettaglio-annullamento .tabella { width: auto; min-width: 32rem; margin-bottom: .5rem; background: #fff; }
+.campo-cambiato { color: var(--ambra); font-weight: 600; }

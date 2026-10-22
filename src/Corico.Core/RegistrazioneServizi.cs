@@ -31,6 +31,8 @@ public static class RegistrazioneServizi
         servizi.AddSingleton<FornitoriService>();
         servizi.AddSingleton<DocumentiService>();
         servizi.AddSingleton<StoricoService>();
+        servizi.AddSingleton<AnnullamentoService>();
+        servizi.AggiungiContestoAnnullabile<CoreDbContext>();
         servizi.AddSingleton<ImpostazioniService>();
         servizi.AddSingleton<BackupService>();
         servizi.AddSingleton<AvvisiService>();

@@ -85,13 +85,13 @@
         }
         else
         {
-            <p class="testo-secondario">Nessun computo. Importa un file XPWE (PriMus) oppure inserisci le voci manualmente.</p>
+            <p class="testo-secondario">Nessun computo. Importa un file XPWE (PriMus) o Excel oppure inserisci le voci manualmente.</p>
         }
 
         <div class="riga-form">
             <label class="pulsante">
-                Importa computo XPWE…
-                <InputFile OnChange="LeggiFileAsync" accept=".xpwe,.XPWE" style="display:none" />
+                Importa computo (XPWE o Excel)…
+                <InputFile OnChange="LeggiFileAsync" accept="@ImportazioneComputoService.EstensioniAccettate" style="display:none" />
             </label>
             <button class="pulsante" @onclick="NuovaVoce">Nuova voce manuale</button>
         </div>
@@ -110,12 +110,20 @@
         <p class="testo-secondario">Nulla è ancora stato salvato. Controlla i dati e conferma.</p>
         <table class="tabella quadro">
             <tbody>
+                <tr><td>Formato</td><td>@a.Formato</td></tr>
                 <tr><td>Oggetto</td><td>@a.Letto.Oggetto</td></tr>
                 <tr><td>Comune</td><td>@a.Letto.Comune @(a.Letto.Provincia is { Length: 2 } pr ? $"({pr})" : "")</td></tr>
                 <tr><td>Committente</td><td>@a.Letto.Committente</td></tr>
                 <tr><td>Voci di computo / voci di elenco prezzi</td><td>@a.Letto.Voci.Count / @a.Letto.ElencoPrezzi.Count</td></tr>
                 <tr><td>Totale calcolato (quantità × prezzo)</td><td class="num"><strong>@Formato.Euro(a.TotaleCalcolato)</strong></td></tr>
                 <tr><td>di cui proposto come non soggetto a ribasso</td><td class="num">@Formato.Euro(a.TotaleSicurezza)</td></tr>
+                @if (a.TotaleDocumento is { } totDoc)
+                {
+                    <tr class="@(Math.Abs(a.Differenza ?? 0) >= 0.01m ? "differenza" : "")">
+                        <td>Totale scritto nel file</td>
+                        <td class="num">@Formato.Euro(totDoc) @(Math.Abs(a.Differenza ?? 0) < 0.01m ? "· concorde" : $"· differenza {Formato.Euro(a.Differenza)}")</td>
+                    </tr>
+                }
             </tbody>
         </table>
 
@@ -407,11 +415,11 @@
             await flusso.CopyToAsync(ms);
             _contenuto = ms.ToArray();
             ms.Position = 0;
-            _anteprima = ImportazioneComputoService.Anteprima(ms);
+            _anteprima = ImportazioneComputoService.Anteprima(ms, e.File.Name);
             _nomeFile = e.File.Name;
             await PreparaProposteAsync(_anteprima.Letto);
         }
-        catch (Exception ex) when (ex is FormatException or IOException)
+        catch (Exception ex) when (ex is FormatException or IOException or InvalidDataException)
         {
             (_messaggio, _errore) = ($"Impossibile leggere «{e.File.Name}»: {ex.Message}", true);
             AnnullaImportazione();
@@ -439,7 +447,7 @@
         _inCorso = true;
         try
         {
-            var esito = await Importazione.ConfermaXpweAsync(CommessaId, _contenuto!, _nomeFile!, _totaleDichiaratoImport);
+            var esito = await Importazione.ConfermaAsync(CommessaId, _contenuto!, _nomeFile!, _totaleDichiaratoImport);
             var scelte = _proposte.Where(p => p.Usa).ToList();
             if (scelte.Count > 0 && await Commesse.OttieniAsync(CommessaId) is { } commessa)
             {

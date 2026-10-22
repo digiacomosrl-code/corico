@@ -22,7 +22,7 @@ public class PreventivoServiceTests
         var (amb, id) = await PreparaAsync();
         await using var _ = amb;
 
-        var esito = await amb.Get<ImportazioneComputoService>().ConfermaXpweAsync(id, XpweDiProva.Contenuto, "prova.xpwe", 5000m);
+        var esito = await amb.Get<ImportazioneComputoService>().ConfermaAsync(id, XpweDiProva.Contenuto, "prova.xpwe", 5000m);
 
         Assert.Equal(3, esito.Voci);
         Assert.NotNull(esito.Backup);
@@ -57,7 +57,7 @@ public class PreventivoServiceTests
     {
         var (amb, id) = await PreparaAsync();
         await using var _ = amb;
-        await amb.Get<ImportazioneComputoService>().ConfermaXpweAsync(id, XpweDiProva.Contenuto, "prova.xpwe", null);
+        await amb.Get<ImportazioneComputoService>().ConfermaAsync(id, XpweDiProva.Contenuto, "prova.xpwe", null);
         var servizio = amb.Get<PreventivoService>();
 
         var stato = await servizio.StatoAsync(id);
@@ -89,8 +89,8 @@ public class PreventivoServiceTests
         await using var _ = amb;
         var import = amb.Get<ImportazioneComputoService>();
 
-        await import.ConfermaXpweAsync(id, XpweDiProva.Contenuto, "prima.xpwe", null);
-        await import.ConfermaXpweAsync(id, XpweDiProva.Contenuto, "seconda.xpwe", null);
+        await import.ConfermaAsync(id, XpweDiProva.Contenuto, "prima.xpwe", null);
+        await import.ConfermaAsync(id, XpweDiProva.Contenuto, "seconda.xpwe", null);
 
         var computi = await amb.Get<PreventivoService>().ComputiAsync(id);
         Assert.Equal(2, computi.Count);

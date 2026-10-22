@@ -9,7 +9,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Corico.Modules.Preventivo.Servizi;
 
-public sealed record AnteprimaComputo(ComputoLetto Letto, decimal TotaleCalcolato, decimal TotaleSicurezza, int VociSenzaElenco);
+public sealed record AnteprimaComputo(ComputoLetto Letto, decimal TotaleCalcolato, decimal TotaleSicurezza, int VociSenzaElenco,
+    OrigineComputo Origine = OrigineComputo.Xpwe, string Formato = "XPWE (PriMus)", decimal? TotaleDocumento = null)
+{
+    /// <summary>Differenza tra il totale scritto nel documento e quello ricalcolato; null se il documento non lo riporta.</summary>
+    public decimal? Differenza => TotaleDocumento is null ? null : TotaleCalcolato - TotaleDocumento;
+}
 
 public sealed record EsitoImportazione(Guid ComputoId, int Voci, decimal TotaleCalcolato, Guid DocumentoId, string? Backup);
 
@@ -23,9 +28,23 @@ public sealed class ImportazioneComputoService(
     DocumentiService documenti,
     BackupService backup)
 {
-    public static AnteprimaComputo Anteprima(Stream xpwe)
+    /// <summary>Formati accettati, per il selettore dei file.</summary>
+    public const string EstensioniAccettate = ".xpwe,.XPWE,.xlsx,.XLSX";
+
+    public static bool FileExcel(string nomeFile) => Path.GetExtension(nomeFile).Equals(".xlsx", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Anteprima di un computo XPWE oppure Excel (tabellare o stampa PriMus), secondo l'estensione del file.</summary>
+    public static AnteprimaComputo Anteprima(Stream contenuto, string nomeFile)
     {
-        var letto = LettoreXpwe.Leggi(xpwe);
+        if (!FileExcel(nomeFile)) return Anteprima(contenuto);
+        var excel = LettoreComputoExcel.Leggi(contenuto);
+        return Calcola(excel.Letto) with { Origine = OrigineComputo.Excel, Formato = excel.Formato, TotaleDocumento = excel.TotaleDocumento };
+    }
+
+    public static AnteprimaComputo Anteprima(Stream xpwe) => Calcola(LettoreXpwe.Leggi(xpwe));
+
+    private static AnteprimaComputo Calcola(ComputoLetto letto)
+    {
         decimal totale = 0, sicurezza = 0;
         var senzaElenco = 0;
         foreach (var v in letto.Voci)
@@ -39,12 +58,12 @@ public sealed class ImportazioneComputoService(
         return new AnteprimaComputo(letto, totale, sicurezza, senzaElenco);
     }
 
-    public async Task<EsitoImportazione> ConfermaXpweAsync(Guid commessaId, byte[] contenuto, string nomeFile,
+    public async Task<EsitoImportazione> ConfermaAsync(Guid commessaId, byte[] contenuto, string nomeFile,
         decimal? totaleDichiarato, CancellationToken ct = default)
     {
         AnteprimaComputo anteprima;
         using (var ms = new MemoryStream(contenuto))
-            anteprima = Anteprima(ms);
+            anteprima = Anteprima(ms, nomeFile);
 
         var esitoBackup = await backup.EseguiBackupLocaleAsync(MotivoBackup.PrimaDiImportazione, ct);
         if (!esitoBackup.Riuscito)
@@ -52,7 +71,9 @@ public sealed class ImportazioneComputoService(
 
         EsitoCaricamento doc;
         using (var ms = new MemoryStream(contenuto))
-            doc = await documenti.CaricaAsync(ms, nomeFile, "application/xml", commessaId, "Computo metrico", ct);
+            doc = await documenti.CaricaAsync(ms, nomeFile,
+                FileExcel(nomeFile) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/xml",
+                commessaId, "Computo metrico", ct);
 
         var letto = anteprima.Letto;
         await using var db = await fabbrica.CreateDbContextAsync(ct);
@@ -65,9 +86,9 @@ public sealed class ImportazioneComputoService(
 
         var computo = new Computo
         {
-            PreventivoId = preventivo.Id, CommessaId = commessaId, Origine = OrigineComputo.Xpwe, Attivo = true,
+            PreventivoId = preventivo.Id, CommessaId = commessaId, Origine = anteprima.Origine, Attivo = true,
             Descrizione = $"Computo importato da {Path.GetFileName(nomeFile)}", NomeFile = Path.GetFileName(nomeFile),
-            DocumentoId = doc.Documento.Id, TotaleImportato = anteprima.TotaleCalcolato, TotaleDichiarato = totaleDichiarato,
+            DocumentoId = doc.Documento.Id, TotaleImportato = anteprima.TotaleCalcolato, TotaleDichiarato = totaleDichiarato ?? anteprima.TotaleDocumento,
             Oggetto = letto.Oggetto, Comune = letto.Comune, Committente = letto.Committente, Impresa = letto.Impresa,
         };
         db.Computi.Add(computo);

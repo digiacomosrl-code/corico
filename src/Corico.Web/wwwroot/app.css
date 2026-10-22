@@ -185,6 +185,7 @@ label.pulsante { display: inline-flex; align-items: center; }
 .confronto-totali tr.cambiata td:first-child { font-weight: 600; }
 tr.esito-aggiunto td { color: var(--verde); }
 tr.esito-eliminato td { color: var(--testo-secondario); text-decoration: line-through; }
+.colonna-pacchetto { max-width: 11rem; font-size: .82rem; }
 .descrizione-breve { max-width: 32rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .griglia-form.due-colonne { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .griglia-form.due-colonne input, .griglia-form.due-colonne select, .griglia-form.due-colonne textarea { width: 100%; box-sizing: border-box; }

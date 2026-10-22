@@ -107,6 +107,19 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             note, preventivo.RibassoPercentuale);
     }
 
+    /// <summary>Pacchetti attivi della commessa (per scegliere dove assegnare le voci) e pacchetto di ogni voce assegnata.</summary>
+    public async Task<(IReadOnlyList<(Guid Id, int Ordine, string Descrizione)> Pacchetti, IReadOnlyDictionary<Guid, Guid> PerVoce)> AssegnazioniAsync(
+        Guid commessaId, CancellationToken ct = default)
+    {
+        await using var db = await fabbrica.CreateDbContextAsync(ct);
+        var pacchetti = (await db.Pacchetti.AsNoTracking().Where(p => p.CommessaId == commessaId && !p.Archiviato)
+                .OrderBy(p => p.Ordine).Select(p => new { p.Id, p.Ordine, p.Descrizione }).ToListAsync(ct))
+            .Select(p => (p.Id, p.Ordine, p.Descrizione)).ToList();
+        var perVoce = await db.PacchettiVoci.AsNoTracking().Where(v => v.CommessaId == commessaId)
+            .ToDictionaryAsync(v => v.VoceComputoId, v => v.PacchettoId, ct);
+        return (pacchetti, perVoce);
+    }
+
     /// <summary>Voci del computo attivo non ancora assegnate a un pacchetto.</summary>
     public async Task<IReadOnlyList<VoceDiCalcolo>> VociLibereAsync(Guid commessaId, CancellationToken ct = default)
     {

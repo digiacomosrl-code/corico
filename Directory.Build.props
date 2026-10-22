@@ -2,7 +2,7 @@
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <Version>0.9.2</Version>
+    <Version>0.9.3</Version>
     <Company>Corico</Company>
     <Product>Corico</Product>
   </PropertyGroup>

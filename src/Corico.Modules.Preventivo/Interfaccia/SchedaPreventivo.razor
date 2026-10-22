@@ -2,6 +2,7 @@
 @inject PreventivoService Preventivo
 @inject ImportazioneComputoService Importazione
 @inject CommesseService Commesse
+@inject PacchettiService Pacchetti
 
 @if (!string.IsNullOrEmpty(_messaggio))
 {
@@ -247,12 +248,31 @@
             <button class="pulsante piccolo" @onclick="() => ImpostaNonSoggettaAsync(100)" disabled="@(_selezionate.Count == 0)">Selezionate: non soggette a ribasso</button>
             <button class="pulsante piccolo" @onclick="() => ImpostaNonSoggettaAsync(0)" disabled="@(_selezionate.Count == 0)">Selezionate: soggette a ribasso</button>
         </div>
+        <div class="riga-form">
+            <span>Assegna le selezionate al pacchetto</span>
+            <select @bind="_pacchettoDestinazione">
+                <option value="">— scegli —</option>
+                <option value="@NuovoPacchetto">+ Nuovo pacchetto…</option>
+                @foreach (var p in _pacchetti)
+                {
+                    <option value="@p.Id">@p.Ordine. @p.Descrizione</option>
+                }
+            </select>
+            @if (_pacchettoDestinazione == NuovoPacchetto)
+            {
+                <input placeholder="Descrizione del nuovo pacchetto" @bind="_descrizioneNuovo" />
+            }
+            <button class="pulsante piccolo primario" @onclick="AssegnaAPacchettoAsync"
+                    disabled="@(_selezionate.Count == 0 || string.IsNullOrEmpty(_pacchettoDestinazione))">Assegna</button>
+            <span class="spazio"></span>
+            <label class="spunta"><input type="checkbox" @bind="_soloNonAssegnate" /> Solo voci non assegnate a pacchetti</label>
+        </div>
 
         <div class="scorrevole">
             <table class="tabella">
                 <thead>
                     <tr>
-                        <th></th><th class="num">N.</th><th>Tariffa</th><th>Descrizione</th><th>U.M.</th>
+                        <th></th><th class="num">N.</th><th>Tariffa</th><th>Pacchetto</th><th>Descrizione</th><th>U.M.</th>
                         <th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Non sogg.</th>
                         <th class="num">Importo lordo</th><th class="num">Prezzo ribassato</th><th class="num">Importo netto</th>
                     </tr>
@@ -266,6 +286,16 @@
                             </td>
                             <td class="num">@v.Ordine</td>
                             <td class="codice">@v.Tariffa</td>
+                            <td class="colonna-pacchetto">
+                                @if (_perVoce.TryGetValue(v.Id, out var pid) && _nomiPacchetti.TryGetValue(pid, out var nome))
+                                {
+                                    <span title="@nome">@nome</span>
+                                }
+                                else
+                                {
+                                    <span class="testo-secondario">non assegnata</span>
+                                }
+                            </td>
                             <td>
                                 @Accorcia(v.Descrizione)
                                 @if (v.SuperCategoria is not null) { <div class="testo-secondario">@v.SuperCategoria</div> }
@@ -283,7 +313,7 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="8">Totale voci visualizzate</td>
+                        <td colspan="9">Totale voci visualizzate</td>
                         <td class="num">@Formato.Numero(visibili.Sum(v => v.Ricavo.Lordo))</td>
                         <td></td>
                         <td class="num">@Formato.Numero(visibili.Sum(v => v.Ricavo.Netto))</td>
@@ -311,6 +341,15 @@
     private string _categoria = "";
     private bool _soloDaCompletare;
     private readonly HashSet<Guid> _selezionate = [];
+
+    // Collegamento con i pacchetti: pacchetto di ogni voce e assegnazione diretta delle voci selezionate.
+    private const string NuovoPacchetto = "nuovo";
+    private IReadOnlyList<(Guid Id, int Ordine, string Descrizione)> _pacchetti = [];
+    private IReadOnlyDictionary<Guid, Guid> _perVoce = new Dictionary<Guid, Guid>();
+    private Dictionary<Guid, string> _nomiPacchetti = [];
+    private string _pacchettoDestinazione = "";
+    private string? _descrizioneNuovo;
+    private bool _soloNonAssegnate;
 
     private DatiVoce? _voceInModifica;
     private IReadOnlyList<RigaMisura> _misure = [];
@@ -340,6 +379,40 @@
         _ribasso = _stato.RibassoPercentuale;
         _totaleDichiarato = _stato.Computo?.TotaleDichiarato;
         _selezionate.IntersectWith(_voci.Select(v => v.Id));
+        (_pacchetti, _perVoce) = await Pacchetti.AssegnazioniAsync(CommessaId);
+        _nomiPacchetti = _pacchetti.ToDictionary(p => p.Id, p => $"{p.Ordine}. {p.Descrizione}");
+    }
+
+    /// <summary>Assegna le voci selezionate a un pacchetto esistente o a uno nuovo; una voce già in un altro pacchetto viene spostata.</summary>
+    private async Task AssegnaAPacchettoAsync()
+    {
+        var voci = _selezionate.ToList();
+        if (voci.Count == 0 || string.IsNullOrEmpty(_pacchettoDestinazione)) return;
+        string nome = "";
+        var ok = await EseguiAsync(async () =>
+        {
+            Guid destinazione;
+            if (_pacchettoDestinazione == NuovoPacchetto)
+            {
+                if (string.IsNullOrWhiteSpace(_descrizioneNuovo))
+                    throw new OperazioneNonValidaException("Indichi la descrizione del nuovo pacchetto.");
+                destinazione = await Pacchetti.SalvaPacchettoAsync(CommessaId, new Pacchetto { Descrizione = _descrizioneNuovo });
+                nome = _descrizioneNuovo.Trim();
+            }
+            else
+            {
+                destinazione = Guid.Parse(_pacchettoDestinazione);
+                nome = _pacchetti.FirstOrDefault(p => p.Id == destinazione).Descrizione ?? "";
+            }
+            var spostate = await Pacchetti.AssegnaVociAsync(CommessaId, destinazione, voci);
+            nome = $"«{nome}»" + (spostate > 0 ? $"; {spostate} erano in un altro pacchetto e sono state spostate" : "");
+        }, $"{voci.Count} voci assegnate al pacchetto.");
+        if (ok)
+        {
+            _messaggio = $"{voci.Count} voci assegnate al pacchetto {nome}. Costi e offerte si inseriscono nella scheda Pacchetti.";
+            (_pacchettoDestinazione, _descrizioneNuovo) = ("", null);
+            _selezionate.Clear();
+        }
     }
 
     private IEnumerable<RigaVoce> VociVisibili()
@@ -349,7 +422,8 @@
             (t.Length == 0 || v.Descrizione.Contains(t, StringComparison.OrdinalIgnoreCase)
                            || (v.Tariffa?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false))
             && (_categoria.Length == 0 || v.SuperCategoria == _categoria)
-            && (!_soloDaCompletare || v.Prezzo == 0));
+            && (!_soloDaCompletare || v.Prezzo == 0)
+            && (!_soloNonAssegnate || !_perVoce.ContainsKey(v.Id)));
     }
 
     private void Seleziona(Guid id, bool si)

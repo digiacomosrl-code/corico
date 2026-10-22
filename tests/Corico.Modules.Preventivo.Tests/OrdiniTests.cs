@@ -133,4 +133,20 @@ public class OrdiniTests
         Assert.False(a.Emettibile);
         Assert.Contains(a.Impedimenti, i => i.Contains("stima interna"));
     }
+
+    [Fact]
+    public async Task Assegnazioni_per_voce_dal_preventivo()
+    {
+        var (amb, id, pacchetto) = await PreparaAsync();
+        await using var _ = amb;
+        var pacchetti = amb.Get<PacchettiService>();
+        var voci = await amb.Get<PreventivoService>().VociAsync(id);
+        var nuovo = await pacchetti.SalvaPacchettoAsync(id, new Pacchetto { Descrizione = "Porte REI" });
+        Assert.Equal(1, await pacchetti.AssegnaVociAsync(id, nuovo, [voci[1].Id]));
+
+        var (elenco, perVoce) = await pacchetti.AssegnazioniAsync(id);
+        Assert.Equal(["Porte", "Porte REI"], elenco.Select(p => p.Descrizione));
+        Assert.Equal(pacchetto, perVoce[voci[0].Id]);
+        Assert.Equal(nuovo, perVoce[voci[1].Id]);
+    }
 }

@@ -12,7 +12,7 @@ public class CalcoloRicaviTests
 
         Assert.Equal(697.67m * 0.785m, r.PrezzoRibassato);
         Assert.Equal(12.5m * 697.67m * 0.785m, r.Netto);
-        Assert.Equal(12.5m * 697.67m, r.Lordo);
+        Assert.Equal(8720.88m, r.Lordo); // 8.720,875 arrotondato come l'importo di voce di PriMus
         Assert.Equal(0m, r.LordoNonSoggetto);
     }
 

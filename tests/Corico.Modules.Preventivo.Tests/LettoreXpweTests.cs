@@ -64,6 +64,33 @@ public class LettoreXpweTests
         Assert.Equal(attesa, UnitaMisura.Normalizza(originale));
     }
 
+    [Fact]
+    public void Legge_anche_i_file_in_Windows_1252_senza_dichiarazione()
+    {
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        var testo = XpweDiProva.Testo.Replace("<?xml version=\"1.0\" encoding=\"utf-8\"?>", "")
+            .Replace("Intonaco civile", "Intonaco civile già rifinito – qualità «A»");
+        var byteFile = System.Text.Encoding.GetEncoding(1252).GetBytes(testo);
+
+        var letto = LettoreXpwe.Leggi(new MemoryStream(byteFile));
+
+        Assert.Equal("Intonaco civile già rifinito – qualità «A»", letto.Elenco("10")!.DesBreve);
+    }
+
+    [Fact]
+    public void Campione_Albergo_in_Windows_1252_totale_identico_a_PriMus()
+    {
+        var cartella = Environment.GetEnvironmentVariable("CORICO_ESEMPI") ?? "/mnt/project-files/Esempi";
+        var percorso = Path.Combine(cartella, "COMPUTO_ALBERGO.XPWE");
+        if (!File.Exists(percorso)) return;
+
+        using var f = File.OpenRead(percorso);
+        var a = ImportazioneComputoService.Anteprima(f);
+
+        Assert.Equal(1_998_980.93m, a.TotaleCalcolato);
+        Assert.DoesNotContain(a.Letto.ElencoPrezzi, e => (e.DesBreve ?? "").Contains('\uFFFD'));
+    }
+
     /// <summary>
     /// Campione reale fornito da Salvatore. Il file contiene dati aziendali e non è nel repository:
     /// il test si esegue solo dove il file è presente (variabile CORICO_ESEMPI o cartella di progetto).
@@ -78,7 +105,7 @@ public class LettoreXpweTests
         using var f = File.OpenRead(percorso);
         var a = ImportazioneComputoService.Anteprima(f);
 
-        Assert.Equal(1_354_438.26m, Math.Round(a.TotaleCalcolato, 2, MidpointRounding.AwayFromZero));
+        Assert.Equal(1_354_438.26m, a.TotaleCalcolato);
         Assert.Equal(297, a.Letto.Voci.Count);
         Assert.Equal(418, a.Letto.ElencoPrezzi.Count);
         Assert.Equal(22, a.VociSenzaElenco);

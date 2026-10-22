@@ -54,9 +54,7 @@ public static partial class LettoreXpwe
 
     public static ComputoLetto Leggi(Stream contenuto)
     {
-        string testo;
-        using (var reader = new StreamReader(contenuto, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
-            testo = reader.ReadToEnd();
+        var testo = Decodifica(contenuto);
 
         // Pulizia preliminare: caratteri di controllo non ammessi in XML (es. 0x03 in ConfQuantita).
         var rimossi = CaratteriNonValidi().Matches(testo).Count;
@@ -194,6 +192,32 @@ public static partial class LettoreXpwe
         if (sicurezza > 0)
             s.Add(new(GravitaSegnalazione.Informazione,
                 $"{sicurezza} voci hanno un'incidenza di sicurezza: la quota corrispondente è proposta come non soggetta a ribasso."));
+    }
+
+    private static readonly Encoding Utf8Rigoroso = new UTF8Encoding(false, throwOnInvalidBytes: true);
+
+    /// <summary>
+    /// I file PriMus possono essere in UTF-8 (con o senza BOM) oppure in Windows-1252 senza dichiarazione:
+    /// si prova l'UTF-8 rigoroso e, se i byte non sono validi, si legge come Windows-1252.
+    /// </summary>
+    internal static string Decodifica(Stream contenuto)
+    {
+        using var ms = new MemoryStream();
+        contenuto.CopyTo(ms);
+        var byteFile = ms.ToArray();
+        if (byteFile.Length >= 3 && byteFile[0] == 0xEF && byteFile[1] == 0xBB && byteFile[2] == 0xBF)
+            return Encoding.UTF8.GetString(byteFile, 3, byteFile.Length - 3);
+        if (byteFile.Length >= 2 && byteFile[0] == 0xFF && byteFile[1] == 0xFE)
+            return Encoding.Unicode.GetString(byteFile, 2, byteFile.Length - 2);
+        try
+        {
+            return Utf8Rigoroso.GetString(byteFile);
+        }
+        catch (DecoderFallbackException)
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(1252).GetString(byteFile);
+        }
     }
 
     private static string? Id(XElement e, string nome) => Numero(e, nome) is > 0 ? Testo(e, nome) : null;

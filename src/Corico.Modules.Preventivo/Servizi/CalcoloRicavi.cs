@@ -6,7 +6,7 @@ public readonly record struct RicavoVoce(decimal Lordo, decimal PrezzoRibassato,
 
 /// <summary>
 /// Regole di calcolo dei ricavi (specifica Modulo 1, regole R1–R3), identiche alle formule
-/// dei fogli CR: nessun arrotondamento intermedio.
+/// dei fogli CR: nessun arrotondamento intermedio sul netto.
 /// </summary>
 public static class CalcoloRicavi
 {
@@ -16,7 +16,10 @@ public static class CalcoloRicavi
     {
         var quotaSoggetta = 1m - percentualeNonSoggetta / 100m;
         var prezzoRibassato = prezzo * (1m - ribassoPercentuale / 100m * quotaSoggetta);
-        var lordo = quantita * prezzo;
+        // L'importo di voce del computo è arrotondato al centesimo come in PriMus (verificato su BIANCAVILLA
+        // e COMPUTO_ALBERGO): così il totale coincide con quello del documento ufficiale.
+        // Il netto segue invece la formula dei fogli CR (quantità × prezzo ribassato), senza arrotondamenti.
+        var lordo = Importi.Arrotonda(quantita * prezzo);
         return new RicavoVoce(lordo, prezzoRibassato, quantita * prezzoRibassato, lordo * percentualeNonSoggetta / 100m);
     }
 }

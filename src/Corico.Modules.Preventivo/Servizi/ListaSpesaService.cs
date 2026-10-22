@@ -24,7 +24,7 @@ public sealed record RigaSpesa(
 public sealed record RigaSpesaAggregata(CategoriaRisorsa Categoria, string Descrizione, string? Unita, decimal Quantita,
     decimal? Prezzo, decimal Importo, int Utilizzi);
 
-public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSenzaOfferta)
+public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSenzaOfferta, int VociNonAssegnate = 0)
 {
     public decimal Totale => Righe.Sum(r => r.Importo);
 
@@ -107,7 +107,13 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
                 righe.Add(Riga(CategoriaCorpo(c.Descrizione), c.Descrizione, "a corpo", 1, c.Importo, c.Importo, OrigineRigaSpesa.ACorpo, null,
                     scelta.Numero is null ? null : $"Offerta {scelta.Numero}"));
         }
-        return new ListaSpesa(righe, senzaOfferta);
+        var assegnate = pacchetti.SelectMany(p => p.Voci).Select(v => v.VoceComputoId).ToHashSet();
+        // Stesso criterio del tabellone: voci attive del computo attivo che non stanno in nessun pacchetto.
+        var computoAttivo = await db.Computi.AsNoTracking().Where(c => c.CommessaId == commessaId && c.Attivo)
+            .Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
+        var attive = await db.VociComputo.AsNoTracking().Where(v => v.ComputoId == computoAttivo && !v.Archiviata)
+            .Select(v => v.Id).ToListAsync(ct);
+        return new ListaSpesa(righe, senzaOfferta, attive.Count(id => !assegnate.Contains(id)));
     }
 
     /// <summary>Categoria delle righe d'offerta secondo il tipo di offerta.</summary>

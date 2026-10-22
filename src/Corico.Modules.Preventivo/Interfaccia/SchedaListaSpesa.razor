@@ -24,6 +24,10 @@
     {
         <div class="segnalazione segnalazione-attenzione">@_lista.PacchettiSenzaOfferta pacchetti senza offerta scelta non compaiono nella lista.</div>
     }
+    @if (_lista.VociNonAssegnate > 0)
+    {
+        <div class="segnalazione segnalazione-attenzione">@_lista.VociNonAssegnate voci del computo non sono assegnate a un pacchetto: il loro costo non è pianificato e non compaiono nella lista.</div>
+    }
 
     <table class="tabella quadro riepilogo-categorie">
         <tbody>

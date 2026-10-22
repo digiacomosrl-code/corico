@@ -166,4 +166,15 @@ public class RiepilogoEVersioniTests
         Assert.Contains("v1", pdfVersione.Nome);
         Assert.Null(await e.RiepilogoPdfAsync(id, Guid.NewGuid()));
     }
+
+    [Fact]
+    public async Task La_lista_della_spesa_segnala_le_voci_non_assegnate()
+    {
+        var (amb, id, _, _) = await PreparaAsync();
+        await using var _ = amb;
+        var lista = await amb.Get<ListaSpesaService>().CalcolaAsync(id);
+        Assert.Equal(5_000m, lista.Totale);
+        Assert.Equal(0, lista.PacchettiSenzaOfferta);
+        Assert.Equal(1, lista.VociNonAssegnate);    // la voce C
+    }
 }

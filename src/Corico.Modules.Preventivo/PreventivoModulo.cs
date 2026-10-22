@@ -29,6 +29,8 @@ public sealed class PreventivoModulo : ICoricoModulo
             s => s.MigrationsHistoryTable(PreventivoDbContext.TabellaMigrazioni)));
         servizi.AddSingleton<PreventivoService>();
         servizi.AddSingleton<ImportazioneComputoService>();
+        servizi.AddSingleton<PacchettiService>();
+        servizi.AddSingleton<ImportazionePianificazioneService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)

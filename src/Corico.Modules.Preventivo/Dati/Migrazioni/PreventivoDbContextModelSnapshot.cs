@@ -195,6 +195,360 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.ToTable("PRV_Computi", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.CostoACorpo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descrizione")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Importo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Incluso")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OffertaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordine")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OffertaId");
+
+                    b.ToTable("PRV_CostiACorpo", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.NotaPacchetto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Iniziali")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PacchettoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Testo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PacchettoId");
+
+                    b.ToTable("PRV_NotePacchetti", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Offerta", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Consegna")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DocumentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Esclusioni")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("FornitoreId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Garanzia")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NomeFornitore")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Numero")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Origine")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PacchettoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Pagamento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Revisione")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("Scadenza")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("TotaleDichiarato")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ValiditaGiorni")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PacchettoId");
+
+                    b.ToTable("PRV_Offerte", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.OffertaVoce", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Fornitura")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("FornituraEPosa")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ManodoperaENoli")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NotaQuantita")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OffertaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("QuantitaPianificazione")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("VoceComputoId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OffertaId", "VoceComputoId")
+                        .IsUnique();
+
+                    b.ToTable("PRV_OfferteVoci", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Pacchetto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Archiviato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Codice")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descrizione")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("OffertaSceltaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordine")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RiferimentoOda")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StatoCosto")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommessaId", "Ordine");
+
+                    b.ToTable("PRV_Pacchetti", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.PacchettoVoce", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PacchettoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("VoceComputoId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PacchettoId");
+
+                    b.HasIndex("VoceComputoId")
+                        .IsUnique();
+
+                    b.ToTable("PRV_PacchettiVoci", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Preventivo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -357,6 +711,72 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.HasIndex("VoceComputoId");
 
                     b.ToTable("PRV_RigheMisura", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.RigaOfferta", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CodiceArticolo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descrizione")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OffertaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordine")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Posizione")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("PrezzoListino")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Quantita")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ScontoPercentuale")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Unita")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("VoceComputoId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OffertaId", "Ordine");
+
+                    b.ToTable("PRV_RigheOfferta", (string)null);
                 });
 
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.VoceComputo", b =>
@@ -558,6 +978,57 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.CostoACorpo", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.Offerta", null)
+                        .WithMany("CostiACorpo")
+                        .HasForeignKey("OffertaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.NotaPacchetto", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.Pacchetto", null)
+                        .WithMany()
+                        .HasForeignKey("PacchettoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Offerta", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.Pacchetto", null)
+                        .WithMany()
+                        .HasForeignKey("PacchettoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.OffertaVoce", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.Offerta", null)
+                        .WithMany("Voci")
+                        .HasForeignKey("OffertaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.PacchettoVoce", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.Pacchetto", null)
+                        .WithMany("Voci")
+                        .HasForeignKey("PacchettoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.VoceComputo", null)
+                        .WithMany()
+                        .HasForeignKey("VoceComputoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.RigaAnalisi", b =>
                 {
                     b.HasOne("Corico.Modules.Preventivo.Dominio.VoceElencoPrezzi", null)
@@ -572,6 +1043,15 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.HasOne("Corico.Modules.Preventivo.Dominio.VoceComputo", null)
                         .WithMany("RigheMisura")
                         .HasForeignKey("VoceComputoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.RigaOfferta", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.Offerta", null)
+                        .WithMany("Righe")
+                        .HasForeignKey("OffertaId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -599,6 +1079,20 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                         .HasForeignKey("ComputoId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Offerta", b =>
+                {
+                    b.Navigation("CostiACorpo");
+
+                    b.Navigation("Righe");
+
+                    b.Navigation("Voci");
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Pacchetto", b =>
+                {
+                    b.Navigation("Voci");
                 });
 
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.VoceComputo", b =>

@@ -18,6 +18,13 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<RigaAnalisi> RigheAnalisi => Set<RigaAnalisi>();
     public DbSet<VoceComputo> VociComputo => Set<VoceComputo>();
     public DbSet<RigaMisura> RigheMisura => Set<RigaMisura>();
+    public DbSet<Pacchetto> Pacchetti => Set<Pacchetto>();
+    public DbSet<PacchettoVoce> PacchettiVoci => Set<PacchettoVoce>();
+    public DbSet<NotaPacchetto> NotePacchetti => Set<NotaPacchetto>();
+    public DbSet<Offerta> Offerte => Set<Offerta>();
+    public DbSet<OffertaVoce> OfferteVoci => Set<OffertaVoce>();
+    public DbSet<RigaOfferta> RigheOfferta => Set<RigaOfferta>();
+    public DbSet<CostoACorpo> CostiACorpo => Set<CostoACorpo>();
 
     protected override bool PossiedeTabelleCore => false;
 
@@ -72,6 +79,57 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
         });
 
         modelBuilder.Entity<RigaMisura>(e => e.ToTable("PRV_RigheMisura"));
+
+        modelBuilder.Entity<Pacchetto>(e =>
+        {
+            e.ToTable("PRV_Pacchetti");
+            e.HasIndex(x => new { x.CommessaId, x.Ordine });
+            e.Property(x => x.Descrizione).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Codice).HasMaxLength(100);
+            e.Property(x => x.RiferimentoOda).HasMaxLength(200);
+            e.HasMany(x => x.Voci).WithOne().HasForeignKey(x => x.PacchettoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PacchettoVoce>(e =>
+        {
+            e.ToTable("PRV_PacchettiVoci");
+            // Una voce del computo appartiene a un solo pacchetto (sez. 14.1).
+            e.HasIndex(x => x.VoceComputoId).IsUnique();
+            e.HasOne<VoceComputo>().WithMany().HasForeignKey(x => x.VoceComputoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotaPacchetto>(e =>
+        {
+            e.ToTable("PRV_NotePacchetti");
+            e.HasIndex(x => x.PacchettoId);
+            e.Property(x => x.Iniziali).HasMaxLength(10);
+            e.HasOne<Pacchetto>().WithMany().HasForeignKey(x => x.PacchettoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Offerta>(e =>
+        {
+            e.ToTable("PRV_Offerte");
+            e.HasIndex(x => x.PacchettoId);
+            e.Property(x => x.NomeFornitore).HasMaxLength(200);
+            e.HasOne<Pacchetto>().WithMany().HasForeignKey(x => x.PacchettoId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Voci).WithOne().HasForeignKey(x => x.OffertaId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Righe).WithOne().HasForeignKey(x => x.OffertaId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.CostiACorpo).WithOne().HasForeignKey(x => x.OffertaId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OffertaVoce>(e =>
+        {
+            e.ToTable("PRV_OfferteVoci");
+            e.HasIndex(x => new { x.OffertaId, x.VoceComputoId }).IsUnique();
+        });
+
+        modelBuilder.Entity<RigaOfferta>(e =>
+        {
+            e.ToTable("PRV_RigheOfferta");
+            e.HasIndex(x => new { x.OffertaId, x.Ordine });
+        });
+
+        modelBuilder.Entity<CostoACorpo>(e => e.ToTable("PRV_CostiACorpo"));
 
         base.OnModelCreating(modelBuilder);
     }

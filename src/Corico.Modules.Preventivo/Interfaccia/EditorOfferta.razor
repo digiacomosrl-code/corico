@@ -277,6 +277,8 @@
     [Parameter, EditorRequired] public IReadOnlyList<VoceDiCalcolo> Voci { get; set; } = [];
     [Parameter] public decimal Ribasso { get; set; }
     [Parameter] public EventCallback OnChiudi { get; set; }
+    /// <summary>Voce di cui aprire subito le risorse (analisi prezzi avviata dal pacchetto).</summary>
+    [Parameter] public Guid? ApriRisorseVoce { get; set; }
 
     private IReadOnlyList<DatiFornitore> _fornitori = [];
     private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
@@ -294,6 +296,7 @@
         _documenti = await Documenti.ElencoAsync(CommessaId);
         _analisi = await Analisi.ElencoAsync(soloConfermate: true);
         _scontoPredefinito = Offerta.Righe.LastOrDefault()?.ScontoPercentuale ?? 0;
+        if (ApriRisorseVoce is { } voce) _risorseAperte.Add(voce);
     }
 
     private OffertaVoce VoceOfferta(Guid voceId)

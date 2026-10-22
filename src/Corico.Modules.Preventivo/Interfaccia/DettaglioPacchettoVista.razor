@@ -18,7 +18,7 @@
 @if (_offertaInModifica is not null)
 {
     <EditorOfferta CommessaId="CommessaId" Offerta="_offertaInModifica" Voci="_dettaglio.Voci"
-                   Ribasso="_dettaglio.RibassoPercentuale" OnChiudi="ChiudiOffertaAsync" />
+                   Ribasso="_dettaglio.RibassoPercentuale" OnChiudi="ChiudiOffertaAsync" ApriRisorseVoce="_voceAnalisi" />
     return;
 }
 
@@ -162,7 +162,29 @@
 <div class="riquadro">
     <div class="riga-form">
         <h3 class="spazio">Voci del computo nel pacchetto (@_dettaglio.Voci.Count)</h3>
-        <button class="pulsante" @onclick="ApriSceltaVociAsync">Aggiungi voci…</button>
+        <button class="pulsante" @onclick="ApriSceltaVociAsync">Selezione multipla…</button>
+    </div>
+
+    <div class="cerca-voce">
+        <input type="search" placeholder="Aggiungi una voce: scrivi il codice o una parte della descrizione…" autocomplete="off"
+               @bind="_cercaVoce" @bind:event="oninput" @onkeydown="TastoCercaVoceAsync" />
+        @if (RisultatiRicerca() is { Count: > 0 } risultati)
+        {
+            <ul class="tendina" role="listbox">
+                @foreach (var v in risultati)
+                {
+                    <li role="option" @onclick="() => AggiungiVoceAsync(v.Id)">
+                        <span class="codice">@v.Tariffa</span>
+                        <span class="descrizione-breve" title="@v.Descrizione">@v.Descrizione</span>
+                        <span class="testo-secondario nowrap">@Formato.Numero(v.Quantita) @v.Unita × @Formato.Euro(v.Prezzo)</span>
+                    </li>
+                }
+            </ul>
+        }
+        else if (_cercaVoce.Trim().Length > 0)
+        {
+            <ul class="tendina"><li class="testo-secondario">Nessuna voce non assegnata corrisponde alla ricerca.</li></ul>
+        }
     </div>
 
     @if (_vociLibere is not null)
@@ -232,7 +254,10 @@
                                     }
                                 </td>
                             }
-                            <td><button class="pulsante piccolo" @onclick="() => RimuoviVoceAsync(v.Id)" title="Togli dal pacchetto">✕</button></td>
+                            <td class="nowrap">
+                                <button class="pulsante piccolo" @onclick="() => AnalisiVoceAsync(v.Id)" title="Costruisci l'analisi prezzi della voce (risorse)">Analisi prezzi</button>
+                                <button class="pulsante piccolo" @onclick="() => RimuoviVoceAsync(v.Id)" title="Togli dal pacchetto">✕</button>
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -277,11 +302,70 @@
     private readonly HashSet<Guid> _selezionateLibere = [];
     private string _cercaLibere = "";
 
+    // Ricerca rapida di una voce da aggiungere (menu a tendina per codice o descrizione).
+    private IReadOnlyList<VoceDiCalcolo> _libere = [];
+    private string _cercaVoce = "";
+    private Guid? _voceAnalisi;
+
     private DateOnly _dataNota = DateOnly.FromDateTime(DateTime.Today);
     private static string? _iniziali;
     private string? _testoNota;
 
-    protected override Task OnParametersSetAsync() => AggiornaAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        await AggiornaAsync();
+        _libere = await Pacchetti.VociLibereAsync(CommessaId);
+    }
+
+    /// <summary>Prima le voci il cui codice inizia con il testo cercato, poi quelle che lo contengono nel codice o nella descrizione.</summary>
+    private List<VoceDiCalcolo> RisultatiRicerca()
+    {
+        var t = _cercaVoce.Trim();
+        if (t.Length == 0) return [];
+        var parole = t.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return _libere
+            .Where(v => (v.Tariffa?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false)
+                || parole.All(p => v.Descrizione.Contains(p, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(v => v.Tariffa?.StartsWith(t, StringComparison.OrdinalIgnoreCase) == true ? 0 : 1)
+            .Take(12).ToList();
+    }
+
+    private async Task TastoCercaVoceAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && RisultatiRicerca() is [var prima, ..]) await AggiungiVoceAsync(prima.Id);
+        else if (e.Key == "Escape") _cercaVoce = "";
+    }
+
+    private async Task AggiungiVoceAsync(Guid voceId)
+    {
+        var voce = _libere.First(v => v.Id == voceId);
+        if (await EseguiAsync(() => Pacchetti.AssegnaVociAsync(CommessaId, PacchettoId, [voceId]),
+                $"Voce {voce.Tariffa} aggiunta al pacchetto. Con «Analisi prezzi» ne costruisce il costo per risorse."))
+        {
+            _cercaVoce = "";
+            _libere = await Pacchetti.VociLibereAsync(CommessaId);
+        }
+    }
+
+    /// <summary>
+    /// Analisi prezzi della voce: si lavora sulla stima interna del pacchetto (creata se manca), con le risorse
+    /// della voce già aperte. Se il pacchetto non ha ancora un'offerta di riferimento, la stima lo diventa al salvataggio.
+    /// </summary>
+    private async Task AnalisiVoceAsync(Guid voceId)
+    {
+        var stima = _dettaglio!.Offerte.Where(o => o.Offerta.Tipo == TipoOfferta.StimaInterna)
+            .OrderBy(o => o.Scelta ? 0 : 1).FirstOrDefault();
+        if (stima is not null)
+            _offertaInModifica = await Pacchetti.OffertaAsync(CommessaId, stima.Offerta.Id);
+        else
+        {
+            _offertaInModifica = await Pacchetti.NuovaOffertaAsync(CommessaId, PacchettoId);
+            _offertaInModifica.Tipo = TipoOfferta.StimaInterna;
+            _offertaInModifica.NomeFornitore = "Analisi prezzi interna";
+            _offertaInModifica.Data = DateOnly.FromDateTime(DateTime.Today);
+        }
+        _voceAnalisi = voceId;
+    }
 
     private async Task AggiornaAsync()
     {
@@ -318,6 +402,7 @@
     private async Task ChiudiOffertaAsync()
     {
         _offertaInModifica = null;
+        _voceAnalisi = null;
         await AggiornaAsync();
     }
 
@@ -343,11 +428,17 @@
     {
         var n = _selezionateLibere.Count;
         if (await EseguiAsync(() => Pacchetti.AssegnaVociAsync(CommessaId, PacchettoId, _selezionateLibere.ToList()), $"{n} voci aggiunte al pacchetto."))
+        {
             _vociLibere = null;
+            _libere = await Pacchetti.VociLibereAsync(CommessaId);
+        }
     }
 
-    private Task RimuoviVoceAsync(Guid voceId) =>
-        EseguiAsync(() => Pacchetti.RimuoviVoceAsync(CommessaId, PacchettoId, voceId), "Voce tolta dal pacchetto: torna tra quelle non assegnate.");
+    private async Task RimuoviVoceAsync(Guid voceId)
+    {
+        if (await EseguiAsync(() => Pacchetti.RimuoviVoceAsync(CommessaId, PacchettoId, voceId), "Voce tolta dal pacchetto: torna tra quelle non assegnate."))
+            _libere = await Pacchetti.VociLibereAsync(CommessaId);
+    }
 
     private async Task AggiungiNotaAsync()
     {

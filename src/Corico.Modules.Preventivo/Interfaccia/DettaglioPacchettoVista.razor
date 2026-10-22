@@ -1,0 +1,375 @@
+@* Dettaglio di un pacchetto: dati, voci assegnate, confronto delle offerte, note datate. *@
+@inject PacchettiService Pacchetti
+
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@if (_dettaglio is null || _modifica is null)
+{
+    <p class="testo-secondario">Caricamento…</p>
+    return;
+}
+
+@if (_offertaInModifica is not null)
+{
+    <EditorOfferta CommessaId="CommessaId" Offerta="_offertaInModifica" Voci="_dettaglio.Voci"
+                   Ribasso="_dettaglio.RibassoPercentuale" OnChiudi="ChiudiOffertaAsync" />
+    return;
+}
+
+<div class="riga-form">
+    <button class="pulsante" @onclick="OnChiudi">← Tabellone</button>
+    <h3 class="spazio">@_dettaglio.Pacchetto.Descrizione</h3>
+    @if (_dettaglio.Scelta is { } s)
+    {
+        <span>Ricavo @Formato.Euro(s.Risultato.RicavoNetto) · Costo @Formato.Euro(s.Risultato.Costo) ·
+            <strong class="@(s.Risultato.Mdc < 0 ? "testo-negativo" : "")">MDC @Formato.Euro(s.Risultato.Mdc) (@Formato.Percento(s.Risultato.MarginePercentuale))</strong></span>
+    }
+</div>
+
+<div class="riquadro">
+    <h3>Dati del pacchetto</h3>
+    <div class="griglia-form">
+        <label>Gruppo / codice <input @bind="_modifica.Codice" /></label>
+        <label>Riferimento ODA <input @bind="_modifica.RiferimentoOda" /></label>
+        <label class="largo">Descrizione (attività) <input @bind="_modifica.Descrizione" /></label>
+        <label>
+            Tipo di affidamento
+            <select @bind="_modifica.Tipo">
+                @foreach (var t in Enum.GetValues<TipoAffidamento>())
+                {
+                    <option value="@t">@Testi.Affidamento(t)</option>
+                }
+            </select>
+        </label>
+        <label>
+            Stato del costo
+            <select @bind="_modifica.StatoCosto">
+                @foreach (var t in Enum.GetValues<StatoCosto>())
+                {
+                    <option value="@t">@t</option>
+                }
+            </select>
+        </label>
+        <label class="largo">Note <textarea rows="2" @bind="_modifica.Note"></textarea></label>
+    </div>
+    <div class="azioni">
+        <button class="pulsante primario" @onclick="SalvaAsync">Salva</button>
+        <span class="spazio"></span>
+        <button class="pulsante" @onclick="ArchiviaAsync">Archivia pacchetto</button>
+    </div>
+</div>
+
+<div class="riquadro">
+    <div class="riga-form">
+        <h3 class="spazio">Offerte (@_dettaglio.Offerte.Count)</h3>
+        <button class="pulsante primario" @onclick="NuovaOffertaAsync" disabled="@(_dettaglio.Voci.Count == 0)">Nuova offerta</button>
+    </div>
+    @if (_dettaglio.Voci.Count == 0)
+    {
+        <p class="testo-secondario">Assegna prima le voci del computo al pacchetto: le offerte si confrontano sulle stesse voci.</p>
+    }
+    @if (_dettaglio.Offerte.Count > 0)
+    {
+        <div class="scorrevole">
+            <table class="tabella confronto">
+                <thead>
+                    <tr>
+                        <th></th>
+                        @foreach (var o in _dettaglio.Offerte)
+                        {
+                            <th class="num @(o.Scelta ? "colonna-scelta" : "")">
+                                @(o.Offerta.NomeFornitore ?? "Senza fornitore")
+                                <div class="testo-secondario">@o.Offerta.Numero @o.Offerta.Revisione</div>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Tipo</td>@foreach (var o in _dettaglio.Offerte) { <td class="num">@Testi.Offerta(o.Offerta.Tipo)</td> }</tr>
+                    <tr>
+                        <td>Scadenza</td>
+                        @foreach (var o in _dettaglio.Offerte)
+                        {
+                            var scaduta = o.Offerta.Scadenza is { } sc && sc < DateOnly.FromDateTime(DateTime.Today);
+                            <td class="num @(scaduta ? "testo-negativo" : "")">@Formato.Data(o.Offerta.Scadenza)@(scaduta ? " (scaduta)" : "")</td>
+                        }
+                    </tr>
+                    <tr><td>Ricavo netto</td>@foreach (var o in _dettaglio.Offerte) { <td class="num">@Formato.Euro(o.Risultato.RicavoNetto)</td> }</tr>
+                    <tr><td>Costo</td>@foreach (var o in _dettaglio.Offerte) { <td class="num">@Formato.Euro(o.Risultato.Costo)</td> }</tr>
+                    <tr class="totale"><td>MDC</td>@foreach (var o in _dettaglio.Offerte) { <td class="num @(o.Risultato.Mdc < 0 ? "testo-negativo" : "")">@Formato.Euro(o.Risultato.Mdc)</td> }</tr>
+                    <tr><td>Margine sul ricavo</td>@foreach (var o in _dettaglio.Offerte) { <td class="num">@Formato.Percento(o.Risultato.MarginePercentuale)</td> }</tr>
+                    <tr><td>Ricarico sul costo</td>@foreach (var o in _dettaglio.Offerte) { <td class="num">@Formato.Percento(o.Risultato.RicaricoPercentuale)</td> }</tr>
+                    <tr>
+                        <td>Righe non assegnate a voci</td>
+                        @foreach (var o in _dettaglio.Offerte)
+                        {
+                            <td class="num @(o.Risultato.RigheNonAssegnate > 0 ? "testo-differenza" : "")">
+                                @(o.Risultato.RigheNonAssegnate == 0 ? "—" : $"{o.Risultato.RigheNonAssegnate} ({Formato.Euro(o.Risultato.CostoRigheNonAssegnate)})")
+                            </td>
+                        }
+                    </tr>
+                    <tr>
+                        <td>Totale dichiarato / calcolato</td>
+                        @foreach (var o in _dettaglio.Offerte)
+                        {
+                            var d = o.Offerta.TotaleDichiarato;
+                            var conRighe = o.Offerta.Righe.Count > 0;
+                            var diff = d is null || !conRighe ? (decimal?)null : d - o.Risultato.TotaleOffertaCalcolato;
+                            <td class="num @(diff is { } x && Math.Abs(x) >= 0.01m ? "testo-differenza" : "")">
+                                @(d is null ? "—" : Formato.Euro(d)) / @(conRighe ? Formato.Euro(o.Risultato.TotaleOffertaCalcolato) : "—")
+                            </td>
+                        }
+                    </tr>
+                    <tr>
+                        <td>Esclusioni</td>
+                        @foreach (var o in _dettaglio.Offerte)
+                        {
+                            <td class="num @(o.Offerta.Esclusioni is null ? "" : "testo-differenza")" title="@o.Offerta.Esclusioni">
+                                @(o.Offerta.Esclusioni is null ? "—" : "Sì, da valutare")
+                            </td>
+                        }
+                    </tr>
+                    <tr>
+                        <td></td>
+                        @foreach (var o in _dettaglio.Offerte)
+                        {
+                            <td class="num nowrap">
+                                @if (o.Scelta)
+                                {
+                                    <strong>Riferimento</strong>
+                                }
+                                else
+                                {
+                                    <button class="pulsante piccolo" @onclick="() => ScegliAsync(o.Offerta.Id)">Scegli</button>
+                                }
+                                <button class="pulsante piccolo" @onclick="() => ModificaOffertaAsync(o.Offerta.Id)">Apri</button>
+                            </td>
+                        }
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="riquadro">
+    <div class="riga-form">
+        <h3 class="spazio">Voci del computo nel pacchetto (@_dettaglio.Voci.Count)</h3>
+        <button class="pulsante" @onclick="ApriSceltaVociAsync">Aggiungi voci…</button>
+    </div>
+
+    @if (_vociLibere is not null)
+    {
+        <div class="sotto-riquadro">
+            <div class="filtri">
+                <input type="search" placeholder="Cerca tra le voci non assegnate…" @bind="_cercaLibere" @bind:event="oninput" />
+                <span>@_selezionateLibere.Count selezionate</span>
+                <button class="pulsante primario piccolo" @onclick="AssegnaAsync" disabled="@(_selezionateLibere.Count == 0)">Aggiungi al pacchetto</button>
+                <button class="pulsante piccolo" @onclick="() => _vociLibere = null">Chiudi</button>
+            </div>
+            <div class="scorrevole elenco-breve">
+                <table class="tabella">
+                    <tbody>
+                        @foreach (var v in _vociLibere.Where(Corrisponde).Take(200))
+                        {
+                            <tr>
+                                <td><input type="checkbox" checked="@_selezionateLibere.Contains(v.Id)" @onchange="e => Seleziona(v.Id, (bool)e.Value!)" /></td>
+                                <td class="codice">@v.Tariffa</td>
+                                <td>@Accorcia(v.Descrizione)</td>
+                                <td>@v.Unita</td>
+                                <td class="num">@Formato.Numero(v.Quantita)</td>
+                                <td class="num">@Formato.Numero(v.Prezzo)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_vociLibere.Count == 0)
+            {
+                <p class="testo-secondario">Tutte le voci del computo sono già assegnate a un pacchetto.</p>
+            }
+        </div>
+    }
+
+    @if (_dettaglio.Voci.Count > 0)
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th>Tariffa</th><th>Descrizione</th><th>U.M.</th><th class="num">Q. computo</th><th class="num">Prezzo</th>
+                        @foreach (var o in _dettaglio.Offerte)
+                        {
+                            <th class="num @(o.Scelta ? "colonna-scelta" : "")">Costo @(o.Offerta.NomeFornitore ?? "offerta")</th>
+                        }
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in _dettaglio.Voci)
+                    {
+                        <tr>
+                            <td class="codice">@v.Tariffa</td>
+                            <td>@Accorcia(v.Descrizione)@(v.PercentualeNonSoggetta > 0 ? " (non soggetta a ribasso)" : "")</td>
+                            <td>@v.Unita</td>
+                            <td class="num">@Formato.Numero(v.Quantita)</td>
+                            <td class="num">@Formato.Numero(v.Prezzo)</td>
+                            @foreach (var o in _dettaglio.Offerte)
+                            {
+                                var c = o.Risultato.Voci.First(x => x.Voce.Id == v.Id);
+                                <td class="num @(o.Scelta ? "colonna-scelta" : "")" title="@c.NotaQuantita">
+                                    @Formato.Numero(c.Costo)
+                                    @if (c.QuantitaModificata)
+                                    {
+                                        <div class="testo-nota">q. @Formato.Numero(c.Quantita)</div>
+                                    }
+                                </td>
+                            }
+                            <td><button class="pulsante piccolo" @onclick="() => RimuoviVoceAsync(v.Id)" title="Togli dal pacchetto">✕</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="riquadro">
+    <h3>Note</h3>
+    <div class="riga-form">
+        <input type="date" @bind="_dataNota" />
+        <input placeholder="Iniziali" @bind="_iniziali" maxlength="10" style="width:6rem" />
+        <input placeholder="Nota, es. «In attesa del preventivo»" @bind="_testoNota" class="spazio" />
+        <button class="pulsante" @onclick="AggiungiNotaAsync">Aggiungi nota</button>
+    </div>
+    @if (_dettaglio.Note.Count > 0)
+    {
+        <table class="tabella">
+            <tbody>
+                @foreach (var n in _dettaglio.Note)
+                {
+                    <tr><td class="nowrap">@Formato.Data(n.Data)</td><td>@n.Iniziali</td><td>@n.Testo</td></tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Guid PacchettoId { get; set; }
+    [Parameter] public EventCallback OnChiudi { get; set; }
+
+    private DettaglioPacchetto? _dettaglio;
+    private Pacchetto? _modifica;
+    private Offerta? _offertaInModifica;
+    private string? _messaggio;
+    private bool _errore;
+
+    private IReadOnlyList<VoceDiCalcolo>? _vociLibere;
+    private readonly HashSet<Guid> _selezionateLibere = [];
+    private string _cercaLibere = "";
+
+    private DateOnly _dataNota = DateOnly.FromDateTime(DateTime.Today);
+    private static string? _iniziali;
+    private string? _testoNota;
+
+    protected override Task OnParametersSetAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync()
+    {
+        _dettaglio = await Pacchetti.DettaglioAsync(CommessaId, PacchettoId);
+        if (_dettaglio is null)
+        {
+            await OnChiudi.InvokeAsync();
+            return;
+        }
+        var p = _dettaglio.Pacchetto;
+        _modifica = new Pacchetto
+        {
+            Id = p.Id, Versione = p.Versione, Codice = p.Codice, Descrizione = p.Descrizione, Tipo = p.Tipo,
+            RiferimentoOda = p.RiferimentoOda, StatoCosto = p.StatoCosto, Note = p.Note,
+        };
+    }
+
+    private Task SalvaAsync() => EseguiAsync(() => Pacchetti.SalvaPacchettoAsync(CommessaId, _modifica!), "Pacchetto salvato.");
+
+    private async Task ArchiviaAsync()
+    {
+        if (await EseguiAsync(() => Pacchetti.ImpostaArchiviazioneAsync(CommessaId, PacchettoId, true), "Pacchetto archiviato."))
+            await OnChiudi.InvokeAsync();
+    }
+
+    private Task ScegliAsync(Guid offertaId) => EseguiAsync(
+        () => Pacchetti.ScegliOffertaAsync(CommessaId, PacchettoId, _dettaglio!.Pacchetto.Versione, offertaId),
+        "Offerta di riferimento aggiornata.");
+
+    private async Task NuovaOffertaAsync() => _offertaInModifica = await Pacchetti.NuovaOffertaAsync(CommessaId, PacchettoId);
+
+    private async Task ModificaOffertaAsync(Guid id) => _offertaInModifica = await Pacchetti.OffertaAsync(CommessaId, id);
+
+    private async Task ChiudiOffertaAsync()
+    {
+        _offertaInModifica = null;
+        await AggiornaAsync();
+    }
+
+    private async Task ApriSceltaVociAsync()
+    {
+        _vociLibere = await Pacchetti.VociLibereAsync(CommessaId);
+        _selezionateLibere.Clear();
+    }
+
+    private bool Corrisponde(VoceDiCalcolo v)
+    {
+        var t = _cercaLibere.Trim();
+        return t.Length == 0 || v.Descrizione.Contains(t, StringComparison.OrdinalIgnoreCase)
+            || (v.Tariffa?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void Seleziona(Guid id, bool si)
+    {
+        if (si) _selezionateLibere.Add(id); else _selezionateLibere.Remove(id);
+    }
+
+    private async Task AssegnaAsync()
+    {
+        var n = _selezionateLibere.Count;
+        if (await EseguiAsync(() => Pacchetti.AssegnaVociAsync(CommessaId, PacchettoId, _selezionateLibere.ToList()), $"{n} voci aggiunte al pacchetto."))
+            _vociLibere = null;
+    }
+
+    private Task RimuoviVoceAsync(Guid voceId) =>
+        EseguiAsync(() => Pacchetti.RimuoviVoceAsync(CommessaId, PacchettoId, voceId), "Voce tolta dal pacchetto: torna tra quelle non assegnate.");
+
+    private async Task AggiungiNotaAsync()
+    {
+        if (await EseguiAsync(() => Pacchetti.AggiungiNotaAsync(CommessaId, PacchettoId, _dataNota, _iniziali, _testoNota ?? ""), "Nota aggiunta."))
+            _testoNota = null;
+    }
+
+    private async Task<bool> EseguiAsync(Func<Task> operazione, string esito)
+    {
+        try
+        {
+            await operazione();
+            (_messaggio, _errore) = (esito, false);
+            await AggiornaAsync();
+            return true;
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+            await AggiornaAsync();
+            return false;
+        }
+    }
+
+    private static string Accorcia(string testo) => testo.Length <= 140 ? testo : testo[..137] + "…";
+}

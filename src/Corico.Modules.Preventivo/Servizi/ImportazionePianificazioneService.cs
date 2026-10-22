@@ -236,11 +236,8 @@ public sealed class ImportazionePianificazioneService(
                 db.NotePacchetti.Add(new NotaPacchetto { PacchettoId = pacchetto.Id, CommessaId = commessaId, Data = oggi, Testo = n });
             if (base_ is not null && base_.Foglio.Stato == StatoCosto.Definitivo && base_.Foglio.StatoTesto is { } st
                 && !st.Contains("definitiv", StringComparison.OrdinalIgnoreCase))
-                db.NotePacchetti.Add(new NotaPacchetto
-                {
-                    PacchettoId = pacchetto.Id, CommessaId = commessaId, Data = oggi,
-                    Testo = $"Stato nel foglio Excel: «{st}», registrato come Definitivo fino al Modulo 4 (consuntivo).",
-                });
+                pacchetto.Note = string.Join("\n", new[] { pacchetto.Note,
+                    $"Stato nel foglio Excel: «{st}», registrato come Definitivo fino al Modulo 4 (consuntivo)." }.Where(x => x is not null));
 
             // Voci del pacchetto: prima il foglio di riferimento, poi le alternative.
             var vociGruppo = new Dictionary<(string Chiave, int Occorrenza), VoceComputo>();

@@ -1,0 +1,274 @@
+@* Scheda "Pacchetti" della commessa (rilascio 1B): tabellone costi/ricavi come il foglio HOME, dettaglio e offerte. *@
+@inject PacchettiService Pacchetti
+@inject ImportazionePianificazioneService ImportazionePianificazione
+
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@if (_pacchettoAperto is { } aperto)
+{
+    <DettaglioPacchettoVista CommessaId="CommessaId" PacchettoId="aperto" OnChiudi="ChiudiDettaglioAsync" />
+    return;
+}
+
+@if (_anteprima is not null)
+{
+    var a = _anteprima;
+    <div class="riquadro anteprima">
+        <h3>Anteprima importazione: @_nomeFile</h3>
+        <p class="testo-secondario">
+            Commessa nel file: @a.Letta.CodiceCommessa @a.Letta.NomeCommessa. Nulla è ancora stato salvato.
+            Ogni foglio CR diventa un'offerta; i fogli con la stessa descrizione diventano offerte alternative dello stesso pacchetto.
+        </p>
+        @foreach (var s in a.Segnalazioni)
+        {
+            <div class="segnalazione segnalazione-@s.Gravita.ToString().ToLowerInvariant()">@s.Testo</div>
+        }
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th>Pacchetto</th><th>Foglio</th><th>Fornitore</th><th>Stato nel foglio</th>
+                        <th class="num">Ricavo foglio</th><th class="num">Ricavo Corico</th>
+                        <th class="num">Costo foglio</th><th class="num">Costo Corico</th>
+                        <th>Importa</th><th>Riferimento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in a.Pacchetti)
+                    {
+                        if (p.Fogli.Count == 0)
+                        {
+                            <tr>
+                                <td>@p.Descrizione</td>
+                                <td colspan="9" class="testo-secondario">Solo nel tabellone HOME: pacchetto senza offerte@(p.Home?.Note is { } n ? $" — {n}" : "")</td>
+                            </tr>
+                            continue;
+                        }
+                        var primo = true;
+                        foreach (var f in p.Fogli)
+                        {
+                            <tr class="@(f.RicavoConcorde && f.CostoConcorde ? "" : "riga-da-completare")">
+                                <td>@(primo ? p.Descrizione : "")</td>
+                                <td>@f.Foglio.Nome</td>
+                                <td>@f.Foglio.Fornitore</td>
+                                <td>@f.Foglio.StatoTesto</td>
+                                <td class="num">@Formato.Numero(f.Foglio.RicavoNettoFoglio)</td>
+                                <td class="num @(f.RicavoConcorde ? "testo-concorde" : "testo-differenza")">@Formato.Numero(f.RicavoCalcolato)</td>
+                                <td class="num">@Formato.Numero(f.Foglio.CostoFoglio)</td>
+                                <td class="num @(f.CostoConcorde ? "testo-concorde" : "testo-differenza")">@Formato.Numero(f.CostoCalcolato)</td>
+                                <td><input type="checkbox" @bind="f.Includi" /></td>
+                                <td>
+                                    @if (p.Fogli.Count > 1)
+                                    {
+                                        <input type="radio" name="rif-@p.GetHashCode()" checked="@(p.FoglioScelto == f.Foglio.Nome)"
+                                               @onchange="() => p.FoglioScelto = f.Foglio.Nome" />
+                                    }
+                                    else
+                                    {
+                                        <span class="testo-secondario">unica</span>
+                                    }
+                                </td>
+                            </tr>
+                            primo = false;
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="azioni">
+            <button class="pulsante primario" @onclick="ConfermaImportazioneAsync" disabled="@_inCorso">
+                @(_inCorso ? "Importazione in corso…" : "Conferma importazione")
+            </button>
+            <button class="pulsante" @onclick="AnnullaImportazione" disabled="@_inCorso">Annulla</button>
+        </div>
+    </div>
+}
+
+@if (_esito is not null)
+{
+    var e = _esito;
+    <div class="riquadro">
+        <h3>Esito dell'importazione</h3>
+        <p>
+            @e.Pacchetti pacchetti, @e.Offerte offerte, @e.VociCreate voci aggiunte al computo e @e.VociCollegate collegate a voci esistenti.
+            <strong>@e.Verifiche.Count(v => v.Concorde) fogli su @e.Verifiche.Count</strong> hanno ricavo e costo identici all'Excel.
+        </p>
+        @foreach (var v in e.Verifiche.Where(v => !v.Concorde))
+        {
+            <div class="segnalazione segnalazione-attenzione">
+                @v.Foglio: ricavo @Formato.Euro(v.RicavoFoglio) nel foglio, @Formato.Euro(v.RicavoCorico) in Corico;
+                costo @Formato.Euro(v.CostoFoglio) nel foglio, @Formato.Euro(v.CostoCorico) in Corico.
+            </div>
+        }
+        @foreach (var avviso in e.Avvisi)
+        {
+            <div class="segnalazione segnalazione-informazione">@avviso</div>
+        }
+        <button class="pulsante piccolo" @onclick="() => _esito = null">Chiudi</button>
+    </div>
+}
+
+@if (_tabellone is null)
+{
+    <p class="testo-secondario">Caricamento…</p>
+    return;
+}
+
+<div class="riquadro">
+    <div class="riga-form">
+        <h3 class="spazio">Tabellone costi/ricavi</h3>
+        <button class="pulsante primario" @onclick="NuovoPacchettoAsync">Nuovo pacchetto</button>
+        <label class="pulsante">
+            Importa Excel di pianificazione…
+            <InputFile OnChange="LeggiFileAsync" accept=".xlsx,.xlsm" style="display:none" />
+        </label>
+    </div>
+
+    @if (_tabellone.Righe.Count == 0)
+    {
+        <p class="testo-secondario">
+            Nessun pacchetto. Crea un pacchetto e assegnagli le voci del computo, oppure importa il file Excel con i fogli CR e il tabellone HOME.
+        </p>
+    }
+    else
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th>Gruppo</th><th>Attività</th><th>ODA</th><th>Fornitore</th><th>Stato</th>
+                        <th class="num">Ricavo netto</th><th class="num">Costo</th><th class="num">MDC</th><th class="num">MDC %</th>
+                        <th>Ultima nota</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _tabellone.Righe)
+                    {
+                        <tr class="cliccabile" @onclick="() => _pacchettoAperto = r.Id">
+                            <td class="codice">@r.Codice</td>
+                            <td>
+                                @r.Descrizione
+                                <div class="testo-secondario">@r.NumeroVoci voci · @r.NumeroOfferte offerte</div>
+                            </td>
+                            <td>@r.RiferimentoOda</td>
+                            <td>@r.Fornitore</td>
+                            <td><span class="etichetta etichetta-costo-@r.Stato.ToString().ToLowerInvariant()">@r.Stato</span></td>
+                            <td class="num">@Formato.Euro(r.RicavoNetto)</td>
+                            <td class="num">@(r.Costo is null ? "—" : Formato.Euro(r.Costo))</td>
+                            <td class="num @(r.Mdc < 0 ? "testo-negativo" : "")">@(r.Mdc is null ? "" : Formato.Euro(r.Mdc))</td>
+                            <td class="num">@(r.Costo is null ? "" : Formato.Percento(r.MarginePercentuale))</td>
+                            <td>
+                                @if (r.UltimaNota is { } n)
+                                {
+                                    <span>@n.Testo</span>
+                                    <div class="testo-secondario">@n.Iniziali @Formato.Data(n.Data)</div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5">Totale pacchetti con costo (@(_tabellone.Righe.Count - _tabellone.PacchettiSenzaCosto) su @_tabellone.Righe.Count)</td>
+                        <td class="num">@Formato.Euro(_tabellone.RicavoConCosto)</td>
+                        <td class="num">@Formato.Euro(_tabellone.CostoPacchetti)</td>
+                        <td class="num">@Formato.Euro(_tabellone.MdcPacchetti)</td>
+                        <td class="num">@Formato.Percento(_tabellone.MarginePercentuale)</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+    <p class="testo-secondario">
+        Ribasso unico di commessa: @Formato.Percento(_tabellone.RibassoPercentuale).
+        @if (_tabellone.PacchettiSenzaCosto > 0)
+        {
+            <span>@_tabellone.PacchettiSenzaCosto pacchetti senza offerta di riferimento non sono compresi nel totale. </span>
+        }
+        @if (_tabellone.VociNonAssegnate > 0)
+        {
+            <span class="testo-differenza">@_tabellone.VociNonAssegnate voci del computo non sono assegnate a nessun pacchetto (ricavo netto @Formato.Euro(_tabellone.RicavoNonAssegnato)).</span>
+        }
+    </p>
+</div>
+
+@code {
+    private const long DimensioneMassima = 50L * 1024 * 1024;
+
+    [Parameter] public Guid CommessaId { get; set; }
+
+    private Tabellone? _tabellone;
+    private Guid? _pacchettoAperto;
+    private string? _messaggio;
+    private bool _errore;
+
+    private AnteprimaPianificazione? _anteprima;
+    private EsitoImportazionePianificazione? _esito;
+    private byte[]? _contenuto;
+    private string? _nomeFile;
+    private bool _inCorso;
+
+    protected override Task OnParametersSetAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync() => _tabellone = await Pacchetti.TabelloneAsync(CommessaId);
+
+    private async Task ChiudiDettaglioAsync()
+    {
+        _pacchettoAperto = null;
+        await AggiornaAsync();
+    }
+
+    private async Task NuovoPacchettoAsync()
+    {
+        var id = await Pacchetti.SalvaPacchettoAsync(CommessaId, new Pacchetto { Descrizione = "Nuovo pacchetto" });
+        _pacchettoAperto = id;
+    }
+
+    private async Task LeggiFileAsync(InputFileChangeEventArgs e)
+    {
+        AnnullaImportazione();
+        _esito = null;
+        try
+        {
+            await using var flusso = e.File.OpenReadStream(DimensioneMassima);
+            using var ms = new MemoryStream();
+            await flusso.CopyToAsync(ms);
+            _contenuto = ms.ToArray();
+            _anteprima = await ImportazionePianificazione.AnteprimaAsync(CommessaId, new MemoryStream(_contenuto));
+            _nomeFile = e.File.Name;
+        }
+        catch (Exception ex) when (ex is FormatException or IOException or InvalidDataException)
+        {
+            (_messaggio, _errore) = ($"Impossibile leggere «{e.File.Name}»: {ex.Message}", true);
+            AnnullaImportazione();
+        }
+    }
+
+    private void AnnullaImportazione() => (_anteprima, _contenuto, _nomeFile) = (null, null, null);
+
+    private async Task ConfermaImportazioneAsync()
+    {
+        _inCorso = true;
+        try
+        {
+            _esito = await ImportazionePianificazione.ConfermaAsync(CommessaId, _contenuto!, _nomeFile!, _anteprima!);
+            AnnullaImportazione();
+            await AggiornaAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

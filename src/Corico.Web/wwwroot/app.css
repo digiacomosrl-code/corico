@@ -154,7 +154,7 @@ details summary { cursor: pointer; color: var(--blu-medio); margin: .5rem 0; }
 .tabella tfoot td { font-weight: 600; border-top: 2px solid var(--grigio-bordo); }
 .tabella tr.riga-da-completare td { background: var(--ambra-chiaro); }
 .testo-nota { font-size: .85em; color: var(--ambra); }
-input.compatto { width: 9rem; text-align: right; }
+input.compatto { width: 7rem; text-align: right; }
 .scorrevole { overflow-x: auto; }
 .anteprima { border-left: 4px solid var(--blu); }
 .segnalazione { padding: .4rem .7rem; border-radius: var(--raggio); margin: .35rem 0; }
@@ -163,3 +163,12 @@ input.compatto { width: 9rem; text-align: right; }
 .segnalazione-errore { background: var(--rosso-chiaro); color: var(--rosso); }
 label.pulsante { display: inline-flex; align-items: center; }
 .scorrevole .tabella td.num { white-space: nowrap; }
+.testo-negativo { color: var(--rosso); }
+.campo-errato { border-color: var(--rosso) !important; background: var(--rosso-chiaro); }
+.colonna-scelta { background: var(--verde-chiaro) !important; }
+.tabella.confronto tr.totale td { font-weight: 600; border-top: 2px solid var(--grigio-bordo); }
+.elenco-breve { max-height: 22rem; overflow-y: auto; }
+.etichetta-costo-previsione { background: var(--grigio-sfondo); color: var(--testo-secondario); }
+.etichetta-costo-provvisorio { background: var(--ambra-chiaro); color: var(--ambra); }
+.etichetta-costo-definitivo { background: var(--verde-chiaro); color: var(--verde); }
+.tabella thead th.colonna-scelta { background: var(--verde) !important; color: #fff; }

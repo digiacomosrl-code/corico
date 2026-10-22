@@ -92,8 +92,9 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
         if (p is null) return null;
         var preventivo = await PreventivoService.OttieniOCreaAsync(db, commessaId, ct);
         var voci = VociDel(p, await VociDiCalcoloAsync(db, commessaId, ct));
+        // L'offerta di riferimento per prima, poi le alternative nell'ordine di inserimento.
         var offerte = (await CaricaOfferteAsync(db, commessaId, ct)).Where(o => o.PacchettoId == p.Id)
-            .OrderBy(o => o.CreatoIl).ToList();
+            .OrderBy(o => o.Id == p.OffertaSceltaId ? 0 : 1).ThenBy(o => o.CreatoIl).ToList();
         var note = await db.NotePacchetti.AsNoTracking().Where(n => n.PacchettoId == p.Id)
             .OrderByDescending(n => n.Data).ThenByDescending(n => n.CreatoIl).ToListAsync(ct);
         return new DettaglioPacchetto(p, voci,
@@ -370,6 +371,8 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
                 e = new T();
                 typeof(T).GetProperty("CommessaId")!.SetValue(e, commessaId);
                 esistenti.Add(e);
+                // Aggiunta esplicita: con la chiave già valorizzata EF la considererebbe una riga esistente da aggiornare.
+                db.Add(e);
             }
             copia(e, n);
         }

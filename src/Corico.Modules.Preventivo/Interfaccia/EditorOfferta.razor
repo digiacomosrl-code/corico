@@ -1,0 +1,310 @@
+@* Scheda dell'offerta (sez. 14.1): testata, costi per voce, righe del fornitore assegnabili alle voci, voci a corpo, esclusioni. *@
+@inject PacchettiService Pacchetti
+@inject FornitoriService Fornitori
+@inject DocumentiService Documenti
+
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@{ var calcolo = CalcoloPacchetti.Calcola(Offerta, Voci, Ribasso); }
+
+<div class="riga-form">
+    <button class="pulsante" @onclick="OnChiudi">← Pacchetto</button>
+    <h3 class="spazio">@(Offerta.Id == Guid.Empty ? "Nuova offerta" : $"Offerta {Offerta.NomeFornitore} {Offerta.Numero}")</h3>
+    <span>Ricavo @Formato.Euro(calcolo.RicavoNetto) · Costo @Formato.Euro(calcolo.Costo) ·
+        <strong class="@(calcolo.Mdc < 0 ? "testo-negativo" : "")">MDC @Formato.Euro(calcolo.Mdc) (@Formato.Percento(calcolo.MarginePercentuale))</strong></span>
+</div>
+
+<div class="riquadro">
+    <h3>Testata</h3>
+    <div class="griglia-form">
+        <label>
+            Fornitore in anagrafica
+            <select value="@Offerta.FornitoreId" @onchange="ScegliFornitore">
+                <option value="">— non collegato —</option>
+                @foreach (var f in _fornitori)
+                {
+                    <option value="@f.Id">@f.Denominazione</option>
+                }
+            </select>
+        </label>
+        <label>Nome del fornitore sull'offerta <input @bind="Offerta.NomeFornitore" /></label>
+        <label>
+            Tipo di offerta
+            <select @bind="Offerta.Tipo">
+                @foreach (var t in Enum.GetValues<TipoOfferta>())
+                {
+                    <option value="@t">@Testi.Offerta(t)</option>
+                }
+            </select>
+        </label>
+        <label>Numero <input @bind="Offerta.Numero" placeholder="es. PR_3000" /></label>
+        <label>Revisione <input @bind="Offerta.Revisione" placeholder="es. r.00" /></label>
+        <label>Data <input type="date" @bind="Offerta.Data" /></label>
+        <label>Validità (giorni) <input type="number" min="0" @bind="Offerta.ValiditaGiorni" /></label>
+        <label>
+            Scadenza
+            <input type="date" @bind="Offerta.Scadenza" />
+            <small class="testo-secondario">Se vuota, calcolata da data e validità.</small>
+        </label>
+        <label>Pagamento <input @bind="Offerta.Pagamento" /></label>
+        <label>Consegna <input @bind="Offerta.Consegna" /></label>
+        <label>Garanzia <input @bind="Offerta.Garanzia" /></label>
+        <label>
+            Documento PDF (dall'archivio della commessa)
+            <select value="@Offerta.DocumentoId" @onchange="e => Offerta.DocumentoId = Guid.TryParse(e.Value as string, out var g) ? g : null">
+                <option value="">— nessuno —</option>
+                @foreach (var d in _documenti)
+                {
+                    <option value="@d.Id">@d.NomeOriginale</option>
+                }
+            </select>
+            @if (Offerta.DocumentoId is { } doc)
+            {
+                <a href="/documenti/@doc/scarica" target="_blank">Apri il documento</a>
+            }
+        </label>
+        <label>Totale imponibile dichiarato (€) <input type="number" step="0.01" @bind="Offerta.TotaleDichiarato" /></label>
+        <label class="largo">
+            Esclusioni e oneri a carico dell'impresa
+            <textarea rows="2" @bind="Offerta.Esclusioni" placeholder="es. scarico con muletto, consegne in ZTL"></textarea>
+        </label>
+        <label class="largo">Note <textarea rows="2" @bind="Offerta.Note"></textarea></label>
+    </div>
+</div>
+
+<div class="riquadro">
+    <h3>Costi per voce del computo</h3>
+    <p class="testo-secondario">
+        Costo unitario in tre colonne (livello sintetico) e/o righe dell'offerta assegnate alla voce.
+        La quantità di pianificazione sostituisce quella del computo per ricavo e costo, con nota obbligatoria.
+    </p>
+    <div class="scorrevole">
+        <table class="tabella">
+            <thead>
+                <tr>
+                    <th>Voce</th><th>U.M.</th><th class="num">Q. computo</th><th class="num">Q. pianificazione</th><th>Nota quantità</th>
+                    <th class="num">Fornitura</th><th class="num">Forn. e posa</th><th class="num">M.O. e noli</th>
+                    <th class="num">Righe assegnate</th><th class="num">Costo</th><th class="num">Ricavo netto</th><th class="num">MDC</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in calcolo.Voci)
+                {
+                    var ov = VoceOfferta(c.Voce.Id);
+                    <tr>
+                        <td><span class="codice">@c.Voce.Tariffa</span> @Accorcia(c.Voce.Descrizione)</td>
+                        <td>@c.Voce.Unita</td>
+                        <td class="num">@Formato.Numero(c.Voce.Quantita)</td>
+                        <td class="num"><input type="number" step="any" class="compatto" @bind="ov.QuantitaPianificazione" /></td>
+                        <td><input @bind="ov.NotaQuantita" class="@(c.QuantitaModificata && string.IsNullOrWhiteSpace(ov.NotaQuantita) ? "campo-errato" : "")" /></td>
+                        <td class="num"><input type="number" step="any" class="compatto" @bind="ov.Fornitura" /></td>
+                        <td class="num"><input type="number" step="any" class="compatto" @bind="ov.FornituraEPosa" /></td>
+                        <td class="num"><input type="number" step="any" class="compatto" @bind="ov.ManodoperaENoli" /></td>
+                        <td class="num">@(c.NumeroRighe == 0 ? "" : $"{c.NumeroRighe} · {Formato.Numero(c.CostoRighe)}")</td>
+                        <td class="num">@Formato.Numero(c.Costo)</td>
+                        <td class="num">@Formato.Numero(c.Ricavo.Netto)</td>
+                        <td class="num @(c.Mdc < 0 ? "testo-negativo" : "")">@Formato.Numero(c.Mdc)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="riquadro righe-offerta">
+    <div class="riga-form">
+        <h3 class="spazio">Righe dell'offerta (@Offerta.Righe.Count)</h3>
+        <label>Sconto per le nuove righe (%) <input type="number" step="any" class="compatto" @bind="_scontoPredefinito" /></label>
+        <button class="pulsante" @onclick="AggiungiRiga">Aggiungi riga</button>
+    </div>
+    @if (Offerta.Righe.Count > 0)
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th>Codice</th><th>Descrizione</th><th>Posizione</th><th>U.M.</th><th class="num">Quantità</th>
+                        <th class="num">Listino</th><th class="num">Sconto %</th><th class="num">Netto</th><th>Voce del computo</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Offerta.Righe)
+                    {
+                        <tr class="@(r.VoceComputoId is null ? "riga-da-completare" : "")">
+                            <td><input @bind="r.CodiceArticolo" style="width:7rem" /></td>
+                            <td><input @bind="r.Descrizione" style="min-width:16rem" /></td>
+                            <td><input @bind="r.Posizione" style="width:8rem" /></td>
+                            <td><input @bind="r.Unita" style="width:4rem" /></td>
+                            <td class="num"><input type="number" step="any" class="compatto" @bind="r.Quantita" /></td>
+                            <td class="num"><input type="number" step="any" class="compatto" @bind="r.PrezzoListino" /></td>
+                            <td class="num"><input type="number" step="any" class="compatto" @bind="r.ScontoPercentuale" /></td>
+                            <td class="num">@Formato.Numero(CalcoloPacchetti.ImportoRiga(r.Quantita, r.PrezzoListino, r.ScontoPercentuale))</td>
+                            <td>
+                                <select value="@r.VoceComputoId" @onchange="e => r.VoceComputoId = Guid.TryParse(e.Value as string, out var g) ? g : null">
+                                    <option value="">— da assegnare —</option>
+                                    @foreach (var v in Voci)
+                                    {
+                                        <option value="@v.Id">@(v.Tariffa) @Accorcia(v.Descrizione, 50)</option>
+                                    }
+                                </select>
+                            </td>
+                            <td class="nowrap">
+                                <button class="pulsante piccolo" @onclick="() => DuplicaRiga(r)" title="Duplica">⧉</button>
+                                <button class="pulsante piccolo" @onclick="() => Offerta.Righe.Remove(r)" title="Elimina">✕</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr><td colspan="7">Totale righe</td><td class="num">@Formato.Numero(calcolo.TotaleRigheOfferta)</td><td colspan="2"></td></tr>
+                </tfoot>
+            </table>
+        </div>
+        @if (calcolo.RigheNonAssegnate > 0)
+        {
+            <div class="segnalazione segnalazione-attenzione">
+                @calcolo.RigheNonAssegnate righe non sono assegnate a una voce del computo: il loro importo (@Formato.Euro(calcolo.CostoRigheNonAssegnate)) è comunque nel costo del pacchetto.
+            </div>
+        }
+    }
+</div>
+
+<div class="riquadro voci-corpo">
+    <div class="riga-form">
+        <h3 class="spazio">Voci a corpo (trasporto, posa, imballo, scarico…)</h3>
+        <button class="pulsante" @onclick="AggiungiCorpo">Aggiungi voce a corpo</button>
+    </div>
+    @if (Offerta.CostiACorpo.Count > 0)
+    {
+        <table class="tabella">
+            <tbody>
+                @foreach (var c in Offerta.CostiACorpo)
+                {
+                    <tr>
+                        <td><input @bind="c.Descrizione" style="min-width:18rem" /></td>
+                        <td class="num"><input type="number" step="0.01" class="compatto" @bind="c.Importo" disabled="@c.Incluso" /></td>
+                        <td><label class="spunta"><input type="checkbox" @bind="c.Incluso" /> incluso</label></td>
+                        <td><button class="pulsante piccolo" @onclick="() => Offerta.CostiACorpo.Remove(c)">✕</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    <table class="tabella quadro">
+        <tbody>
+            <tr><td>Totale calcolato dell'offerta (righe + voci a corpo)</td><td class="num">@Formato.Euro(calcolo.TotaleOffertaCalcolato)</td></tr>
+            @if (Offerta.TotaleDichiarato is { } td)
+            {
+                var diff = td - calcolo.TotaleOffertaCalcolato;
+                <tr class="@(Math.Abs(diff) >= 0.01m ? "differenza" : "concorde")">
+                    <td>Totale imponibile dichiarato</td>
+                    <td class="num">@Formato.Euro(td) @(Math.Abs(diff) >= 0.01m ? $"(differenza {Formato.Euro(diff)})" : "✓")</td>
+                </tr>
+            }
+            <tr class="totale"><td>Costo del pacchetto con questa offerta</td><td class="num">@Formato.Euro(calcolo.Costo)</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="azioni">
+    <button class="pulsante primario" @onclick="SalvaAsync">Salva offerta</button>
+    <button class="pulsante" @onclick="OnChiudi">Annulla</button>
+    <span class="spazio"></span>
+    @if (Offerta.Id != Guid.Empty)
+    {
+        @if (_confermaElimina)
+        {
+            <span class="conferma">Eliminare l'offerta? <button class="pulsante piccolo" @onclick="EliminaAsync">Sì, elimina</button>
+                <button class="pulsante piccolo" @onclick="() => _confermaElimina = false">No</button></span>
+        }
+        else
+        {
+            <button class="pulsante" @onclick="() => _confermaElimina = true">Elimina offerta</button>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Offerta Offerta { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<VoceDiCalcolo> Voci { get; set; } = [];
+    [Parameter] public decimal Ribasso { get; set; }
+    [Parameter] public EventCallback OnChiudi { get; set; }
+
+    private IReadOnlyList<DatiFornitore> _fornitori = [];
+    private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
+    private decimal _scontoPredefinito;
+    private bool _confermaElimina;
+    private string? _messaggio;
+    private bool _errore;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _fornitori = await Fornitori.ElencoAsync();
+        _documenti = await Documenti.ElencoAsync(CommessaId);
+        _scontoPredefinito = Offerta.Righe.LastOrDefault()?.ScontoPercentuale ?? 0;
+    }
+
+    private OffertaVoce VoceOfferta(Guid voceId)
+    {
+        var ov = Offerta.Voci.FirstOrDefault(v => v.VoceComputoId == voceId);
+        if (ov is null)
+        {
+            ov = new OffertaVoce { Id = Guid.Empty, CommessaId = CommessaId, VoceComputoId = voceId };
+            Offerta.Voci.Add(ov);
+        }
+        return ov;
+    }
+
+    private void ScegliFornitore(ChangeEventArgs e)
+    {
+        Offerta.FornitoreId = Guid.TryParse(e.Value as string, out var g) ? g : null;
+        if (_fornitori.FirstOrDefault(f => f.Id == g) is { } f) Offerta.NomeFornitore = f.Denominazione;
+    }
+
+    private void AggiungiRiga() => Offerta.Righe.Add(new RigaOfferta
+    {
+        Id = Guid.Empty, CommessaId = CommessaId, Quantita = 1, ScontoPercentuale = _scontoPredefinito,
+        VoceComputoId = Voci.Count == 1 ? Voci[0].Id : null,
+    });
+
+    private void DuplicaRiga(RigaOfferta r)
+    {
+        var i = Offerta.Righe.IndexOf(r);
+        Offerta.Righe.Insert(i + 1, new RigaOfferta
+        {
+            Id = Guid.Empty, CommessaId = CommessaId, CodiceArticolo = r.CodiceArticolo, Descrizione = r.Descrizione,
+            Unita = r.Unita, Quantita = r.Quantita, PrezzoListino = r.PrezzoListino, ScontoPercentuale = r.ScontoPercentuale,
+            VoceComputoId = r.VoceComputoId,
+        });
+    }
+
+    private void AggiungiCorpo() => Offerta.CostiACorpo.Add(new CostoACorpo { Id = Guid.Empty, CommessaId = CommessaId, Descrizione = "Trasporto" });
+
+    private async Task SalvaAsync()
+    {
+        try
+        {
+            await Pacchetti.SalvaOffertaAsync(CommessaId, Offerta);
+            await OnChiudi.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task EliminaAsync()
+    {
+        await Pacchetti.EliminaOffertaAsync(CommessaId, Offerta.Id);
+        await OnChiudi.InvokeAsync();
+    }
+
+    private static string Accorcia(string testo, int max = 90) => testo.Length <= max ? testo : testo[..(max - 3)] + "…";
+}

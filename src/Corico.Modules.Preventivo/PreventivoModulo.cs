@@ -21,6 +21,7 @@ public sealed class PreventivoModulo : ICoricoModulo
     public IReadOnlyList<SchedaCommessa> SchedeCommessa { get; } =
     [
         new("Preventivo", typeof(SchedaPreventivo), Ordine: 10),
+        new("Pacchetti", typeof(SchedaPacchetti), Ordine: 20),
     ];
 
     public void RegistraServizi(IServiceCollection servizi, PercorsiDati percorsi)

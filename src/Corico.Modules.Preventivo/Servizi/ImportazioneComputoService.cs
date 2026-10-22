@@ -1,4 +1,5 @@
 using Corico.Core.Backup;
+using Corico.Core.Calcolo;
 using Corico.Core.Dominio;
 using Corico.Core.Servizi;
 using Corico.Modules.Preventivo.Dati;
@@ -55,6 +56,7 @@ public sealed class ImportazioneComputoService(
 
         var letto = anteprima.Letto;
         await using var db = await fabbrica.CreateDbContextAsync(ct);
+        db.InserimentiSoloInRiepilogo = true;
         await using var transazione = await db.Database.BeginTransactionAsync(ct);
         var preventivo = await PreventivoService.OttieniOCreaAsync(db, commessaId, ct);
 
@@ -145,7 +147,8 @@ public sealed class ImportazioneComputoService(
         db.NotaStorico = $"Importazione computo {Path.GetFileName(nomeFile)}";
         await db.SaveChangesAsync(ct);
         db.RegistraOperazione("Importazione", nameof(Computo), computo.Id, commessaId,
-            $"Importato {Path.GetFileName(nomeFile)}: {letto.Voci.Count} voci, totale calcolato {anteprima.TotaleCalcolato:N2} €.");
+            $"Importato {Path.GetFileName(nomeFile)}: {letto.Voci.Count} voci, {letto.ElencoPrezzi.Count} prezzi di elenco, " +
+            $"totale calcolato {Formato.Euro(anteprima.TotaleCalcolato)}.");
         await db.SaveChangesAsync(ct);
         await transazione.CommitAsync(ct);
 

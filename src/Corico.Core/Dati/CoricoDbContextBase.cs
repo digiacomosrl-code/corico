@@ -58,6 +58,13 @@ public abstract class CoricoDbContextBase : DbContext
     /// <summary>Nota facoltativa allegata alle voci di storico del prossimo salvataggio.</summary>
     public string? NotaStorico { get; set; }
 
+    /// <summary>
+    /// Per le importazioni massive: gli inserimenti non generano una voce di storico ciascuno;
+    /// il chiamante registra un'unica operazione riepilogativa con <see cref="RegistraOperazione"/>.
+    /// Modifiche ed eliminazioni restano registrate singolarmente.
+    /// </summary>
+    public bool InserimentiSoloInRiepilogo { get; set; }
+
     /// <summary>Registra un'operazione applicativa (es. cambio di stato, ripristino) nello storico.</summary>
     public void RegistraOperazione(string operazione, string entita, Guid? entitaId, Guid? commessaId, string? nota,
         object? prima = null, object? dopo = null)
@@ -134,6 +141,7 @@ public abstract class CoricoDbContextBase : DbContext
                 }
             }
 
+            if (InserimentiSoloInRiepilogo && entry.State == EntityState.Added) continue;
             var voce = CreaVoceStorico(entry, adesso, utente);
             if (voce is not null) voci.Add(voce);
         }

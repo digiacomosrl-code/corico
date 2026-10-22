@@ -1,3 +1,5 @@
+using Corico.Modules.Preventivo.Dati;
+using Microsoft.EntityFrameworkCore;
 using Corico.Core.Dominio;
 using Corico.Core.Servizi;
 using Corico.Core.Tests;
@@ -42,6 +44,12 @@ public class PreventivoServiceTests
         Assert.Equal(100m, voci[1].PercentualeNonSoggetta);
         Assert.True(voci[2].SenzaElencoPrezzi);
         Assert.Equal("SICUREZZA", voci[1].SuperCategoria);
+
+        // Lo storico riporta un'unica operazione riepilogativa, non una riga per ogni voce importata.
+        await using var db = await amb.Get<IDbContextFactory<PreventivoDbContext>>().CreateDbContextAsync();
+        var storico = await db.Storico.Where(s => s.CommessaId == id && s.Entita != "Commessa" && s.Entita != "Documento").ToListAsync();
+        Assert.Single(storico, s => s.Operazione == "Importazione");
+        Assert.DoesNotContain(storico, s => s.Entita == "VoceComputo");
     }
 
     [Fact]

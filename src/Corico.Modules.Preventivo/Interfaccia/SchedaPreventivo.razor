@@ -1,13 +1,484 @@
-@* Scheda "Preventivo" nella pagina della commessa. Contenuto completo dopo l'approvazione della specifica del Modulo 1. *@
+@* Scheda "Preventivo" della commessa (rilascio 1A): ribasso unico, quadro economico, computo e voci. *@
+@inject PreventivoService Preventivo
+@inject ImportazioneComputoService Importazione
+@inject CommesseService Commesse
 
-<div class="riquadro">
-    <h3>Preventivo economico</h3>
-    <p class="testo-secondario">
-        Il preventivo (computo, pacchetti di affidamento, offerte, ribasso d'asta e MDC) sarà disponibile
-        dopo l'approvazione della specifica di dettaglio del Modulo 1.
-    </p>
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
+}
+
+@if (_stato is null)
+{
+    <p class="testo-secondario">Caricamento…</p>
+    return;
+}
+
+<div class="colonne-preventivo">
+    <div class="riquadro">
+        <h3>Quadro economico dei ricavi</h3>
+        <div class="riga-form">
+            <label>
+                Ribasso d'asta unico (%)
+                <input type="number" step="0.0001" min="0" max="99.9999" @bind="_ribasso" />
+            </label>
+            <button class="pulsante primario" @onclick="SalvaRibassoAsync" disabled="@(_ribasso == _stato.RibassoPercentuale)">Applica</button>
+        </div>
+        @{ var q = _stato.Quadro; }
+        <table class="tabella quadro">
+            <tbody>
+                <tr><td>Importo lavori a base d'asta</td><td class="num">@Formato.Euro(q.ImportoLavoriLordo)</td></tr>
+                <tr><td>di cui non soggetto a ribasso (sicurezza, ecc.)</td><td class="num">@Formato.Euro(q.ImportoNonSoggetto)</td></tr>
+                <tr><td>di cui soggetto a ribasso</td><td class="num">@Formato.Euro(q.ImportoSoggetto)</td></tr>
+                <tr><td>Ribasso del @Formato.Percento(q.RibassoPercentuale)</td><td class="num">− @Formato.Euro(q.ImportoRibasso)</td></tr>
+                <tr class="totale"><td>Ricavo netto da computo</td><td class="num">@Formato.Euro(q.ImportoNetto)</td></tr>
+                @if (q.ValoreContrattuale is not null)
+                {
+                    <tr><td>Valore contrattuale indicato nei dati generali</td><td class="num">@Formato.Euro(q.ValoreContrattuale)</td></tr>
+                    <tr class="@(Math.Abs(q.DifferenzaDaContratto ?? 0) >= 0.01m ? "differenza" : "")">
+                        <td>Differenza (contratto − computo)</td><td class="num">@Formato.Euro(q.DifferenzaDaContratto)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="testo-secondario">
+            @q.NumeroVoci voci in calcolo@(q.VociSenzaPrezzo > 0 ? $", di cui {q.VociSenzaPrezzo} senza prezzo" : "").
+            Gli importi sono calcolati senza arrotondamenti intermedi e arrotondati al centesimo solo in visualizzazione.
+        </p>
+    </div>
+
+    <div class="riquadro">
+        <h3>Computo metrico</h3>
+        @if (_stato.Computo is { } c)
+        {
+            <table class="tabella quadro">
+                <tbody>
+                    <tr><td>Origine</td><td>@c.Descrizione</td></tr>
+                    @if (c.Oggetto is not null) { <tr><td>Oggetto</td><td>@c.Oggetto</td></tr> }
+                    @if (c.Committente is not null) { <tr><td>Committente</td><td>@c.Committente</td></tr> }
+                    <tr><td>Data</td><td>@Formato.DataOra(c.CreatoIl)</td></tr>
+                    @if (c.TotaleImportato is not null) { <tr><td>Totale calcolato all'importazione</td><td class="num">@Formato.Euro(c.TotaleImportato)</td></tr> }
+                    <tr>
+                        <td>Totale dichiarato nel documento</td>
+                        <td class="num">
+                            <input type="number" step="0.01" @bind="_totaleDichiarato" class="compatto" />
+                            <button class="pulsante piccolo" @onclick="SalvaTotaleDichiaratoAsync">Salva</button>
+                        </td>
+                    </tr>
+                    @if (c.TotaleDichiarato is not null && c.TotaleImportato is not null)
+                    {
+                        var diff = c.TotaleImportato.Value - c.TotaleDichiarato.Value;
+                        <tr class="@(Math.Abs(diff) >= 0.01m ? "differenza" : "concorde")">
+                            <td>Verifica di quadratura</td>
+                            <td class="num">@(Math.Abs(diff) < 0.01m ? "Totali concordi" : "Differenza " + Formato.Euro(diff))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (c.DocumentoId is not null)
+            {
+                <p><a href="/documenti/@c.DocumentoId/scarica" target="_blank">Scarica il file originale (@c.NomeFile)</a></p>
+            }
+        }
+        else
+        {
+            <p class="testo-secondario">Nessun computo. Importa un file XPWE (PriMus) oppure inserisci le voci manualmente.</p>
+        }
+
+        <div class="riga-form">
+            <label class="pulsante">
+                Importa computo XPWE…
+                <InputFile OnChange="LeggiFileAsync" accept=".xpwe,.XPWE" style="display:none" />
+            </label>
+            <button class="pulsante" @onclick="NuovaVoce">Nuova voce manuale</button>
+        </div>
+        @if (_computi.Count > 1)
+        {
+            <p class="testo-secondario">Computi precedenti conservati: @(_computi.Count - 1) (consultabili nello storico e nei documenti).</p>
+        }
+    </div>
 </div>
 
+@if (_anteprima is not null)
+{
+    var a = _anteprima;
+    <div class="riquadro anteprima">
+        <h3>Anteprima importazione: @_nomeFile</h3>
+        <p class="testo-secondario">Nulla è ancora stato salvato. Controlla i dati e conferma.</p>
+        <table class="tabella quadro">
+            <tbody>
+                <tr><td>Oggetto</td><td>@a.Letto.Oggetto</td></tr>
+                <tr><td>Comune</td><td>@a.Letto.Comune @(a.Letto.Provincia is { Length: 2 } pr ? $"({pr})" : "")</td></tr>
+                <tr><td>Committente</td><td>@a.Letto.Committente</td></tr>
+                <tr><td>Voci di computo / voci di elenco prezzi</td><td>@a.Letto.Voci.Count / @a.Letto.ElencoPrezzi.Count</td></tr>
+                <tr><td>Totale calcolato (quantità × prezzo)</td><td class="num"><strong>@Formato.Euro(a.TotaleCalcolato)</strong></td></tr>
+                <tr><td>di cui proposto come non soggetto a ribasso</td><td class="num">@Formato.Euro(a.TotaleSicurezza)</td></tr>
+            </tbody>
+        </table>
+
+        @foreach (var s in a.Letto.Segnalazioni)
+        {
+            <div class="segnalazione segnalazione-@s.Gravita.ToString().ToLowerInvariant()">@s.Testo</div>
+        }
+
+        <div class="riga-form">
+            <label>
+                Totale riportato nel computo cartaceo/PDF (€), per la verifica
+                <input type="number" step="0.01" @bind="_totaleDichiaratoImport" />
+            </label>
+            @if (_totaleDichiaratoImport is { } td)
+            {
+                var d = a.TotaleCalcolato - td;
+                <span class="@(Math.Abs(d) >= 0.01m ? "testo-differenza" : "testo-concorde")">
+                    @(Math.Abs(d) < 0.01m ? "Totali concordi." : $"Differenza di {Formato.Euro(d)}: verificare prima di confermare.")
+                </span>
+            }
+        </div>
+
+        @if (_proposte.Count > 0)
+        {
+            <div class="sotto-riquadro">
+                <strong>Dati generali della commessa ancora vuoti</strong>
+                @foreach (var p in _proposte)
+                {
+                    <label class="spunta"><input type="checkbox" @bind="p.Usa" /> @p.Campo: «@p.Valore»</label>
+                }
+            </div>
+        }
+
+        @if (_stato.Computo is not null)
+        {
+            <div class="nota-mancanti">
+                Il computo attuale verrà sostituito da questo; quello precedente resta conservato.
+                Le modifiche manuali fatte sulle voci del computo attuale non vengono riportate.
+            </div>
+        }
+        <div class="azioni">
+            <button class="pulsante primario" @onclick="ConfermaImportazioneAsync" disabled="@_inCorso">
+                @(_inCorso ? "Importazione in corso…" : "Conferma importazione")
+            </button>
+            <button class="pulsante" @onclick="AnnullaImportazione" disabled="@_inCorso">Annulla</button>
+        </div>
+    </div>
+}
+
+@if (_voceInModifica is not null)
+{
+    <div class="riquadro">
+        <h3>@(_voceInModifica.Id == Guid.Empty ? "Nuova voce" : "Modifica voce")</h3>
+        <div class="griglia-form">
+            <label>Tariffa <input @bind="_voceInModifica.Tariffa" /></label>
+            <label>Unità di misura <input @bind="_voceInModifica.Unita" /></label>
+            <label class="largo">Descrizione <textarea rows="2" @bind="_voceInModifica.Descrizione"></textarea></label>
+            <label>Quantità <input type="number" step="any" @bind="_voceInModifica.Quantita" /></label>
+            <label>Prezzo unitario (€) <input type="number" step="any" @bind="_voceInModifica.Prezzo" /></label>
+            <label>
+                Quota non soggetta a ribasso (%)
+                <input type="number" step="any" min="0" max="100" @bind="_voceInModifica.PercentualeNonSoggetta" />
+                <small class="testo-secondario">100 = oneri della sicurezza o voce esclusa dal ribasso.</small>
+            </label>
+            <label class="largo">Note <textarea rows="2" @bind="_voceInModifica.Note"></textarea></label>
+        </div>
+        @if (_misure.Count > 0)
+        {
+            <details>
+                <summary>Righe di misura del computo (@_misure.Count)</summary>
+                <table class="tabella">
+                    <thead><tr><th>Descrizione</th><th class="num">Par. ug.</th><th class="num">Lung.</th><th class="num">Larg.</th><th class="num">H/peso</th><th class="num">Quantità</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _misure)
+                        {
+                            <tr>
+                                <td>@m.Descrizione @(m.VoceRiferita is null ? "" : "(vedi voce)")</td>
+                                <td class="num">@NumeroOVuoto(m.PartiUguali)</td><td class="num">@NumeroOVuoto(m.Lunghezza)</td>
+                                <td class="num">@NumeroOVuoto(m.Larghezza)</td><td class="num">@NumeroOVuoto(m.AltezzaPeso)</td>
+                                <td class="num">@NumeroOVuoto(m.Quantita)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </details>
+        }
+        <div class="azioni">
+            <button class="pulsante primario" @onclick="SalvaVoceAsync">Salva</button>
+            <button class="pulsante" @onclick="() => _voceInModifica = null">Annulla</button>
+            @if (_voceInModifica.Id != Guid.Empty)
+            {
+                <span class="spazio"></span>
+                <button class="pulsante" @onclick="ArchiviaVoceAsync">Togli dal calcolo (archivia)</button>
+            }
+        </div>
+    </div>
+}
+
+@if (_voci.Count > 0)
+{
+    <div class="riquadro">
+        <h3>Voci del computo</h3>
+        <div class="filtri">
+            <input type="search" placeholder="Cerca per tariffa o descrizione…" @bind="_cerca" @bind:event="oninput" />
+            <select @bind="_categoria">
+                <option value="">Tutte le categorie</option>
+                @foreach (var cat in _voci.Select(v => v.SuperCategoria).Where(x => x is not null).Distinct().Order())
+                {
+                    <option value="@cat">@cat</option>
+                }
+            </select>
+            <label class="spunta"><input type="checkbox" @bind="_soloDaCompletare" /> Solo voci senza prezzo</label>
+        </div>
+
+        @{ var visibili = VociVisibili().ToList(); }
+        <div class="riga-form">
+            <span>@visibili.Count voci visualizzate, @_selezionate.Count selezionate.</span>
+            <button class="pulsante piccolo" @onclick="() => SelezionaTutte(visibili)">Seleziona le visualizzate</button>
+            <button class="pulsante piccolo" @onclick="() => _selezionate.Clear()" disabled="@(_selezionate.Count == 0)">Deseleziona</button>
+            <span class="spazio"></span>
+            <button class="pulsante piccolo" @onclick="() => ImpostaNonSoggettaAsync(100)" disabled="@(_selezionate.Count == 0)">Selezionate: non soggette a ribasso</button>
+            <button class="pulsante piccolo" @onclick="() => ImpostaNonSoggettaAsync(0)" disabled="@(_selezionate.Count == 0)">Selezionate: soggette a ribasso</button>
+        </div>
+
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th></th><th class="num">N.</th><th>Tariffa</th><th>Descrizione</th><th>U.M.</th>
+                        <th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Non sogg.</th>
+                        <th class="num">Importo lordo</th><th class="num">Prezzo ribassato</th><th class="num">Importo netto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in visibili)
+                    {
+                        <tr class="cliccabile @(v.Prezzo == 0 ? "riga-da-completare" : "")" @onclick="() => ModificaVoceAsync(v)">
+                            <td @onclick:stopPropagation="true">
+                                <input type="checkbox" checked="@_selezionate.Contains(v.Id)" @onchange="e => Seleziona(v.Id, (bool)e.Value!)" />
+                            </td>
+                            <td class="num">@v.Ordine</td>
+                            <td class="codice">@v.Tariffa</td>
+                            <td>
+                                @Accorcia(v.Descrizione)
+                                @if (v.SuperCategoria is not null) { <div class="testo-secondario">@v.SuperCategoria</div> }
+                                @if (v.Note is not null) { <div class="testo-nota">@v.Note</div> }
+                            </td>
+                            <td>@v.Unita</td>
+                            <td class="num">@Formato.Numero(v.Quantita)</td>
+                            <td class="num">@Formato.Numero(v.Prezzo)</td>
+                            <td class="num">@(v.PercentualeNonSoggetta == 0 ? "" : Formato.Percento(v.PercentualeNonSoggetta))</td>
+                            <td class="num">@Formato.Numero(v.Ricavo.Lordo)</td>
+                            <td class="num">@Formato.Numero(v.Ricavo.PrezzoRibassato, 4)</td>
+                            <td class="num">@Formato.Numero(v.Ricavo.Netto)</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="8">Totale voci visualizzate</td>
+                        <td class="num">@Formato.Numero(visibili.Sum(v => v.Ricavo.Lordo))</td>
+                        <td></td>
+                        <td class="num">@Formato.Numero(visibili.Sum(v => v.Ricavo.Netto))</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+}
+
 @code {
+    private const long DimensioneMassima = 100L * 1024 * 1024;
+
     [Parameter] public Guid CommessaId { get; set; }
+
+    private StatoPreventivo? _stato;
+    private IReadOnlyList<RigaVoce> _voci = [];
+    private IReadOnlyList<DatiComputo> _computi = [];
+    private decimal _ribasso;
+    private decimal? _totaleDichiarato;
+    private string? _messaggio;
+    private bool _errore;
+
+    private string _cerca = "";
+    private string _categoria = "";
+    private bool _soloDaCompletare;
+    private readonly HashSet<Guid> _selezionate = [];
+
+    private DatiVoce? _voceInModifica;
+    private IReadOnlyList<RigaMisura> _misure = [];
+
+    private AnteprimaComputo? _anteprima;
+    private byte[]? _contenuto;
+    private string? _nomeFile;
+    private decimal? _totaleDichiaratoImport;
+    private List<Proposta> _proposte = [];
+    private bool _inCorso;
+
+    private sealed class Proposta(string campo, string valore, Action<DatiCommessa, string> applica)
+    {
+        public string Campo { get; } = campo;
+        public string Valore { get; } = valore;
+        public Action<DatiCommessa, string> Applica { get; } = applica;
+        public bool Usa { get; set; } = true;
+    }
+
+    protected override Task OnParametersSetAsync() => AggiornaAsync();
+
+    private async Task AggiornaAsync()
+    {
+        _stato = await Preventivo.StatoAsync(CommessaId);
+        _voci = await Preventivo.VociAsync(CommessaId);
+        _computi = await Preventivo.ComputiAsync(CommessaId);
+        _ribasso = _stato.RibassoPercentuale;
+        _totaleDichiarato = _stato.Computo?.TotaleDichiarato;
+        _selezionate.IntersectWith(_voci.Select(v => v.Id));
+    }
+
+    private IEnumerable<RigaVoce> VociVisibili()
+    {
+        var t = _cerca.Trim();
+        return _voci.Where(v =>
+            (t.Length == 0 || v.Descrizione.Contains(t, StringComparison.OrdinalIgnoreCase)
+                           || (v.Tariffa?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false))
+            && (_categoria.Length == 0 || v.SuperCategoria == _categoria)
+            && (!_soloDaCompletare || v.Prezzo == 0));
+    }
+
+    private void Seleziona(Guid id, bool si)
+    {
+        if (si) _selezionate.Add(id); else _selezionate.Remove(id);
+    }
+
+    private void SelezionaTutte(IEnumerable<RigaVoce> voci) => _selezionate.UnionWith(voci.Select(v => v.Id));
+
+    private Task SalvaRibassoAsync() => EseguiAsync(
+        () => Preventivo.ImpostaRibassoAsync(CommessaId, _stato!.Versione, _ribasso),
+        $"Ribasso impostato al {Formato.Percento(_ribasso)}.");
+
+    private Task SalvaTotaleDichiaratoAsync() => EseguiAsync(
+        () => Preventivo.ImpostaTotaleDichiaratoAsync(CommessaId, _totaleDichiarato), "Totale dichiarato salvato.");
+
+    private async Task ImpostaNonSoggettaAsync(decimal percentuale)
+    {
+        var n = _selezionate.Count;
+        await EseguiAsync(() => Preventivo.ImpostaNonSoggettaAsync(CommessaId, _selezionate.ToList(), percentuale),
+            percentuale == 0 ? $"{n} voci ora soggette a ribasso." : $"{n} voci escluse dal ribasso.");
+        _selezionate.Clear();
+    }
+
+    private void NuovaVoce()
+    {
+        _voceInModifica = new DatiVoce();
+        _misure = [];
+    }
+
+    private async Task ModificaVoceAsync(RigaVoce v)
+    {
+        _voceInModifica = new DatiVoce
+        {
+            Id = v.Id, Versione = v.Versione, Tariffa = v.Tariffa, Descrizione = v.Descrizione, Unita = v.Unita,
+            Quantita = v.Quantita, Prezzo = v.Prezzo, PercentualeNonSoggetta = v.PercentualeNonSoggetta, Note = v.Note,
+        };
+        _misure = v.RigheMisura > 0 ? await Preventivo.RigheMisuraAsync(v.Id) : [];
+    }
+
+    private async Task SalvaVoceAsync()
+    {
+        var voce = _voceInModifica!;
+        if (await EseguiAsync(() => Preventivo.SalvaVoceAsync(CommessaId, voce), "Voce salvata."))
+            _voceInModifica = null;
+    }
+
+    private async Task ArchiviaVoceAsync()
+    {
+        var voce = _voceInModifica!;
+        if (await EseguiAsync(() => Preventivo.ArchiviaVoceAsync(CommessaId, voce.Id, voce.Versione),
+                "Voce tolta dal calcolo. Resta consultabile nello storico."))
+            _voceInModifica = null;
+    }
+
+    private async Task LeggiFileAsync(InputFileChangeEventArgs e)
+    {
+        AnnullaImportazione();
+        try
+        {
+            await using var flusso = e.File.OpenReadStream(DimensioneMassima);
+            using var ms = new MemoryStream();
+            await flusso.CopyToAsync(ms);
+            _contenuto = ms.ToArray();
+            ms.Position = 0;
+            _anteprima = ImportazioneComputoService.Anteprima(ms);
+            _nomeFile = e.File.Name;
+            await PreparaProposteAsync(_anteprima.Letto);
+        }
+        catch (Exception ex) when (ex is FormatException or IOException)
+        {
+            (_messaggio, _errore) = ($"Impossibile leggere «{e.File.Name}»: {ex.Message}", true);
+            AnnullaImportazione();
+        }
+    }
+
+    private async Task PreparaProposteAsync(Importazione.ComputoLetto letto)
+    {
+        _proposte = [];
+        var commessa = await Commesse.OttieniAsync(CommessaId);
+        if (commessa is null) return;
+        if (string.IsNullOrWhiteSpace(commessa.ComuneCantiere) && letto.Comune is { } comune)
+            _proposte.Add(new("Comune del cantiere", comune, (c, v) => c.ComuneCantiere = v));
+        if (string.IsNullOrWhiteSpace(commessa.ProvinciaCantiere) && letto.Provincia is { Length: 2 } prov)
+            _proposte.Add(new("Provincia", prov.ToUpperInvariant(), (c, v) => c.ProvinciaCantiere = v));
+    }
+
+    private void AnnullaImportazione()
+    {
+        (_anteprima, _contenuto, _nomeFile, _totaleDichiaratoImport, _proposte) = (null, null, null, null, []);
+    }
+
+    private async Task ConfermaImportazioneAsync()
+    {
+        _inCorso = true;
+        try
+        {
+            var esito = await Importazione.ConfermaXpweAsync(CommessaId, _contenuto!, _nomeFile!, _totaleDichiaratoImport);
+            var scelte = _proposte.Where(p => p.Usa).ToList();
+            if (scelte.Count > 0 && await Commesse.OttieniAsync(CommessaId) is { } commessa)
+            {
+                foreach (var p in scelte) p.Applica(commessa, p.Valore);
+                await Commesse.AggiornaAsync(commessa);
+            }
+            (_messaggio, _errore) = ($"Computo importato: {esito.Voci} voci, totale {Formato.Euro(esito.TotaleCalcolato)}. " +
+                                     "Backup eseguito prima dell'importazione; file originale archiviato nei documenti.", false);
+            AnnullaImportazione();
+            await AggiornaAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private async Task<bool> EseguiAsync(Func<Task> operazione, string esito)
+    {
+        try
+        {
+            await operazione();
+            (_messaggio, _errore) = (esito, false);
+            await AggiornaAsync();
+            return true;
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+            await AggiornaAsync();
+            return false;
+        }
+    }
+
+    private static string Accorcia(string testo) => testo.Length <= 180 ? testo : testo[..177] + "…";
+
+    private static string NumeroOVuoto(decimal? n) => n is null ? "" : Formato.Numero(n, n % 1 == 0 ? 0 : 3);
 }

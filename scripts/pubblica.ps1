@@ -27,4 +27,7 @@ $modifiche = (git status --porcelain)
     TestSuperati  = $true
 } | ConvertTo-Json | Set-Content -Path (Join-Path $Destinazione "rilascio.json") -Encoding UTF8
 
+# Script di installazione e aggiornamento accanto alla cartella del programma (avviabili con doppio clic).
+Copy-Item -Path "scripts\installa.*", "scripts\aggiorna.*" -Destination (Split-Path $Destinazione -Parent)
+
 Write-Host "Pacchetto $versione ($commit) pronto in $Destinazione"

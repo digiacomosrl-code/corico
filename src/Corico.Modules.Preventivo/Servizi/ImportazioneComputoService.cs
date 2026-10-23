@@ -29,13 +29,21 @@ public sealed class ImportazioneComputoService(
     BackupService backup)
 {
     /// <summary>Formati accettati, per il selettore dei file.</summary>
-    public const string EstensioniAccettate = ".xpwe,.XPWE,.xlsx,.XLSX";
+    public const string EstensioniAccettate = ".xpwe,.XPWE,.xlsx,.XLSX,.pdf,.PDF,.p7m,.P7M";
 
     public static bool FileExcel(string nomeFile) => Path.GetExtension(nomeFile).Equals(".xlsx", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Anteprima di un computo XPWE oppure Excel (tabellare o stampa PriMus), secondo l'estensione del file.</summary>
+    /// <summary>PDF del computo, anche firmato digitalmente («computo.pdf.p7m»).</summary>
+    public static bool FilePdf(string nomeFile) => Path.GetExtension(nomeFile).ToLowerInvariant() is ".pdf" or ".p7m";
+
+    /// <summary>Anteprima di un computo XPWE, Excel (tabellare o stampa PriMus) o PDF, secondo l'estensione del file.</summary>
     public static AnteprimaComputo Anteprima(Stream contenuto, string nomeFile)
     {
+        if (FilePdf(nomeFile))
+        {
+            var pdf = LettoreComputoPdf.Leggi(contenuto);
+            return Calcola(pdf.Letto) with { Origine = OrigineComputo.Pdf, Formato = pdf.Formato, TotaleDocumento = pdf.TotaleDocumento };
+        }
         if (!FileExcel(nomeFile)) return Anteprima(contenuto);
         var excel = LettoreComputoExcel.Leggi(contenuto);
         return Calcola(excel.Letto) with { Origine = OrigineComputo.Excel, Formato = excel.Formato, TotaleDocumento = excel.TotaleDocumento };
@@ -72,7 +80,9 @@ public sealed class ImportazioneComputoService(
         EsitoCaricamento doc;
         using (var ms = new MemoryStream(contenuto))
             doc = await documenti.CaricaAsync(ms, nomeFile,
-                FileExcel(nomeFile) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/xml",
+                FileExcel(nomeFile) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    : Path.GetExtension(nomeFile).Equals(".p7m", StringComparison.OrdinalIgnoreCase) ? "application/pkcs7-mime"
+                    : FilePdf(nomeFile) ? "application/pdf" : "application/xml",
                 commessaId, "Computo metrico", ct);
 
         var letto = anteprima.Letto;

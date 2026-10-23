@@ -30,7 +30,7 @@ public class LettoreXpweTests
         Assert.Equal("cad", letto.Elenco("11")!.Unita);
         Assert.Equal("cadauno", letto.Elenco("11")!.UnitaOriginale);
         Assert.Contains(letto.Segnalazioni, s => s.Testo.StartsWith("Unità di misura uniformate"));
-        Assert.Contains(letto.Segnalazioni, s => s.Gravita == GravitaSegnalazione.Attenzione && s.Testo.Contains("non sono collegate"));
+        Assert.Contains(letto.Segnalazioni, s => s.Gravita == GravitaSegnalazione.Attenzione && s.Testo.Contains("non hanno l'articolo di elenco prezzi"));
     }
 
     [Fact]

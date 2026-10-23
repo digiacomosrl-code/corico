@@ -17,6 +17,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <!-- PDFsharp resta alla 6.2.4, ultima versione con licenza MIT: dalla 6.5 la licenza è AGPL con controllo della chiave. -->
     <PackageReference Include="PDFsharp-MigraDoc" Version="[6.2.4]" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />

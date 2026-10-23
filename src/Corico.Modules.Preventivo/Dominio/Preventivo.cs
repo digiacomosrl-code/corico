@@ -21,6 +21,7 @@ public enum OrigineComputo
     Manuale = 0,
     Xpwe = 1,
     Excel = 2,
+    Pdf = 3,
 }
 
 /// <summary>

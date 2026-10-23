@@ -165,9 +165,11 @@ public static partial class LettoreXpwe
         var senzaElenco = letto.Voci.Where(v => letto.Elenco(v.IdElenco) is null).ToList();
         if (senzaElenco.Count > 0)
             s.Add(new(GravitaSegnalazione.Attenzione,
-                $"{senzaElenco.Count} voci di computo non sono collegate a una voce di elenco prezzi valida " +
+                $"Nel file {senzaElenco.Count} voci di computo non hanno l'articolo di elenco prezzi " +
                 $"(n. {string.Join(", ", senzaElenco.Take(30).Select(v => v.Ordine))}{(senzaElenco.Count > 30 ? "…" : "")}): " +
-                "verranno importate con prezzo zero e restano da completare."));
+                "nel file c'è solo la quantità, mancano tariffa, descrizione e prezzo. Non è un errore di lettura: " +
+                "in PriMus queste voci risultano scollegate dall'elenco (articolo cancellato o mai creato). " +
+                "Se le importi entrano con prezzo zero e restano da completare; in alternativa ricollegale in PriMus ed esporta di nuovo."));
 
         var normalizzate = letto.ElencoPrezzi
             .Where(e => e.UnitaOriginale is not null && e.Unita != e.UnitaOriginale)

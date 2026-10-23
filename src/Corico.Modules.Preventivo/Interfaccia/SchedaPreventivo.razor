@@ -95,14 +95,14 @@
         }
         else
         {
-            <p class="testo-secondario">Nessun computo. Importa un file XPWE (PriMus) o Excel oppure inserisci le voci manualmente.</p>
+            <p class="testo-secondario">Nessun computo. Importa un file XPWE (PriMus), Excel o PDF oppure inserisci le voci manualmente.</p>
         }
 
         @if (_stato.BloccoBudget is null)
         {
             <div class="riga-form">
                 <label class="pulsante">
-                    Importa computo (XPWE o Excel)…
+                    Importa computo (XPWE, Excel o PDF)…
                     <InputFile OnChange="LeggiFileAsync" accept="@ImportazioneComputoService.EstensioniAccettate" style="display:none" />
                 </label>
                 <button class="pulsante" @onclick="NuovaVoce">Nuova voce manuale</button>

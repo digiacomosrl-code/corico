@@ -137,8 +137,9 @@ public sealed class PreventivoModulo : ICoricoModulo
             if (offerte.FirstOrDefault(o => o.CommessaId == id) is { } o && (o.Scadute > 0 || o.InScadenza > 0))
                 parti.Add(string.Join(" e ", new[]
                 {
-                    o.Scadute > 0 ? $"{o.Scadute} offerte scelte sono scadute" : null,
-                    o.InScadenza > 0 ? $"{o.InScadenza} scadono entro {ConfrontoService.GiorniPreavviso} giorni" : null,
+                    o.Scadute > 0 ? (o.Scadute == 1 ? "1 offerta scelta è scaduta" : $"{o.Scadute} offerte scelte sono scadute") : null,
+                    o.InScadenza > 0 ? (o.Scadute > 0 ? $"{o.InScadenza} scadono" : o.InScadenza == 1 ? "1 offerta scelta scade" : $"{o.InScadenza} offerte scelte scadono")
+                        + $" entro {ConfrontoService.GiorniPreavviso} giorni" : null,
                 }.Where(x => x is not null)));
             if (parti.Count == 0) continue;
             avvisi.Add(new(Corico.Core.Servizi.GravitaAvviso.Attenzione, $"Commessa {c.Codice}: {string.Join("; ", parti)}.",

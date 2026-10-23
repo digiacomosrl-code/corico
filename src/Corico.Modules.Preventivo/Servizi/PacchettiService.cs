@@ -24,6 +24,10 @@ public sealed record RigaTabellone(
     public decimal PercentualeOrdinata { get; init; }
     public bool HaOrdini { get; init; }
 
+    /// <summary>Codici WBS delle voci del pacchetto (un pacchetto può toccare più lavorazioni) e voci ancora senza WBS.</summary>
+    public IReadOnlyList<string> Wbs { get; init; } = [];
+    public int VociSenzaWbs { get; init; }
+
     /// <summary>Costo attuale meno costo budget: positivo = costo in aumento.</summary>
     public decimal? Scostamento => Costo is null || CostoBudget is null ? null : Costo - CostoBudget;
 
@@ -109,6 +113,8 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
                 ImportoOrdinato = a?.ImportoOrdinato ?? 0,
                 PercentualeOrdinata = a?.PercentualeOrdinata ?? 0,
                 HaOrdini = a?.HaOrdini ?? false,
+                Wbs = CodiciDi(vociPacchetto),
+                VociSenzaWbs = vociPacchetto.Count(v => v.Wbs is null),
             });
         }
 
@@ -117,7 +123,7 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             .Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
         var libere = await db.VociComputo.AsNoTracking()
             .Where(v => v.ComputoId == computoAttivo && !v.Archiviata)
-            .Select(v => new VoceDiCalcolo(v.Id, v.Tariffa, v.Descrizione, v.Unita, v.Quantita, v.Prezzo, v.PercentualeNonSoggetta))
+            .Select(v => new VoceDiCalcolo(v.Id, v.Tariffa, v.Descrizione, v.Unita, v.Quantita, v.Prezzo, v.PercentualeNonSoggetta) { Wbs = v.CodiceWbs })
             .ToListAsync(ct);
         libere = libere.Where(v => !assegnate.Contains(v.Id)).ToList();
 
@@ -168,7 +174,7 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
         if (computo is null) return [];
         var voci = await db.VociComputo.AsNoTracking().Where(v => v.ComputoId == computo.Id && !v.Archiviata)
             .OrderBy(v => v.Ordine)
-            .Select(v => new VoceDiCalcolo(v.Id, v.Tariffa, v.Descrizione, v.Unita, v.Quantita, v.Prezzo, v.PercentualeNonSoggetta))
+            .Select(v => new VoceDiCalcolo(v.Id, v.Tariffa, v.Descrizione, v.Unita, v.Quantita, v.Prezzo, v.PercentualeNonSoggetta) { Wbs = v.CodiceWbs })
             .ToListAsync(ct);
         var set = assegnate.ToHashSet();
         return voci.Where(v => !set.Contains(v.Id)).ToList();
@@ -478,13 +484,17 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
         var ids = await db.PacchettiVoci.Where(v => v.CommessaId == commessaId).Select(v => v.VoceComputoId).ToListAsync(ct);
         var voci = await db.VociComputo.AsNoTracking().Where(v => ids.Contains(v.Id)).ToListAsync(ct);
         return voci.ToDictionary(v => v.Id, v => (new VoceDiCalcolo(v.Id, v.Tariffa, v.Descrizione, v.Unita, v.Quantita, v.Prezzo,
-            v.PercentualeNonSoggetta), v.Ordine, v.Archiviata));
+            v.PercentualeNonSoggetta) { Wbs = v.CodiceWbs }, v.Ordine, v.Archiviata));
     }
 
     internal static List<VoceDiCalcolo> VociDel(Pacchetto p, Dictionary<Guid, (VoceDiCalcolo Voce, int Ordine, bool Archiviata)> voci) =>
         p.Voci.Select(v => voci.GetValueOrDefault(v.VoceComputoId))
             .Where(v => v.Voce is not null && !v.Archiviata)
             .OrderBy(v => v.Ordine).Select(v => v.Voce).ToList();
+
+    /// <summary>Codici WBS distinti delle voci, in ordine naturale.</summary>
+    internal static IReadOnlyList<string> CodiciDi(IEnumerable<VoceDiCalcolo> voci) =>
+        voci.Select(v => v.Wbs).Where(w => w is not null).Select(w => w!).Distinct().Order(CodiciWbs.Ordine).ToList();
 
     private static string? Pulisci(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

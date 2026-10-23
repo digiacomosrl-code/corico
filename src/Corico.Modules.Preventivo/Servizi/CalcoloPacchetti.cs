@@ -5,7 +5,11 @@ namespace Corico.Modules.Preventivo.Servizi;
 
 /// <summary>Dati della voce del computo necessari al calcolo di un pacchetto.</summary>
 public sealed record VoceDiCalcolo(Guid Id, string? Tariffa, string Descrizione, string? Unita,
-    decimal Quantita, decimal Prezzo, decimal PercentualeNonSoggetta);
+    decimal Quantita, decimal Prezzo, decimal PercentualeNonSoggetta)
+{
+    /// <summary>Codice WBS della voce, se assegnato.</summary>
+    public string? Wbs { get; init; }
+}
 
 /// <summary>Ricavo e costo di una voce secondo un'offerta.</summary>
 public sealed record VoceOffertaCalcolata(

@@ -295,13 +295,13 @@ public static class EsportazionePdf
         ogg.AddText(o.Oggetto);
         sec.AddParagraph("Con la presente Vi ordiniamo quanto segue, alle condizioni indicate:").Format.SpaceAfter = Unit.FromPoint(4);
 
-        var tab = Tabella(sec, ("N.", 0.7, false), ("Codice", 2.1, false), ("Descrizione", 7.2, false), ("U.M.", 1.5, false),
+        var tab = Tabella(sec, ("N.", 0.7, false), ("WBS", 1.6, false), ("Codice", 2.0, false), ("Descrizione", 5.7, false), ("U.M.", 1.5, false),
             ("Quantità", 1.8, true), ("Prezzo", 2.1, true), ("Importo", 2.6, true));
         tab.Format.Font.Size = 8;
         foreach (var r in o.Righe.OrderBy(r => r.Ordine))
-            Riga(tab, r.Ordine.ToString(), r.Codice ?? "", Breve(r.Descrizione, 600), r.Unita ?? "", Formato.Numero(r.Quantita),
+            Riga(tab, r.Ordine.ToString(), r.Wbs ?? "", r.Codice ?? "", Breve(r.Descrizione, 600), r.Unita ?? "", Formato.Numero(r.Quantita),
                 Formato.Numero(r.Prezzo, r.Prezzo == Math.Round(r.Prezzo, 2) ? 2 : 4), Formato.Euro(r.Importo));
-        RigaTotale(tab, "", "", "Totale imponibile (IVA esclusa)", "", "", "", Formato.Euro(o.Totale));
+        RigaTotale(tab, "", "", "", "Totale imponibile (IVA esclusa)", "", "", "", Formato.Euro(o.Totale));
 
         Titoletto(sec, "Condizioni");
         var cond = Tabella(sec, [("", 4.5, false), ("", 13.5, false)], intestazioneColonne: false);

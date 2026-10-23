@@ -2,6 +2,7 @@
 @inject OrdiniService Ordini
 @inject FornitoriService Fornitori
 @inject PacchettiService Pacchetti
+@inject WbsService Wbs
 @inject ConflittiService Conflitti
 @inject SessioneUtente Sessione
 
@@ -83,7 +84,7 @@
         <table class="tabella">
             <thead>
                 <tr>
-                    <th>N.</th><th>Codice</th><th>Descrizione</th><th>Pacchetto</th><th>U.M.</th>
+                    <th>N.</th><th>WBS</th><th>Codice</th><th>Descrizione</th><th>Pacchetto</th><th>U.M.</th>
                     @if (bozza)
                     {
                         <th class="num">Da ordinare</th>
@@ -106,6 +107,7 @@
                         <td>@r.Ordine</td>
                         @if (bozza && libera)
                         {
+                            <td><input class="stretto" @bind="r.Wbs" placeholder="es. 2.3" title="Codice WBS a cui imputare la riga" /></td>
                             <td><input class="stretto" @bind="r.Codice" /></td>
                             <td><input class="largo" @bind="r.Descrizione" placeholder="Es. Trasporto" /></td>
                             <td>
@@ -121,6 +123,7 @@
                         }
                         else
                         {
+                            <td class="codice" title="@TitoloWbs(r.Wbs)">@r.Wbs</td>
                             <td class="codice">@r.Codice</td>
                             <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
                             <td class="descrizione-breve" title="@info?.Pacchetti">@info?.Pacchetti</td>
@@ -154,7 +157,7 @@
                     </tr>
                 }
                 <tr class="totale">
-                    <td colspan="@(bozza ? 8 : 7)">Totale imponibile (IVA esclusa)</td>
+                    <td colspan="@(bozza ? 9 : 8)">Totale imponibile (IVA esclusa)</td>
                     <td class="num">@Formato.Euro(o.Righe.Sum(r => Importi.Arrotonda(r.Quantita * r.Prezzo)))</td>
                     <td colspan="@(bozza ? 2 : 1)"></td>
                 </tr>
@@ -242,6 +245,10 @@
     private IReadOnlyList<DatiFornitore> _fornitori = [];
     private IReadOnlyList<VoceScelta> _vociFornitori = [];
     private IReadOnlyList<(Guid Id, int Ordine, string Descrizione)> _pacchetti = [];
+    private IReadOnlyDictionary<string, string> _descrizioniWbs = new Dictionary<string, string>();
+
+    private string? TitoloWbs(string? wbs) => wbs is null ? null
+        : string.Join("\n", wbs.Split(", ").Select(c => _descrizioniWbs.TryGetValue(c, out var d) ? $"{c} {d}" : c));
     private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
     private DateOnly? _inviatoIl, _confermatoIl;
     private Guid? _documentoId;
@@ -253,6 +260,7 @@
         _fornitori = await Fornitori.ElencoAsync();
         _vociFornitori = VoceScelta.Da(_fornitori);
         _pacchetti = (await Pacchetti.AssegnazioniAsync(CommessaId)).Pacchetti;
+        _descrizioniWbs = await Wbs.DescrizioniAsync(CommessaId);
         _documenti = await Documenti.ElencoAsync(CommessaId);
         await CaricaAsync();
     }

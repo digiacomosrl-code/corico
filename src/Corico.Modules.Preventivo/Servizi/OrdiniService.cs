@@ -159,6 +159,7 @@ public sealed class OrdiniService(
             Pagamento = offerta?.Pagamento,
         };
 
+        var wbsDi = await WbsDelleRigheAsync(db, righe, ct);
         foreach (var g in righe.GroupBy(r => (r.Categoria, r.Chiave, r.Prezzo)).OrderBy(g => g.Key.Categoria).ThenBy(g => g.First().Codice))
         {
             var primo = g.First();
@@ -170,6 +171,7 @@ public sealed class OrdiniService(
                 OrdineId = ordine.Id, CommessaId = commessaId, Ordine = ordine.Righe.Count + 1,
                 Codice = primo.Codice, Descrizione = primo.Descrizione.Trim(), Unita = primo.Unita, Categoria = primo.Categoria,
                 Quantita = Importi.Arrotonda(quantita, 4), Prezzo = Importi.Arrotonda(prezzo, 4), PrezzoPianificato = Importi.Arrotonda(prezzo, 4),
+                Wbs = UnisciWbs(g.SelectMany(wbsDi)),
             };
             riga.Importo = Importi.Arrotonda(riga.Quantita * riga.Prezzo);
             foreach (var r in g)
@@ -187,6 +189,32 @@ public sealed class OrdiniService(
             $"Bozza d'ordine{(ordine.Fornitore.Length > 0 ? " a " + ordine.Fornitore : "")}: {ordine.Righe.Count} righe, {Formato.Euro(ordine.Totale)}");
         await db.SaveChangesAsync(ct);
         return ordine.Id;
+    }
+
+    /// <summary>
+    /// WBS di ogni riga della Lista della Spesa: quella della sua voce; per righe senza voce (voci a corpo, righe d'offerta
+    /// non abbinate) quelle delle voci del pacchetto. La riga d'ordine non si divide per WBS: ne riporta l'elenco.
+    /// </summary>
+    private static async Task<Func<RigaSpesa, IEnumerable<string>>> WbsDelleRigheAsync(PreventivoDbContext db, List<RigaSpesa> righe, CancellationToken ct)
+    {
+        var pacchetti = righe.Select(r => r.PacchettoId).Distinct().ToList();
+        var vociPacchetto = await db.PacchettiVoci.AsNoTracking().Where(v => pacchetti.Contains(v.PacchettoId))
+            .Select(v => new { v.PacchettoId, v.VoceComputoId }).ToListAsync(ct);
+        var ids = vociPacchetto.Select(v => v.VoceComputoId).Concat(righe.Where(r => r.VoceId is not null).Select(r => r.VoceId!.Value)).Distinct().ToList();
+        var wbs = await db.VociComputo.AsNoTracking().Where(v => ids.Contains(v.Id) && v.CodiceWbs != null && !v.Archiviata)
+            .ToDictionaryAsync(v => v.Id, v => v.CodiceWbs!, ct);
+        var perPacchetto = vociPacchetto.GroupBy(v => v.PacchettoId)
+            .ToDictionary(g => g.Key, g => g.Select(v => wbs.GetValueOrDefault(v.VoceComputoId)).Where(c => c is not null).Select(c => c!).Distinct().ToList());
+        return r => r.VoceId is { } voce
+            ? (wbs.TryGetValue(voce, out var c) ? [c] : [])
+            : perPacchetto.GetValueOrDefault(r.PacchettoId) ?? [];
+    }
+
+    /// <summary>Codici WBS distinti in ordine naturale, separati da virgola («2.1, 3.1.4»); null se nessuno.</summary>
+    internal static string? UnisciWbs(IEnumerable<string> codici)
+    {
+        var testo = string.Join(", ", codici.Distinct(StringComparer.OrdinalIgnoreCase).Order(CodiciWbs.Ordine));
+        return testo.Length == 0 ? null : testo.Length <= 200 ? testo : testo[..199] + "…";
     }
 
     // ---- Modifica della bozza ----
@@ -234,6 +262,7 @@ public sealed class OrdiniService(
             r.NotaScostamento = Pulisci(n.NotaScostamento);
             if (r.Origini.Count == 0)
             {
+                r.Wbs = UnisciWbs((n.Wbs ?? "").Split(',').Select(CodiciWbs.Normalizza).Where(c => c is not null)!);
                 r.Codice = Pulisci(n.Codice);
                 r.Unita = Pulisci(n.Unita);
                 r.PacchettoId = n.PacchettoId ?? predefinito;
@@ -246,6 +275,7 @@ public sealed class OrdiniService(
                 OrdineId = o.Id, CommessaId = commessaId, Ordine = n.Ordine, Codice = Pulisci(n.Codice),
                 Descrizione = (n.Descrizione ?? "").Trim(), Unita = Pulisci(n.Unita), Quantita = n.Quantita, Prezzo = n.Prezzo,
                 NotaScostamento = Pulisci(n.NotaScostamento), PacchettoId = n.PacchettoId ?? predefinito,
+                Wbs = UnisciWbs((n.Wbs ?? "").Split(',').Select(CodiciWbs.Normalizza).Where(c => c is not null)!),
             };
             o.Righe.Add(r);
             db.RigheOrdine.Add(r);

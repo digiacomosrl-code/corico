@@ -49,6 +49,7 @@ public static class LettoreComputoExcel
         var cQuantita = C("QUANTITÀ", "QUANTITA'", "QUANTITA");
         var cQuantitaTot = C("QUANTITÀ TOT.");
         var cImporto = C("IMPORTO");
+        var cWbs = C("WBS", "COD. WBS", "CODICE WBS");
         if (cCodice == 0 || cDescrizione == 0 || cPrezzo == 0 || cQuantita == 0)
             throw new FormatException("Il computo tabellare deve avere le colonne Codice, Descrizione, Prezzo e Quantità.");
 
@@ -105,7 +106,7 @@ public static class LettoreComputoExcel
 
             var ordine = letto.Voci.Count + 1;
             if (cNumero > 0 && f.Numero(r, cNumero) is { } n && n == Math.Truncate(n)) ordine = (int)n;
-            ultima = new VoceComputoLetta(ordine, $"R{r}", ep.Id, quantita.Value, idCap, idSc, idPar, null, []);
+            ultima = new VoceComputoLetta(ordine, $"R{r}", ep.Id, quantita.Value, idCap, idSc, idPar, cWbs > 0 ? f.Testo(r, cWbs) : null, []);
             letto.Voci.Add(ultima);
 
             if (cImporto > 0 && f.Numero(r, cImporto) is { } importo)

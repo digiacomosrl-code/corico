@@ -15,10 +15,10 @@ public static class EsportazioneExcel
     {
         using var wb = new XLWorkbook();
         var ws = wb.AddWorksheet("Computo");
-        var riga = Intestazione(ws, intestazione, "Computo metrico con ricavi netti", 11);
+        var riga = Intestazione(ws, intestazione, "Computo metrico con ricavi netti", 12);
 
         var pacchetti = f.Pacchetti.ToDictionary(p => p.Id, p => p.Descrizione);
-        string[] titoli = ["N.", "Tariffa", "Descrizione", "U.M.", "Quantità", "Prezzo", "Importo lordo",
+        string[] titoli = ["N.", "WBS", "Tariffa", "Descrizione", "U.M.", "Quantità", "Prezzo", "Importo lordo",
             "% non soggetta", "Ricavo netto", "Pacchetto", "Q. pianificazione"];
         var primaRigaDati = Titoli(ws, riga, titoli);
         riga = primaRigaDati;
@@ -26,30 +26,31 @@ public static class EsportazioneExcel
         foreach (var v in f.Voci)
         {
             ws.Cell(riga, 1).Value = ++n;
-            ws.Cell(riga, 2).Value = v.Tariffa;
-            ws.Cell(riga, 3).Value = v.Descrizione;
-            ws.Cell(riga, 4).Value = v.Unita;
-            ws.Cell(riga, 5).Value = v.Quantita;
-            ws.Cell(riga, 6).Value = v.Prezzo;
-            ws.Cell(riga, 7).FormulaA1 = $"ROUND(E{riga}*F{riga},2)";
-            ws.Cell(riga, 8).Value = v.PercentualeNonSoggetta;
-            ws.Cell(riga, 9).Value = v.RicavoNetto;
-            ws.Cell(riga, 10).Value = v.PacchettoId is { } id ? pacchetti.GetValueOrDefault(id) : "";
-            if (v.QuantitaPianificazione is { } qp) ws.Cell(riga, 11).Value = qp;
+            ws.Cell(riga, 2).Value = v.Wbs;
+            ws.Cell(riga, 3).Value = v.Tariffa;
+            ws.Cell(riga, 4).Value = v.Descrizione;
+            ws.Cell(riga, 5).Value = v.Unita;
+            ws.Cell(riga, 6).Value = v.Quantita;
+            ws.Cell(riga, 7).Value = v.Prezzo;
+            ws.Cell(riga, 8).FormulaA1 = $"ROUND(F{riga}*G{riga},2)";
+            ws.Cell(riga, 9).Value = v.PercentualeNonSoggetta;
+            ws.Cell(riga, 10).Value = v.RicavoNetto;
+            ws.Cell(riga, 11).Value = v.PacchettoId is { } id ? pacchetti.GetValueOrDefault(id) : "";
+            if (v.QuantitaPianificazione is { } qp) ws.Cell(riga, 12).Value = qp;
             riga++;
         }
-        ws.Cell(riga, 3).Value = "Totale";
-        ws.Cell(riga, 7).FormulaA1 = $"SUM(G{primaRigaDati}:G{riga - 1})";
-        ws.Cell(riga, 9).FormulaA1 = $"SUM(I{primaRigaDati}:I{riga - 1})";
+        ws.Cell(riga, 4).Value = "Totale";
+        ws.Cell(riga, 8).FormulaA1 = $"SUM(H{primaRigaDati}:H{riga - 1})";
+        ws.Cell(riga, 10).FormulaA1 = $"SUM(J{primaRigaDati}:J{riga - 1})";
         StileTotale(ws.Range(riga, 1, riga, titoli.Length));
         StileCorpo(ws.Range(primaRigaDati, 1, riga - 1, titoli.Length));
 
-        ws.Range(primaRigaDati, 5, riga, 5).Style.NumberFormat.Format = FormatoNumero;
-        ws.Range(primaRigaDati, 11, riga, 11).Style.NumberFormat.Format = FormatoNumero;
-        foreach (var c in new[] { 6, 7, 9 }) ws.Range(primaRigaDati, c, riga, c).Style.NumberFormat.Format = FormatoEuro;
-        ws.Range(primaRigaDati, 8, riga, 8).Style.NumberFormat.Format = FormatoPercento;
-        Larghezze(ws, 5, 14, 60, 7, 12, 12, 15, 10, 15, 30, 12);
-        ws.Column(3).Style.Alignment.WrapText = true;
+        ws.Range(primaRigaDati, 6, riga, 6).Style.NumberFormat.Format = FormatoNumero;
+        ws.Range(primaRigaDati, 12, riga, 12).Style.NumberFormat.Format = FormatoNumero;
+        foreach (var c in new[] { 7, 8, 10 }) ws.Range(primaRigaDati, c, riga, c).Style.NumberFormat.Format = FormatoEuro;
+        ws.Range(primaRigaDati, 9, riga, 9).Style.NumberFormat.Format = FormatoPercento;
+        Larghezze(ws, 5, 9, 14, 60, 7, 12, 12, 15, 10, 15, 30, 12);
+        ws.Column(4).Style.Alignment.WrapText = true;
         ws.SheetView.FreezeRows(primaRigaDati - 1);
         Pagina(ws, orizzontale: true, primaRigaDati - 1);
         return Salva(wb);
@@ -160,7 +161,7 @@ public static class EsportazioneExcel
         using var wb = new XLWorkbook();
 
         var ws = wb.AddWorksheet("Per categoria");
-        string[] titoli = ["Categoria", "Codice", "Descrizione", "Fornitore", "U.M.", "Quantità prevista", "Prezzo", "Importo", "Utilizzi",
+        string[] titoli = ["Categoria", "Codice_Risorsa", "Descrizione_Risorsa", "Fornitore", "U.M.", "Quantità prevista", "Prezzo", "Importo", "Utilizzi",
             "Quantità già ordinata", "Da ordinare", "N. ordini"];
         var riga = Intestazione(ws, intestazione, "Lista della Spesa", titoli.Length);
         riga = Titoli(ws, riga, titoli);
@@ -203,7 +204,7 @@ public static class EsportazioneExcel
         Pagina(ws, orizzontale: true, primo - 1);
 
         var wv = wb.AddWorksheet("Per voce");
-        string[] colonne = ["Pacchetto", "Fornitore", "Tariffa", "Voce", "Categoria", "Codice", "Descrizione", "U.M.", "Quantità prevista", "Prezzo", "Importo", "Origine", "Fonte",
+        string[] colonne = ["Pacchetto", "Fornitore", "Tariffa", "Voce", "Categoria", "Codice_Risorsa", "Descrizione_Risorsa", "U.M.", "Quantità prevista", "Prezzo", "Importo", "Origine", "Fonte",
             "Quantità già ordinata", "Da ordinare", "Ordini"];
         var rv = Titoli(wv, 1, colonne);
         var primaV = rv;

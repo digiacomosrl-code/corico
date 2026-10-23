@@ -1,6 +1,7 @@
 @* Scheda "Pacchetti" della commessa (rilascio 1B): tabellone costi/ricavi come il foglio HOME, dettaglio e offerte. *@
 @inject ConflittiService Conflitti
 @inject PacchettiService Pacchetti
+@inject WbsService Wbs
 @inject ImportazionePianificazioneService ImportazionePianificazione
 
 @if (!string.IsNullOrEmpty(_messaggio))
@@ -143,7 +144,7 @@
             <table class="tabella">
                 <thead>
                     <tr>
-                        <th>Codice</th><th>Attività</th><th>ODA</th><th>Fornitore</th><th>Stato</th>
+                        <th title="WBS delle voci del pacchetto">WBS</th><th>Codice</th><th>Attività</th><th>ODA</th><th>Fornitore</th><th>Stato</th>
                         <th class="num">Ricavo netto</th>
                         @if (ConBudget) { <th class="num" title="@_tabellone.Budget">Costo budget</th> }
                         <th class="num" title="Offerte scelte e ordini emessi">@(ConBudget ? "Costo attuale" : "Costo")</th>
@@ -156,6 +157,17 @@
                     @foreach (var r in _tabellone.Righe)
                     {
                         <tr class="cliccabile" @onclick="() => _pacchettoAperto = r.Id">
+                            <td class="codice nowrap" title="@TitoloWbs(r)">
+                                @if (r.Wbs.Count == 0)
+                                {
+                                    <span class="testo-secondario">—</span>
+                                }
+                                else
+                                {
+                                    @string.Join(", ", r.Wbs.Take(2))
+                                    @if (r.Wbs.Count > 2) { <span class="testo-secondario"> +@(r.Wbs.Count - 2)</span> }
+                                }
+                            </td>
                             <td class="codice">@r.Codice</td>
                             <td>
                                 @r.Descrizione
@@ -203,7 +215,7 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="5">Totale pacchetti con costo (@(_tabellone.Righe.Count - _tabellone.PacchettiSenzaCosto) su @_tabellone.Righe.Count)</td>
+                        <td colspan="6">Totale pacchetti con costo (@(_tabellone.Righe.Count - _tabellone.PacchettiSenzaCosto) su @_tabellone.Righe.Count)</td>
                         <td class="num">@Formato.Euro(_tabellone.RicavoConCosto)</td>
                         @if (ConBudget) { <td class="num">@Formato.Euro(_tabellone.CostoBudget)</td> }
                         <td class="num">@Formato.Euro(_tabellone.CostoPacchetti)</td>
@@ -252,7 +264,21 @@
 
     protected override Task OnParametersSetAsync() => AggiornaAsync();
 
-    private async Task AggiornaAsync() => _tabellone = await Pacchetti.TabelloneAsync(CommessaId);
+    private IReadOnlyDictionary<string, string> _descrizioniWbs = new Dictionary<string, string>();
+
+    private async Task AggiornaAsync()
+    {
+        _tabellone = await Pacchetti.TabelloneAsync(CommessaId);
+        _descrizioniWbs = await Wbs.DescrizioniAsync(CommessaId);
+    }
+
+    /// <summary>Elenco completo delle WBS del pacchetto, con descrizione, per il suggerimento sulla cella.</summary>
+    private string TitoloWbs(RigaTabellone r)
+    {
+        var righe = r.Wbs.Select(c => _descrizioniWbs.TryGetValue(c, out var d) ? $"{c} {d}" : c).ToList();
+        if (r.VociSenzaWbs > 0) righe.Add($"{r.VociSenzaWbs} voci senza WBS");
+        return string.Join("\n", righe);
+    }
 
     private async Task ChiudiDettaglioAsync()
     {

@@ -53,6 +53,8 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<RichiesteService>();
         servizi.AddSingleton<ConfrontoService>();
         servizi.AddSingleton<AggiornamentoPrezziService>();
+        servizi.AddSingleton<IPropostaWbs, PropostaWbsARegole>();
+        servizi.AddSingleton<WbsService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)

@@ -60,7 +60,13 @@
     private List<VoceScelta> Risultati()
     {
         var parole = RicercaTesto.Parole(_testo);
-        return Voci.Where(v => RicercaTesto.Corrisponde(v.Testo + " " + v.Dettaglio, parole)).ToList();
+        var scritto = _testo.Trim();
+        // Chi scrive un codice esatto (es. una WBS «2.3») lo trova per primo, poi le voci che iniziano con quanto scritto.
+        return Voci.Where(v => RicercaTesto.Corrisponde(v.Testo + " " + v.Dettaglio, parole))
+            .OrderBy(v => scritto.Length == 0 ? 2
+                : string.Equals(v.Valore, scritto, StringComparison.OrdinalIgnoreCase) ? 0
+                : v.Testo.StartsWith(scritto, StringComparison.OrdinalIgnoreCase) ? 1 : 2)
+            .ToList();
     }
 
     private void Apri() => (_aperta, _digitato, _testo, _evidenziata) = (true, false, "", 0);

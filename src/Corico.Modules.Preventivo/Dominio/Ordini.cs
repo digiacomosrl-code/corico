@@ -81,6 +81,9 @@ public sealed class RigaOrdine : EntitaBase, IImmutabile
     public decimal Prezzo { get; set; }
     public decimal Importo { get; set; }
 
+    /// <summary>Codici WBS delle voci da cui proviene la riga (es. «2.1, 3.1.4»), copiati alla preparazione; restano com'erano all'emissione.</summary>
+    public string? Wbs { get; set; }
+
     /// <summary>Categoria della risorsa nella Lista della Spesa; null per le righe libere (trasporto, imballo…).</summary>
     public CategoriaRisorsa? Categoria { get; set; }
 

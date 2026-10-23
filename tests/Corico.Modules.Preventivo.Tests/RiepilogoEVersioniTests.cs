@@ -148,8 +148,8 @@ public class RiepilogoEVersioniTests
         {
             var ws = wb.Worksheet("Computo");
             var totale = ws.CellsUsed().Single(c => c.GetString() == "Totale").WorksheetRow();
-            Assert.Equal(8_800m, (decimal)totale.Cell(7).Value.GetNumber());
-            Assert.Equal(7_040m, (decimal)totale.Cell(9).Value.GetNumber());
+            Assert.Equal(8_800m, (decimal)totale.Cell(8).Value.GetNumber());
+            Assert.Equal(7_040m, (decimal)totale.Cell(10).Value.GetNumber());
         }
 
         var riepilogo = (await e.RiepilogoExcelAsync(id, null))!;

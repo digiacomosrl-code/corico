@@ -16,7 +16,7 @@ public sealed class AmbienteDiProva : IAsyncDisposable
     public FakeTimeProvider Orologio { get; } = new(new DateTimeOffset(2026, 10, 21, 9, 0, 0, TimeSpan.Zero));
     public ServiceProvider Servizi { get; }
 
-    private AmbienteDiProva(IEnumerable<ICoricoModulo> moduli)
+    private AmbienteDiProva(IEnumerable<ICoricoModulo> moduli, Action<IServiceCollection>? configura = null)
     {
         Percorsi = new PercorsiDati(Path.Combine(Path.GetTempPath(), "corico-test-" + Guid.NewGuid().ToString("N")));
         Percorsi.CreaCartelle();
@@ -27,12 +27,16 @@ public sealed class AmbienteDiProva : IAsyncDisposable
         servizi.AddOptions<CoricoOpzioni>();
         servizi.AggiungiCorico(Percorsi, moduli);
         servizi.AddSingleton<TimeProvider>(Orologio);
+        configura?.Invoke(servizi);
         Servizi = servizi.BuildServiceProvider();
     }
 
-    public static async Task<AmbienteDiProva> CreaAsync(params ICoricoModulo[] moduli)
+    public static Task<AmbienteDiProva> CreaAsync(params ICoricoModulo[] moduli) => CreaAsync(null, moduli);
+
+    /// <summary>Con <paramref name="configura"/> si sostituiscono servizi esterni (es. il collegamento all'AI) con versioni simulate.</summary>
+    public static async Task<AmbienteDiProva> CreaAsync(Action<IServiceCollection>? configura, params ICoricoModulo[] moduli)
     {
-        var ambiente = new AmbienteDiProva(moduli);
+        var ambiente = new AmbienteDiProva(moduli, configura);
         await ambiente.Servizi.GetRequiredService<IMigrazioniDatabase>().ApplicaAsync();
         return ambiente;
     }

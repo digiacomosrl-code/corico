@@ -1,3 +1,4 @@
+using Corico.Core.Ai;
 using Corico.Core.Backup;
 using Corico.Core.Configurazione;
 using Corico.Core.Dati;
@@ -41,6 +42,10 @@ public static class RegistrazioneServizi
         servizi.AddSingleton<ImpostazioniService>();
         servizi.AddSingleton<BackupService>();
         servizi.AddSingleton<AvvisiService>();
+        servizi.AddSingleton<IArchivioChiaveAi, ArchivioChiaveDpapi>();
+        servizi.AddSingleton<IClienteAi, ClienteAnthropic>();
+        servizi.AddSingleton<ServizioAi>();
+        servizi.AddSingleton<IServizioAi>(sp => sp.GetRequiredService<ServizioAi>());
         servizi.AddHostedService<BackupAutomaticoService>();
 
         foreach (var modulo in attivi)

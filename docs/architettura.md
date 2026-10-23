@@ -34,6 +34,19 @@ Riferimento: prompt strategico v2.1, sezioni 3, 4, 6, 9, 11, 18.
 - Gli allegati delle mail diventano documenti del Core nella stessa commessa (`DOC_AllegatiMail`).
 - Nessun servizio esterno: l'AI esterna arriva con il rilascio 3B.
 
+## Accesso all'AI esterna (Core/Ai)
+
+- Unico punto verso il fornitore AI: `IServizioAi` (`Corico.Core.Ai`). I moduli chiamano `PreparaAsync` (nessuna chiamata
+  esterna: testo da inviare, modello, costo massimo stimato, motivo se non consentito), mostrano l'anteprima all'utente e,
+  dopo la conferma, `InviaAsync`. Con uno schema JSON la risposta è vincolata allo schema (output strutturato).
+- Fornitore: Anthropic (`ClienteAnthropic`, SDK ufficiale, streaming, fallback lato server se il modello declina);
+  sostituibile implementando `IClienteAi`. Modello predefinito `claude-opus-5-5`, scelto dall'amministratore.
+- Controlli in `ServizioAi`: interruttore generale, chiave presente, utente non di consultazione, tetto di spesa mensile
+  in euro (il costo massimo delle richieste in corso è impegnato sul tetto). Ogni invio, anche non riuscito, va in
+  `CORE_RichiesteAi` con utente, funzione, commessa, testo inviato, token e costo.
+- Chiave d'accesso cifrata con DPAPI (ambito macchina) in `Config\ai-chiave.bin`, mai nel database né nel codice.
+- Configurazione e registro nella pagina «Intelligenza artificiale» (solo amministratore).
+
 ## Regole trasversali
 
 | Regola | Implementazione |

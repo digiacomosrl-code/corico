@@ -298,3 +298,4 @@ textarea.descrizione-riga { width: 100%; min-width: 28rem; }
 .altezza-limitata { max-height: 24rem; overflow-y: auto; }
 .tabella tr.gruppo-wbs td { font-weight: 600; }
 .filtro-wbs { min-width: 16rem; }
+.testo-inviato { white-space: pre-wrap; max-height: 24rem; overflow: auto; font-size: .85rem; background: var(--grigio-sfondo); padding: .5rem; margin: 0; }

@@ -401,6 +401,68 @@ namespace Corico.Core.Dati.Migrazioni
                     b.ToTable("CORE_RegistroBackup", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Core.Dominio.RichiestaAiRegistrata", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CaratteriInviati")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Contenuto")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Costo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataOra")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DurataSecondi")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Esito")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Funzione")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Messaggio")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Modello")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TokenIngresso")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TokenUscita")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Utente")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommessaId");
+
+                    b.HasIndex("DataOra");
+
+                    b.ToTable("CORE_RichiesteAi", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Core.Dominio.VoceStorico", b =>
                 {
                     b.Property<long>("Id")

@@ -3,6 +3,7 @@ using Corico.Core.Dominio;
 using Corico.Core.Utenti;
 using Corico.Modules.Preventivo.Dominio;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Corico.Modules.Preventivo.Dati;
 
@@ -35,38 +36,138 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<CodiceRisorsa> CodiciRisorse => Set<CodiceRisorsa>();
     public DbSet<OrdineAcquisto> Ordini => Set<OrdineAcquisto>();
     public DbSet<RigaOrdine> RigheOrdine => Set<RigaOrdine>();
+    public DbSet<RigaOrdineOrigine> RigheOrdineOrigini => Set<RigaOrdineOrigine>();
 
     protected override bool PossiedeTabelleCore => false;
 
+    /// <summary>
+    /// Vero solo durante l'adozione di una perizia di variante (rilascio 2C): consente di cambiare i prezzi contrattuali
+    /// anche dopo l'approvazione di un budget.
+    /// </summary>
+    public bool AdozionePerizia { get; set; }
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        ProteggiVersioni();
+        Proteggi();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        ProteggiVersioni();
+        Proteggi();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    /// <summary>Le versioni ufficiali sono immutabili: si possono solo aggiungere.</summary>
+    private void Proteggi()
+    {
+        ProteggiVersioni();
+        ProteggiOrdini();
+        ProteggiPrezziContrattuali();
+    }
+
+    private static readonly string[] CampiTecniciModifica =
+        [nameof(EntitaBase.Versione), nameof(EntitaBase.ModificatoIl), nameof(EntitaBase.ModificatoDa)];
+
+    private static bool SoloCampi(EntityEntry e, IEnumerable<string> ammessi) =>
+        e.Properties.Where(p => p.IsModified && !Equals(p.OriginalValue, p.CurrentValue))
+            .All(p => ammessi.Contains(p.Metadata.Name) || CampiTecniciModifica.Contains(p.Metadata.Name));
+
+    /// <summary>
+    /// Le versioni ufficiali e i budget sono immutabili: si possono solo aggiungere. Di un budget in approvazione
+    /// cambia soltanto l'esito (approvato o respinto), e solo per mano dell'amministratore.
+    /// Le versioni storiche senza budget le pubblica solo l'amministratore.
+    /// </summary>
     private void ProteggiVersioni()
     {
-        if (ChangeTracker.Entries<VersionePreventivo>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
-            throw new OperazioneNonValidaException("Le versioni ufficiali del preventivo non si possono modificare né eliminare.");
+        var amministratore = UtenteCollegato is null || UtenteCollegato.Ruolo == RuoloUtente.Amministratore;
+        string[] esito = [nameof(VersionePreventivo.StatoBudget), nameof(VersionePreventivo.EsitoDa), nameof(VersionePreventivo.EsitoIl),
+            nameof(VersionePreventivo.MotivoRifiuto)];
+        foreach (var e in ChangeTracker.Entries<VersionePreventivo>())
+        {
+            switch (e.State)
+            {
+                case EntityState.Added when !e.Entity.EBudget && !amministratore:
+                    throw new OperazioneNonValidaException("Questa operazione è riservata all'amministratore.");
+                case EntityState.Added when e.Entity.EBudget && e.Entity.StatoBudget != StatoBudget.InApprovazione:
+                    throw new OperazioneNonValidaException("Un nuovo budget nasce sempre in approvazione.");
+                case EntityState.Deleted:
+                    throw new OperazioneNonValidaException("Le versioni ufficiali del preventivo non si possono modificare né eliminare.");
+                case EntityState.Modified:
+                    var statoLetto = (StatoBudget?)e.Property(nameof(VersionePreventivo.StatoBudget)).OriginalValue;
+                    if (statoLetto != StatoBudget.InApprovazione || !SoloCampi(e, esito))
+                        throw new OperazioneNonValidaException(statoLetto == StatoBudget.Approvato
+                            ? "Il budget approvato non si può più modificare."
+                            : "Le versioni ufficiali del preventivo non si possono modificare né eliminare.");
+                    if (!amministratore)
+                        throw new OperazioneNonValidaException("L'approvazione del budget è riservata all'amministratore.");
+                    break;
+            }
+        }
+    }
 
-        // Ordini di acquisto: dopo l'emissione cambiano solo lo stato e i dati dell'annullamento.
-        string[] ammessi = [nameof(OrdineAcquisto.Stato), nameof(OrdineAcquisto.MotivoAnnullamento), nameof(OrdineAcquisto.AnnullatoIl),
-            nameof(EntitaBase.Versione), nameof(EntitaBase.ModificatoIl), nameof(EntitaBase.ModificatoDa)];
+    /// <summary>
+    /// Ordini di acquisto: in bozza si modificano e si eliminano liberamente; dopo l'emissione cambiano solo lo stato,
+    /// i dati dell'annullamento e le date facoltative di invio e conferma.
+    /// </summary>
+    private void ProteggiOrdini()
+    {
+        string[] dopoEmissione = [nameof(OrdineAcquisto.Stato), nameof(OrdineAcquisto.MotivoAnnullamento), nameof(OrdineAcquisto.AnnullatoIl),
+            nameof(OrdineAcquisto.InviatoIl), nameof(OrdineAcquisto.ConfermatoIl), nameof(OrdineAcquisto.ConfermaDocumentoId)];
         foreach (var e in ChangeTracker.Entries<OrdineAcquisto>())
         {
-            if (e.State == EntityState.Deleted
-                || (e.State == EntityState.Modified && e.Properties.Any(p => p.IsModified && !ammessi.Contains(p.Metadata.Name))))
+            var statoLetto = (StatoOrdine)e.Property(nameof(OrdineAcquisto.Stato)).OriginalValue!;
+            if (e.State is EntityState.Modified or EntityState.Deleted && statoLetto == StatoOrdine.Bozza) continue;
+            if (e.State == EntityState.Deleted || (e.State == EntityState.Modified && !SoloCampi(e, dopoEmissione)))
                 throw new OperazioneNonValidaException("Un ordine emesso non si modifica: va annullato ed emesso di nuovo.");
         }
-        if (ChangeTracker.Entries<RigaOrdine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+
+        var righe = ChangeTracker.Entries<RigaOrdine>().Where(e => e.State is EntityState.Modified or EntityState.Deleted)
+            .Select(e => e.Entity.OrdineId)
+            .Concat(ChangeTracker.Entries<RigaOrdineOrigine>().Where(e => e.State is EntityState.Modified or EntityState.Deleted)
+                .Select(e => e.Entity.OrdineId))
+            .Distinct().ToList();
+        if (righe.Count == 0) return;
+        // Lo stato letto dal database: una bozza appena emessa nello stesso salvataggio non è più modificabile.
+        var bozze = Ordini.AsNoTracking().Where(o => righe.Contains(o.Id) && o.Stato == StatoOrdine.Bozza).Select(o => o.Id).ToHashSet();
+        if (righe.Any(id => !bozze.Contains(id)))
             throw new OperazioneNonValidaException("Le righe di un ordine emesso non si modificano.");
+    }
+
+    /// <summary>
+    /// Dopo l'approvazione di un budget i prezzi contrattuali (computo, prezzi, quantità, quote non soggette e ribasso d'asta)
+    /// sono bloccati anche nella bozza: cambiano solo con una perizia di variante.
+    /// </summary>
+    private void ProteggiPrezziContrattuali()
+    {
+        if (AdozionePerizia) return;
+        string[] campiVoce = [nameof(VoceComputo.Quantita), nameof(VoceComputo.Prezzo), nameof(VoceComputo.PercentualeNonSoggetta),
+            nameof(VoceComputo.Archiviata), nameof(VoceComputo.ComputoId)];
+        var commesse = new HashSet<Guid>();
+        foreach (var e in ChangeTracker.Entries<VoceComputo>())
+        {
+            if (e.State is EntityState.Added or EntityState.Deleted
+                || (e.State == EntityState.Modified && e.Properties.Any(p => p.IsModified && campiVoce.Contains(p.Metadata.Name)
+                    && !Equals(p.OriginalValue, p.CurrentValue))))
+                commesse.Add(e.Entity.CommessaId);
+        }
+        foreach (var e in ChangeTracker.Entries<Computo>())
+        {
+            if (e.State is EntityState.Added or EntityState.Deleted
+                || (e.State == EntityState.Modified && e.Property(nameof(Computo.Attivo)).IsModified
+                    && !Equals(e.Property(nameof(Computo.Attivo)).OriginalValue, e.Entity.Attivo)))
+                commesse.Add(e.Entity.CommessaId);
+        }
+        foreach (var e in ChangeTracker.Entries<Dominio.Preventivo>())
+        {
+            if (e.State == EntityState.Modified && e.Property(nameof(Dominio.Preventivo.RibassoPercentuale)).IsModified
+                && (decimal)e.Property(nameof(Dominio.Preventivo.RibassoPercentuale)).OriginalValue! != e.Entity.RibassoPercentuale)
+                commesse.Add(e.Entity.CommessaId);
+        }
+        if (commesse.Count == 0) return;
+        if (Versioni.AsNoTracking().Any(v => commesse.Contains(v.CommessaId) && v.StatoBudget == StatoBudget.Approvato))
+            throw new OperazioneNonValidaException(
+                "Il budget della commessa è approvato: i prezzi contrattuali (computo, prezzi, quantità e ribasso) sono bloccati " +
+                "e cambiano solo con una perizia di variante.");
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -195,13 +296,15 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
         modelBuilder.Entity<OrdineAcquisto>(e =>
         {
             e.ToTable("PRV_OrdiniAcquisto");
-            e.HasIndex(x => new { x.Anno, x.Progressivo }).IsUnique();
+            // Le bozze non hanno numero (progressivo zero): l'unicità vale solo per gli ordini emessi.
+            e.HasIndex(x => new { x.Anno, x.Progressivo }).IsUnique().HasFilter("\"Progressivo\" > 0");
             e.HasIndex(x => x.CommessaId);
             e.HasIndex(x => x.PacchettoId);
             e.Property(x => x.Numero).HasMaxLength(30).IsRequired();
             e.Property(x => x.Fornitore).HasMaxLength(300).IsRequired();
+            e.Property(x => x.EmessoDa).HasMaxLength(100);
             e.Property(x => x.Oggetto).HasMaxLength(500).IsRequired();
-            e.HasMany(x => x.Righe).WithOne().HasForeignKey(r => r.OrdineId).OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(x => x.Righe).WithOne().HasForeignKey(r => r.OrdineId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<RigaOrdine>(e =>
@@ -211,6 +314,15 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.Property(x => x.Descrizione).HasMaxLength(2000).IsRequired();
             e.Property(x => x.Codice).HasMaxLength(60);
             e.Property(x => x.Unita).HasMaxLength(30);
+            e.HasMany(x => x.Origini).WithOne().HasForeignKey(o => o.RigaOrdineId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RigaOrdineOrigine>(e =>
+        {
+            e.ToTable("PRV_RigheOrdineOrigini");
+            e.HasIndex(x => x.OrdineId);
+            e.HasIndex(x => new { x.CommessaId, x.Chiave });
+            e.Property(x => x.Chiave).HasMaxLength(800).IsRequired();
         });
 
         modelBuilder.Entity<CodiceRisorsa>(e =>

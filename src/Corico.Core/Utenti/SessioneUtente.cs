@@ -11,6 +11,7 @@ public sealed class SessioneUtente
 
     public bool Amministratore => Identita?.Ruolo == RuoloUtente.Amministratore;
     public bool SolaConsultazione => Identita?.Ruolo == RuoloUtente.Consultazione;
+    public bool PuoEmettereOrdini => Identita?.AbilitatoOrdini ?? false;
 
     public static Guid? IdDa(ClaimsPrincipal utente) =>
         Guid.TryParse(utente.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;

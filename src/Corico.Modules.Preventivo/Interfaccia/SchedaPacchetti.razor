@@ -144,7 +144,11 @@
                 <thead>
                     <tr>
                         <th>Codice</th><th>Attività</th><th>ODA</th><th>Fornitore</th><th>Stato</th>
-                        <th class="num">Ricavo netto</th><th class="num">Costo</th><th class="num">MDC</th><th class="num">MDC %</th>
+                        <th class="num">Ricavo netto</th>
+                        @if (ConBudget) { <th class="num" title="@_tabellone.Budget">Costo budget</th> }
+                        <th class="num" title="Offerte scelte e ordini emessi">@(ConBudget ? "Costo attuale" : "Costo")</th>
+                        @if (ConBudget) { <th class="num" title="Costo attuale meno costo budget">Scostamento</th> }
+                        <th class="num">MDC</th><th class="num">MDC %</th>
                         <th>Ultima nota</th>
                     </tr>
                 </thead>
@@ -159,9 +163,32 @@
                             </td>
                             <td>@r.RiferimentoOda</td>
                             <td>@r.Fornitore</td>
-                            <td><span class="etichetta etichetta-costo-@r.Stato.ToString().ToLowerInvariant()">@r.Stato</span></td>
+                            <td>
+                                <span class="etichetta etichetta-costo-@r.Stato.ToString().ToLowerInvariant()">@r.Stato</span>
+                                @if (r.HaOrdini && r.Stato != StatoCosto.Definitivo)
+                                {
+                                    <div class="testo-secondario">ordinato @Formato.Percento(r.PercentualeOrdinata)</div>
+                                }
+                            </td>
                             <td class="num">@Formato.Euro(r.Ricavo)</td>
-                            <td class="num">@(r.Costo is null ? "—" : Formato.Euro(r.Costo))</td>
+                            @if (ConBudget) { <td class="num">@(r.CostoBudget is null ? "—" : Formato.Euro(r.CostoBudget))</td> }
+                            <td class="num">
+                                @(r.Costo is null ? "—" : Formato.Euro(r.Costo))
+                                @if (r.HaOrdini && r.CostoPianificato is { } cp && Math.Round(cp, 2) != Math.Round(r.Costo ?? 0, 2))
+                                {
+                                    <div class="testo-secondario" title="Costo dell'offerta scelta">offerta @Formato.Euro(cp)</div>
+                                }
+                            </td>
+                            @if (ConBudget)
+                            {
+                                <td class="num @(r.Scostamento > 0 ? "testo-negativo" : r.Scostamento < 0 ? "testo-concorde" : "")">
+                                    @(r.Scostamento is { } sc && Math.Round(sc, 2) != 0 ? Formato.Euro(sc) : "")
+                                    @if (r.Scostamento is { } s2 && Math.Round(s2, 2) != 0 && r.MdcBudget is { } mb)
+                                    {
+                                        <div class="testo-secondario">MDC budget @Formato.Euro(mb)</div>
+                                    }
+                                </td>
+                            }
                             <td class="num @(r.Mdc < 0 ? "testo-negativo" : "")">@(r.Mdc is null ? "" : Formato.Euro(r.Mdc))</td>
                             <td class="num">@(r.Costo is null ? "" : Formato.Percento(r.MarginePercentuale))</td>
                             <td>
@@ -178,7 +205,9 @@
                     <tr>
                         <td colspan="5">Totale pacchetti con costo (@(_tabellone.Righe.Count - _tabellone.PacchettiSenzaCosto) su @_tabellone.Righe.Count)</td>
                         <td class="num">@Formato.Euro(_tabellone.RicavoConCosto)</td>
+                        @if (ConBudget) { <td class="num">@Formato.Euro(_tabellone.CostoBudget)</td> }
                         <td class="num">@Formato.Euro(_tabellone.CostoPacchetti)</td>
+                        @if (ConBudget) { <td class="num @(_tabellone.Scostamento > 0 ? "testo-negativo" : "")">@Formato.Euro(_tabellone.Scostamento)</td> }
                         <td class="num">@Formato.Euro(_tabellone.MdcPacchetti)</td>
                         <td class="num">@Formato.Percento(_tabellone.MarginePercentuale)</td>
                         <td></td>
@@ -189,6 +218,10 @@
     }
     <p class="testo-secondario">
         Ribasso unico di commessa: @Formato.Percento(_tabellone.RibassoPercentuale).
+        @if (ConBudget)
+        {
+            <span>Costo budget: @_tabellone.Budget. Il costo attuale comprende gli ordini emessi (al loro importo) e quanto resta da ordinare ai prezzi delle offerte scelte. </span>
+        }
         @if (_tabellone.PacchettiSenzaCosto > 0)
         {
             <span>@_tabellone.PacchettiSenzaCosto pacchetti senza offerta di riferimento non sono compresi nel totale. </span>
@@ -206,6 +239,7 @@
     [Parameter] public Guid CommessaId { get; set; }
 
     private Tabellone? _tabellone;
+    private bool ConBudget => _tabellone?.Budget is not null;
     private Guid? _pacchettoAperto;
     private string? _messaggio;
     private bool _errore;

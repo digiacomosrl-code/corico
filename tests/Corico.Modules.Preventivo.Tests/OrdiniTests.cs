@@ -37,35 +37,43 @@ public class OrdiniTests
     }
 
     [Fact]
-    public async Task Emissione_con_righe_dall_offerta_scelta_e_pacchetto_definitivo()
+    public async Task Emissione_dal_pacchetto_con_righe_della_lista_e_pacchetto_definitivo()
     {
         var (amb, id, pacchetto) = await PreparaAsync();
         await using var _ = amb;
         var ordini = amb.Get<OrdiniService>();
 
-        var a = (await ordini.AnteprimaAsync(id, pacchetto))!;
-        Assert.True(a.Emettibile);
-        Assert.False(a.AziendaCompilata);
-        Assert.Equal("Padilla", a.Fornitore);
-        Assert.Equal(5, a.Righe.Count);                     // 2 voci, 1 riga d'offerta, 2 voci a corpo
-        Assert.Equal(5_330m, a.Totale);                     // 4.000 + 1.000 + 180 + 150
+        var bozzaId = await ordini.PreparaDaPacchettoAsync(id, pacchetto);
+        var bozza = (await ordini.OttieniAsync(id, bozzaId))!;
+        Assert.Equal(StatoOrdine.Bozza, bozza.Stato);
+        Assert.Equal("", bozza.Numero);
+        Assert.Equal("Padilla", bozza.Fornitore);
+        Assert.True(bozza.FornitoreDaOfferta);
+        Assert.Equal(4, bozza.Righe.Count);                 // 2 voci, 1 riga d'offerta, trasporto (l'imballo incluso non si ordina)
+        Assert.Equal(5_330m, bozza.Totale);                 // 4.000 + 1.000 + 180 + 150
         var costo = (await amb.Get<PacchettiService>().DettaglioAsync(id, pacchetto))!.Scelta!.Risultato.Costo;
-        Assert.Equal(costo, a.Totale);
+        Assert.Equal(costo, bozza.Totale);
+        Assert.Equal("60 gg d.f.f.m.", bozza.Pagamento);
+        Assert.Equal("Vs. offerta n. 123", bozza.RiferimentoOfferta);
 
-        a.Proposta.Data = new DateOnly(2026, 10, 22);
-        var o = await ordini.EmettiAsync(id, pacchetto, a.Proposta);
+        var verifica = await ordini.VerificaAsync(id, bozzaId);
+        Assert.True(verifica.Emettibile);
+        Assert.False(verifica.AziendaCompilata);
+        Assert.Contains(verifica.Avvisi, a => a.Contains("Budget 0"));
+
+        var pdfBozza = await amb.Get<EsportazioniService>().OrdinePdfAsync(id, bozzaId);
+        Assert.StartsWith("Bozza", pdfBozza!.Nome);
+
+        var o = await ordini.EmettiAsync(id, bozzaId);
         Assert.Equal("ODA 2026/001", o.Numero);
-        Assert.Equal("60 gg d.f.f.m.", o.Pagamento);
-        Assert.Equal("Vs. offerta n. 123", o.RiferimentoOfferta);
+        Assert.Equal(new DateOnly(2026, 10, 21), o.Data);
 
         var p = (await amb.Get<PacchettiService>().DettaglioAsync(id, pacchetto))!.Pacchetto;
         Assert.Equal(StatoCosto.Definitivo, p.StatoCosto);
         Assert.Equal("ODA 2026/001", p.RiferimentoOda);
 
-        // Un secondo ordine sullo stesso pacchetto richiede l'annullamento del primo.
-        var b = (await ordini.AnteprimaAsync(id, pacchetto))!;
-        Assert.False(b.Emettibile);
-        await Assert.ThrowsAsync<OperazioneNonValidaException>(() => ordini.EmettiAsync(id, pacchetto, b.Proposta));
+        // Tutto ordinato: non c'è più nulla da preparare.
+        await Assert.ThrowsAsync<OperazioneNonValidaException>(() => ordini.PreparaDaPacchettoAsync(id, pacchetto));
 
         var pdf = await amb.Get<EsportazioniService>().OrdinePdfAsync(id, o.Id);
         Assert.NotNull(pdf);
@@ -78,9 +86,7 @@ public class OrdiniTests
         var (amb, id, pacchetto) = await PreparaAsync();
         await using var _ = amb;
         var ordini = amb.Get<OrdiniService>();
-        var a = (await ordini.AnteprimaAsync(id, pacchetto))!;
-        a.Proposta.Data = new DateOnly(2026, 10, 22);
-        var primo = await ordini.EmettiAsync(id, pacchetto, a.Proposta);
+        var primo = await ordini.EmettiAsync(id, await ordini.PreparaDaPacchettoAsync(id, pacchetto));
 
         await Assert.ThrowsAsync<OperazioneNonValidaException>(() => ordini.AnnullaAsync(id, primo.Id, " "));
         await ordini.AnnullaAsync(id, primo.Id, "Quantità errate");
@@ -88,9 +94,7 @@ public class OrdiniTests
         Assert.Equal(StatoCosto.Provvisorio, p.StatoCosto);
         Assert.Null(p.RiferimentoOda);
 
-        var b = (await ordini.AnteprimaAsync(id, pacchetto))!;
-        b.Proposta.Data = new DateOnly(2026, 10, 23);
-        var secondo = await ordini.EmettiAsync(id, pacchetto, b.Proposta);
+        var secondo = await ordini.EmettiAsync(id, await ordini.PreparaDaPacchettoAsync(id, pacchetto));
         Assert.Equal("ODA 2026/002", secondo.Numero);
 
         var elenco = await ordini.ElencoAsync(id);
@@ -105,8 +109,7 @@ public class OrdiniTests
         var (amb, id, pacchetto) = await PreparaAsync();
         await using var _ = amb;
         var ordini = amb.Get<OrdiniService>();
-        var a = (await ordini.AnteprimaAsync(id, pacchetto))!;
-        var o = await ordini.EmettiAsync(id, pacchetto, a.Proposta);
+        var o = await ordini.EmettiAsync(id, await ordini.PreparaDaPacchettoAsync(id, pacchetto));
 
         await using var db = await amb.Get<IDbContextFactory<PreventivoDbContext>>().CreateDbContextAsync();
         var letto = await db.Ordini.Include(x => x.Righe).FirstAsync(x => x.Id == o.Id);
@@ -116,10 +119,17 @@ public class OrdiniTests
         var riga = await db.RigheOrdine.FirstAsync(r => r.OrdineId == o.Id);
         riga.Prezzo = 1;
         await Assert.ThrowsAsync<OperazioneNonValidaException>(() => db.SaveChangesAsync());
+        db.ChangeTracker.Clear();
+        db.Ordini.Remove(await db.Ordini.FirstAsync(x => x.Id == o.Id));
+        await Assert.ThrowsAsync<OperazioneNonValidaException>(() => db.SaveChangesAsync());
+
+        // Invio e conferma restano registrabili.
+        await ordini.RegistraInvioAsync(id, o.Id, new DateOnly(2026, 10, 22), new DateOnly(2026, 10, 23), null);
+        Assert.Equal(new DateOnly(2026, 10, 23), (await ordini.OttieniAsync(id, o.Id))!.ConfermatoIl);
     }
 
     [Fact]
-    public async Task Stima_interna_non_emettibile()
+    public async Task Stima_interna_ordinabile_scegliendo_il_fornitore()
     {
         var (amb, id, pacchetto) = await PreparaAsync();
         await using var _ = amb;
@@ -129,9 +139,21 @@ public class OrdiniTests
         offerta.Tipo = TipoOfferta.StimaInterna;
         await pacchetti.SalvaOffertaAsync(id, offerta);
 
-        var a = (await amb.Get<OrdiniService>().AnteprimaAsync(id, pacchetto))!;
-        Assert.False(a.Emettibile);
-        Assert.Contains(a.Impedimenti, i => i.Contains("stima interna"));
+        var ordini = amb.Get<OrdiniService>();
+        var bozzaId = await ordini.PreparaDaPacchettoAsync(id, pacchetto);
+        var bozza = (await ordini.OttieniAsync(id, bozzaId))!;
+        Assert.False(bozza.FornitoreDaOfferta);
+        Assert.Equal("", bozza.Fornitore);
+        var verifica = await ordini.VerificaAsync(id, bozzaId);
+        Assert.False(verifica.Emettibile);
+        Assert.Contains(verifica.Impedimenti, i => i.Contains("fornitore"));
+
+        var f = await amb.Get<FornitoriService>().SalvaAsync(new DatiFornitore { Denominazione = "Edilnord S.r.l.", PartitaIva = "01234567890" });
+        bozza.FornitoreId = f.Id;
+        await ordini.SalvaBozzaAsync(id, bozza);
+        var o = await ordini.EmettiAsync(id, bozzaId);
+        Assert.Equal("Edilnord S.r.l.", o.Fornitore);
+        Assert.Contains("P. IVA 01234567890", o.DatiFornitore);
     }
 
     [Fact]

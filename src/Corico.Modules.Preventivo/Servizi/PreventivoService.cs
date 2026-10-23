@@ -15,7 +15,11 @@ public sealed record RigaVoce(
 public sealed record DatiComputo(Guid Id, string Descrizione, OrigineComputo Origine, string? NomeFile, Guid? DocumentoId,
     DateTime CreatoIl, decimal? TotaleImportato, decimal? TotaleDichiarato, string? Oggetto, string? Committente);
 
-public sealed record StatoPreventivo(Guid PreventivoId, int Versione, decimal RibassoPercentuale, DatiComputo? Computo, QuadroEconomico Quadro);
+public sealed record StatoPreventivo(Guid PreventivoId, int Versione, decimal RibassoPercentuale, DatiComputo? Computo, QuadroEconomico Quadro)
+{
+    /// <summary>Budget approvato che blocca i prezzi contrattuali (es. «Budget 0 approvato»); null se modificabili.</summary>
+    public string? BloccoBudget { get; init; }
+}
 
 public sealed class DatiVoce
 {
@@ -46,8 +50,13 @@ public sealed class PreventivoService(IDbContextFactory<PreventivoDbContext> fab
 
         var quadro = QuadroEconomico.Calcola(preventivo.RibassoPercentuale,
             voci.Select(v => (v.Quantita, v.Prezzo, v.PercentualeNonSoggetta)), valoreContrattuale);
+        var approvato = BudgetService.Approvato(await db.Versioni.AsNoTracking()
+            .Where(v => v.CommessaId == commessaId && v.StatoBudget == StatoBudget.Approvato).ToListAsync(ct));
         return new StatoPreventivo(preventivo.Id, preventivo.Versione, preventivo.RibassoPercentuale,
-            computo is null ? null : Dati(computo), quadro);
+            computo is null ? null : Dati(computo), quadro)
+        {
+            BloccoBudget = approvato is null ? null : BudgetService.Etichetta(approvato),
+        };
     }
 
     public async Task ImpostaRibassoAsync(Guid commessaId, int versioneLetta, decimal ribassoPercentuale, CancellationToken ct = default)

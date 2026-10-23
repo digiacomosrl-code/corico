@@ -41,7 +41,14 @@
                 }
             </select>
         </label>
+        @if (_nuovo.Ruolo == RuoloUtente.Operatore)
+        {
+            <label class="spunta"><input type="checkbox" @bind="_nuovo.PuoEmettereOrdini" /> Può emettere ordini e adottare variazioni</label>
+        }
     </div>
+    <p class="testo-secondario">
+        L'amministratore emette sempre gli ordini e approva il budget. Un operatore senza la spunta prepara le bozze d'ordine, ma non le emette.
+    </p>
     <div class="azioni">
         <button class="pulsante primario" @onclick="CreaAsync">Crea utente</button>
     </div>
@@ -70,6 +77,10 @@
                                         <option value="@r">@r</option>
                                     }
                                 </select>
+                                @if (_modifica.Ruolo == RuoloUtente.Operatore)
+                                {
+                                    <label class="spunta"><input type="checkbox" @bind="_modifica.PuoEmettereOrdini" /> Può emettere ordini</label>
+                                }
                             </td>
                             <td><label><input type="checkbox" @bind="_modifica.Attivo" /> Attivo</label></td>
                             <td></td>
@@ -85,7 +96,13 @@
                             <td>@u.NomeCompleto</td>
                             <td class="codice">@u.NomeUtente</td>
                             <td>@u.Email</td>
-                            <td>@u.Ruolo</td>
+                            <td>
+                                @u.Ruolo
+                                @if (u.Ruolo == RuoloUtente.Operatore && u.PuoEmettereOrdini)
+                                {
+                                    <div class="testo-secondario">Può emettere ordini</div>
+                                }
+                            </td>
                             <td>
                                 @if (!u.Attivo)
                                 {
@@ -168,6 +185,7 @@
         public string? Email { get; set; }
         public RuoloUtente Ruolo { get; set; } = RuoloUtente.Operatore;
         public bool Attivo { get; set; } = true;
+        public bool PuoEmettereOrdini { get; set; }
     }
 
     private IReadOnlyList<RigaUtente> _utenti = [];
@@ -201,7 +219,7 @@
     {
         try
         {
-            var password = await ServizioUtenti.CreaAsync(_nuovo.NomeUtente ?? "", _nuovo.NomeCompleto ?? "", _nuovo.Email, _nuovo.Ruolo);
+            var password = await ServizioUtenti.CreaAsync(_nuovo.NomeUtente ?? "", _nuovo.NomeCompleto ?? "", _nuovo.Email, _nuovo.Ruolo, _nuovo.PuoEmettereOrdini);
             _provvisoria = (_nuovo.NomeCompleto!.Trim(), password);
             (_messaggio, _errore) = ($"Utente «{UtentiService.Normalizza(_nuovo.NomeUtente!)}» creato.", false);
             _nuovo = new();
@@ -216,6 +234,7 @@
     private void ApriModifica(RigaUtente u) => _modifica = new DatiUtente
     {
         Id = u.Id, Versione = u.Versione, NomeCompleto = u.NomeCompleto, Email = u.Email, Ruolo = u.Ruolo, Attivo = u.Attivo,
+        PuoEmettereOrdini = u.PuoEmettereOrdini,
     };
 
     private async Task SalvaAsync()
@@ -223,7 +242,7 @@
         if (_modifica is not { } m) return;
         try
         {
-            await ServizioUtenti.ModificaAsync(m.Id, m.Versione, m.NomeCompleto ?? "", m.Email, m.Ruolo, m.Attivo);
+            await ServizioUtenti.ModificaAsync(m.Id, m.Versione, m.NomeCompleto ?? "", m.Email, m.Ruolo, m.Attivo, m.PuoEmettereOrdini);
             (_messaggio, _errore, _modifica) = ("Utente aggiornato. Le modifiche valgono subito, anche per chi è già collegato.", false, null);
             await CaricaAsync();
         }

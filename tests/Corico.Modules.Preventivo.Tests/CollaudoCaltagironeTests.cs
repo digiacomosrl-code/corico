@@ -78,4 +78,42 @@ public class CollaudoCaltagironeTests(ITestOutputHelper output)
             foreach (var f in stampe) await File.WriteAllBytesAsync(Path.Combine(cartella, f.Nome), f.Contenuto);
         Assert.All(stampe, f => Assert.True(f.Contenuto.Length > 1000));
     }
+
+    /// <summary>Criterio di accettazione del rilascio 2A: il ponteggio ordinato in due ordini parziali.</summary>
+    [Fact]
+    public async Task Ponteggio_in_due_ordini_parziali_e_controlli_del_budget()
+    {
+        if (LettoreFogliCrTests.Campione("1.Surly Caltagirone.xlsx") is not { } percorso) return;
+        await using var amb = await AmbienteDiProva.CreaAsync(new PreventivoModulo());
+        var commessa = await amb.Get<CommesseService>().CreaAsync("Restauro CDD Caltagirone");
+        var import = amb.Get<ImportazionePianificazioneService>();
+        var contenuto = await File.ReadAllBytesAsync(percorso);
+        await import.ConfermaAsync(commessa.Id, contenuto, Path.GetFileName(percorso), await import.AnteprimaAsync(commessa.Id, new MemoryStream(contenuto)));
+
+        var pacchetti = amb.Get<PacchettiService>();
+        var ponteggio = (await pacchetti.TabelloneAsync(commessa.Id)).Righe.Single(r => r.Descrizione == "Ponteggio");
+        var ordini = amb.Get<OrdiniService>();
+
+        var primoId = await ordini.PreparaDaPacchettoAsync(commessa.Id, ponteggio.Id);
+        var primo = (await ordini.OttieniAsync(commessa.Id, primoId))!;
+        foreach (var r in primo.Righe) r.Quantita = Math.Round(r.Quantita / 2, 2);
+        await ordini.SalvaBozzaAsync(commessa.Id, primo);
+        await ordini.EmettiAsync(commessa.Id, primoId);
+        Assert.Equal(StatoCosto.Provvisorio, (await pacchetti.DettaglioAsync(commessa.Id, ponteggio.Id))!.Pacchetto.StatoCosto);
+
+        var lista = await amb.Get<ListaSpesaService>().CalcolaAsync(commessa.Id);
+        Assert.All(lista.Righe.Where(r => r.PacchettoId == ponteggio.Id),
+            r => Assert.Equal(r.Quantita, r.QuantitaOrdinata + r.DaOrdinare));
+
+        await ordini.EmettiAsync(commessa.Id, await ordini.PreparaDaPacchettoAsync(commessa.Id, ponteggio.Id));
+        Assert.Equal(StatoCosto.Definitivo, (await pacchetti.DettaglioAsync(commessa.Id, ponteggio.Id))!.Pacchetto.StatoCosto);
+        var dopo = (await pacchetti.TabelloneAsync(commessa.Id)).Righe.Single(r => r.Id == ponteggio.Id);
+        Assert.Equal(75_415.00m, Math.Round(dopo.Costo!.Value, 2));
+        output.WriteLine($"Ponteggio: ordini {dopo.RiferimentoOda}, costo attuale {dopo.Costo:N2}");
+
+        var stato = await amb.Get<BudgetService>().StatoAsync(commessa.Id);
+        foreach (var c in stato.Controlli)
+            output.WriteLine($"{(c.Superato ? "OK " : c.Bloccante ? "NO " : "AVV")} {c.Descrizione}: {string.Join("; ", c.Dettagli)}");
+        Assert.Contains(stato.Controlli, c => c.Descrizione.StartsWith("Totale della Lista") && c.Superato);
+    }
 }

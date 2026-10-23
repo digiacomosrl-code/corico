@@ -1,10 +1,26 @@
-@* Scheda "Lista della Spesa" della commessa (rilascio 1D): risorse e costi delle offerte scelte, per categoria e per voce. *@
+@* Scheda "Lista della Spesa" della commessa (rilascio 1D): risorse e costi delle offerte scelte, per categoria e per voce.
+   Modulo 2 (2A): quantità già ordinate e da ordinare, selezione delle righe e preparazione dell'ordine. *@
 @inject ListaSpesaService ListaSpesa
+@inject OrdiniService Ordini
+@inject SessioneUtente Sessione
+
+@if (_bozza is { } bozza)
+{
+    <EditorOrdine CommessaId="CommessaId" OrdineId="bozza" OnChiuso="ChiudiBozzaAsync" />
+    return;
+}
 
 @if (_tutta is null)
 {
     <p class="testo-secondario">Caricamento…</p>
     return;
+}
+@if (!string.IsNullOrEmpty(_messaggio))
+{
+    <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+        @_messaggio
+        <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+    </div>
 }
 @{ var lista = _tutta.Filtra(_fornitore, _cerca); var filtrata = _fornitore.Length > 0 || _cerca.Trim().Length > 0; }
 
@@ -20,6 +36,10 @@
         Risorse e costi delle offerte scelte: risorse del livello analitico, colonne del livello sintetico
         (Fornitura → materiali e forniture, Fornitura e posa → subappalti, Manodopera e noli → manodopera), righe d'offerta e voci a corpo.
         Il totale coincide con il costo pianificato della commessa. Ogni risorsa ha un codice assegnato automaticamente (MAT, MAN, ATT, SUB, TRA, ALT), che non cambia.
+        @if (PuoPreparare)
+        {
+            <span>Per ordinare: filtra per fornitore, spunta le righe e premi «Prepara ordine». Un ordine raccoglie righe di un solo fornitore, anche di pacchetti diversi.</span>
+        }
     </p>
     <div class="riga-form">
         <select @bind="_fornitore" aria-label="Filtro per fornitore">
@@ -52,6 +72,8 @@
                 <tr class="@(importo == 0 ? "testo-secondario" : "")"><td>@Testi.Categoria(categoria)</td><td class="num">@Formato.Euro(importo)</td></tr>
             }
             <tr class="totale"><td>Totale</td><td class="num">@Formato.Euro(lista.Totale)</td></tr>
+            <tr><td>già ordinato (ordini emessi)</td><td class="num">@Formato.Euro(lista.TotaleOrdinato)</td></tr>
+            <tr><td>da ordinare (ai prezzi pianificati)</td><td class="num">@Formato.Euro(lista.TotaleDaOrdinare)</td></tr>
         </tbody>
     </table>
 </div>
@@ -62,26 +84,45 @@
         <div class="scorrevole">
             <table class="tabella">
                 <thead>
-                    <tr><th>Codice</th><th>Descrizione</th><th>Fornitore</th><th>U.M.</th><th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th class="num">Utilizzi</th></tr>
+                    <tr>
+                        @if (PuoPreparare) { <th></th> }
+                        <th>Codice</th><th>Descrizione</th><th>Fornitore</th><th>U.M.</th><th class="num">Quantità prevista</th>
+                        <th class="num">Già ordinata</th><th class="num">Da ordinare</th><th class="num">N. ordini</th>
+                        <th class="num">Prezzo</th><th class="num">Importo</th><th class="num">Utilizzi</th>
+                    </tr>
                 </thead>
                 @foreach (var gruppo in lista.Aggregata().GroupBy(r => r.Categoria))
                 {
                     <tbody>
-                        <tr class="gruppo"><td colspan="8">@Testi.Categoria(gruppo.Key)</td></tr>
+                        <tr class="gruppo"><td colspan="@(PuoPreparare ? 12 : 11)">@Testi.Categoria(gruppo.Key)</td></tr>
                         @foreach (var r in gruppo)
                         {
-                            <tr>
+                            var aperte = r.Chiavi.Where(_aperte.Contains).ToList();
+                            var selezionata = aperte.Count > 0 && aperte.All(_selezione.Contains);
+                            <tr class="@(selezionata ? "selezionata" : r.DaOrdinare <= 0 && r.Ordini.Count > 0 ? "ordinata" : "")">
+                                @if (PuoPreparare)
+                                {
+                                    <td>
+                                        @if (aperte.Count > 0)
+                                        {
+                                            <input type="checkbox" checked="@selezionata" @onchange="() => Inverti(aperte, !selezionata)" aria-label="Seleziona la riga" />
+                                        }
+                                    </td>
+                                }
                                 <td class="codice">@r.Codice</td>
                                 <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
                                 <td class="@(r.Fornitore == RigaSpesa.DaAssegnare ? "testo-differenza" : "")">@r.Fornitore</td>
                                 <td>@r.Unita</td>
                                 <td class="num">@Formato.Numero(r.Quantita)</td>
+                                <td class="num @(r.Eccedenza ? "testo-eccedenza" : "")" title="@string.Join(", ", r.Ordini)">@(r.Ordini.Count == 0 ? "" : Formato.Numero(r.QuantitaOrdinata))</td>
+                                <td class="num">@(r.Ordini.Count == 0 ? "" : Formato.Numero(r.DaOrdinare))</td>
+                                <td class="num" title="@string.Join(", ", r.Ordini)">@(r.Ordini.Count == 0 ? "" : r.Ordini.Count)</td>
                                 <td class="num">@(r.Prezzo is null ? "" : Formato.Euro(r.Prezzo))</td>
                                 <td class="num">@Formato.Euro(r.Importo)</td>
                                 <td class="num">@r.Utilizzi</td>
                             </tr>
                         }
-                        <tr class="subtotale"><td colspan="6">Totale @Testi.Categoria(gruppo.Key).ToLowerInvariant()</td><td class="num">@Formato.Euro(gruppo.Sum(r => r.Importo))</td><td></td></tr>
+                        <tr class="subtotale"><td colspan="@(PuoPreparare ? 10 : 9)">Totale @Testi.Categoria(gruppo.Key).ToLowerInvariant()</td><td class="num">@Formato.Euro(gruppo.Sum(r => r.Importo))</td><td></td></tr>
                     </tbody>
                 }
             </table>
@@ -93,14 +134,26 @@
             <table class="tabella">
                 <thead>
                     <tr>
+                        @if (PuoPreparare) { <th></th> }
                         <th>Pacchetto</th><th>Fornitore</th><th>Voce</th><th>Categoria</th><th>Codice</th><th>Descrizione</th><th>U.M.</th>
-                        <th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th>Origine</th>
+                        <th class="num">Quantità prevista</th><th class="num">Già ordinata</th><th class="num">Da ordinare</th><th>Ordini</th>
+                        <th class="num">Prezzo</th><th class="num">Importo</th><th>Origine</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var r in lista.Righe)
                     {
-                        <tr>
+                        var selezionata = _selezione.Contains(r.ChiaveOrdine);
+                        <tr class="@(selezionata ? "selezionata" : r.Ordinata ? "ordinata" : "")">
+                            @if (PuoPreparare)
+                            {
+                                <td>
+                                    @if (!r.Ordinata)
+                                    {
+                                        <input type="checkbox" checked="@selezionata" @onchange="() => Inverti([r.ChiaveOrdine], !selezionata)" aria-label="Seleziona la riga" />
+                                    }
+                                </td>
+                            }
                             <td>@r.Pacchetto</td>
                             <td class="@(r.Fornitore == RigaSpesa.DaAssegnare ? "testo-differenza" : "")">@r.Fornitore</td>
                             <td class="codice">@r.Tariffa</td>
@@ -109,6 +162,9 @@
                             <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
                             <td>@r.Unita</td>
                             <td class="num">@Formato.Numero(r.Quantita)</td>
+                            <td class="num @(r.Eccedenza ? "testo-eccedenza" : "")">@(r.Ordini.Count == 0 ? "" : Formato.Numero(r.QuantitaOrdinata))</td>
+                            <td class="num">@(r.Ordini.Count == 0 ? "" : Formato.Numero(r.DaOrdinare))</td>
+                            <td class="nowrap">@string.Join(", ", r.Ordini)</td>
                             <td class="num">@(r.Prezzo is null ? "" : Formato.Euro(r.Prezzo))</td>
                             <td class="num">@Formato.Euro(r.Importo)</td>
                             <td>@Testi.OrigineSpesa(r.Origine)</td>
@@ -120,14 +176,82 @@
     }
 </div>
 
+@if (PuoPreparare && _selezione.Count > 0)
+{
+    var scelte = _tutta.Righe.Where(r => _selezione.Contains(r.ChiaveOrdine)).ToList();
+    var nominati = scelte.Where(r => !r.FornitoreLibero).Select(r => r.Fornitore).Distinct().ToList();
+    <div class="barra-selezione">
+        <strong>@scelte.Count righe selezionate</strong>
+        <span>da ordinare @Formato.Euro(scelte.Sum(AvanzamentoOrdini.Residuo))</span>
+        @if (nominati.Count > 1)
+        {
+            <span class="testo-negativo">Righe di più fornitori (@string.Join(", ", nominati)): un ordine raccoglie righe di un solo fornitore.</span>
+        }
+        else
+        {
+            <span class="testo-secondario">Fornitore: @(nominati.FirstOrDefault() ?? "da scegliere nella bozza")</span>
+        }
+        <button class="pulsante primario" disabled="@(nominati.Count > 1 || _occupato)" @onclick="PreparaAsync">Prepara ordine</button>
+        <button class="pulsante" @onclick="() => _selezione.Clear()">Togli la selezione</button>
+    </div>
+}
+
 @code {
     [Parameter] public Guid CommessaId { get; set; }
 
     private ListaSpesa? _tutta;
     private bool _perVoce;
     private string _fornitore = "", _cerca = "";
+    private readonly HashSet<string> _selezione = [];
+    private HashSet<string> _aperte = [];
+    private Guid? _bozza;
+    private string? _messaggio;
+    private bool _errore, _occupato;
 
-    protected override async Task OnParametersSetAsync() => _tutta = await ListaSpesa.CalcolaAsync(CommessaId);
+    private bool PuoPreparare => !Sessione.SolaConsultazione;
+
+    protected override async Task OnParametersSetAsync() => await CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _tutta = await ListaSpesa.CalcolaAsync(CommessaId);
+        _aperte = _tutta.Righe.Where(r => !r.Ordinata).Select(r => r.ChiaveOrdine).ToHashSet();
+        _selezione.IntersectWith(_aperte);
+    }
+
+    private void Inverti(IEnumerable<string> chiavi, bool seleziona)
+    {
+        foreach (var c in chiavi)
+        {
+            if (seleziona) _selezione.Add(c);
+            else _selezione.Remove(c);
+        }
+    }
+
+    private async Task PreparaAsync()
+    {
+        _occupato = true;
+        try
+        {
+            _bozza = await Ordini.PreparaDaListaAsync(CommessaId, _selezione.ToList());
+            _selezione.Clear();
+            _messaggio = null;
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task ChiudiBozzaAsync()
+    {
+        _bozza = null;
+        await CaricaAsync();
+    }
 
     private string IndirizzoExcel()
     {

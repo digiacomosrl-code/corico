@@ -68,7 +68,10 @@ public sealed class EsportazioniService(
         var ordine = await ordini.OttieniAsync(commessaId, ordineId, ct);
         if (commessa is null || ordine is null) return null;
         var azienda = await impostazioni.LeggiAziendaAsync(ct);
-        var nome = $"{ordine.Numero.Replace('/', '-')} {Pulisci(ordine.Fornitore)}{(ordine.Stato == Dominio.StatoOrdine.Annullato ? " ANNULLATO" : "")}.pdf";
+        if (ordine.Stato == Dominio.StatoOrdine.Bozza) ordine.Condizioni = azienda.CondizioniOrdine;   // anteprima
+        var nome = ordine.Stato == Dominio.StatoOrdine.Bozza
+            ? $"Bozza ordine {Pulisci(ordine.Fornitore)}.pdf"
+            : $"{ordine.Numero.Replace('/', '-')} {Pulisci(ordine.Fornitore)}{(ordine.Stato == Dominio.StatoOrdine.Annullato ? " ANNULLATO" : "")}.pdf";
         return new(EsportazionePdf.Ordine(azienda, ordine, NomeCommessa(commessa)), TipoPdf, nome);
     }
 

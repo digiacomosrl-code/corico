@@ -45,11 +45,21 @@ public sealed class IntegrazioneRicavo : EntitaBase
     public string? Note { get; set; }
 }
 
+/// <summary>Stato di un budget (Modulo 2): la fotografia è immutabile, cambia solo l'esito dell'approvazione.</summary>
+public enum StatoBudget
+{
+    InApprovazione = 0,
+    Approvato = 1,
+    Respinto = 2,
+}
+
 /// <summary>
 /// Versione ufficiale del preventivo: fotografia completa e immutabile della bozza al momento
 /// della pubblicazione, con prezzi congelati e totali calcolati.
+/// Dal Modulo 2 le versioni ufficiali sono i budget (Budget 0, 1, 2…): proposti, poi approvati o respinti
+/// dall'amministratore. Le versioni pubblicate con il Modulo 1 restano come versioni storiche (senza stato di budget).
 /// </summary>
-public sealed class VersionePreventivo : EntitaBase, IImmutabile, IRiservatoAmministratore
+public sealed class VersionePreventivo : EntitaBase, IImmutabile
 {
     public Guid CommessaId { get; set; }
     public int Numero { get; set; }
@@ -64,4 +74,19 @@ public sealed class VersionePreventivo : EntitaBase, IImmutabile, IRiservatoAmmi
     public decimal Mdc { get; set; }
     public decimal SpeseGenerali { get; set; }
     public decimal Risultato { get; set; }
+
+    /// <summary>Numero del budget (0, 1, 2…); null per le versioni storiche del Modulo 1.</summary>
+    public int? NumeroBudget { get; set; }
+
+    public StatoBudget? StatoBudget { get; set; }
+
+    /// <summary>Avvisi non bloccanti rilevati alla proposta (offerte scadute, margine sotto l'obiettivo).</summary>
+    public string? Avvisi { get; set; }
+
+    /// <summary>Chi ha approvato o respinto il budget, e quando.</summary>
+    public string? EsitoDa { get; set; }
+    public DateTime? EsitoIl { get; set; }
+    public string? MotivoRifiuto { get; set; }
+
+    public bool EBudget => NumeroBudget is not null;
 }

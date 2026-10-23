@@ -495,6 +495,9 @@ namespace Corico.Core.Dati.Migrazioni
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("PuoEmettereOrdini")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Ruolo")
                         .HasColumnType("INTEGER");
 

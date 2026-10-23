@@ -1,13 +1,29 @@
-@* Scheda "Ordini" della commessa: ordini di acquisto emessi dai pacchetti, con stampa e annullamento. *@
+@* Scheda "Ordini" della commessa (Modulo 2, rilascio 2A): bozze, ordini emessi e annullati, totali per pacchetto e per fornitore. *@
 @inject OrdiniService Ordini
+@inject SessioneUtente Sessione
+
+@if (_aperto is { } aperto)
+{
+    <EditorOrdine CommessaId="CommessaId" OrdineId="aperto" OnChiuso="ChiudiAsync" />
+    return;
+}
 
 <div class="riquadro">
     <div class="intestazione-riquadro">
         <h3>Ordini di acquisto</h3>
+        <div class="azioni-in-linea">
+            <select @bind="_filtro" aria-label="Filtro per stato">
+                <option value="">Tutti gli stati</option>
+                @foreach (var s in new[] { StatoOrdine.Bozza, StatoOrdine.Emesso, StatoOrdine.Annullato })
+                {
+                    <option value="@s">@Testi.StatoOrdine(s)</option>
+                }
+            </select>
+        </div>
     </div>
     <p class="testo-secondario">
-        Gli ordini si emettono dal dettaglio del pacchetto, dall'offerta scelta (scheda Pacchetti → pacchetto → «Emetti ordine…»).
-        Un ordine emesso non si modifica: si annulla indicando il motivo e se ne emette uno nuovo. La numerazione è progressiva per anno.
+        Gli ordini si preparano dal pacchetto (scheda Pacchetti → pacchetto → «Prepara ordine…») oppure dalla Lista della Spesa, spuntando le righe.
+        Le bozze si modificano; all'emissione l'ordine riceve il numero progressivo dell'anno e non si modifica più: si annulla indicando il motivo.
     </p>
 
     @if (!string.IsNullOrEmpty(_messaggio))
@@ -24,29 +40,45 @@
     }
     else if (_elenco.Count == 0)
     {
-        <p class="testo-secondario">Nessun ordine emesso per questa commessa.</p>
+        <p class="testo-secondario">Nessun ordine per questa commessa.</p>
     }
     else
     {
+        var elenco = _elenco.Where(o => _filtro.Length == 0 || o.Stato.ToString() == _filtro).ToList();
         <div class="scorrevole">
             <table class="tabella">
                 <thead>
-                    <tr><th>Numero</th><th>Data</th><th>Fornitore</th><th>Pacchetto</th><th>Stato</th><th class="num">Totale</th><th></th></tr>
+                    <tr><th>Numero</th><th>Data</th><th>Fornitore</th><th>Pacchetti</th><th>Stato</th><th>Autori</th><th class="num">Totale</th><th></th></tr>
                 </thead>
                 <tbody>
-                    @foreach (var o in _elenco)
+                    @foreach (var o in elenco)
                     {
                         var annullato = o.Stato == StatoOrdine.Annullato;
                         <tr class="@(annullato ? "testo-secondario" : "")">
                             <td class="nowrap"><strong>@o.Numero</strong></td>
                             <td>@Formato.Data(o.Data)</td>
-                            <td>@o.Fornitore</td>
+                            <td>@(o.Fornitore.Length == 0 ? "—" : o.Fornitore)</td>
                             <td class="descrizione-breve" title="@o.Oggetto">@o.Pacchetto</td>
-                            <td>@(annullato ? $"Annullato il {Formato.Data(o.AnnullatoIl)}: {o.MotivoAnnullamento}" : "Emesso")</td>
+                            <td>
+                                <span class="etichetta etichetta-ordine-@o.Stato.ToString().ToLowerInvariant()">@Testi.StatoOrdine(o.Stato)</span>
+                                @if (annullato)
+                                {
+                                    <div>il @Formato.Data(o.AnnullatoIl): @o.MotivoAnnullamento</div>
+                                }
+                                @if (o.InviatoIl is { } inv)
+                                {
+                                    <div class="testo-secondario">inviato il @Formato.Data(inv)@(o.ConfermatoIl is { } c ? $", confermato il {Formato.Data(c)}" : "")</div>
+                                }
+                            </td>
+                            <td class="testo-secondario">
+                                @o.PreparatoDa
+                                @if (o.EmessoDa is { } e && e != o.PreparatoDa) { <span> / @e</span> }
+                            </td>
                             <td class="num">@Formato.Euro(o.Totale)</td>
                             <td class="nowrap">
+                                <button class="pulsante piccolo" @onclick="() => _aperto = o.Id">@(o.Stato == StatoOrdine.Bozza ? "Apri bozza" : "Apri")</button>
                                 <a class="pulsante piccolo" href="@($"preventivo/{CommessaId}/ordini/{o.Id}.pdf")" target="_blank">PDF</a>
-                                @if (!annullato && _daAnnullare != o.Id)
+                                @if (o.Stato == StatoOrdine.Emesso && !Sessione.SolaConsultazione && _daAnnullare != o.Id)
                                 {
                                     <button class="pulsante piccolo" @onclick="() => (_daAnnullare, _motivo) = (o.Id, null)">Annulla…</button>
                                 }
@@ -55,46 +87,96 @@
                         @if (_daAnnullare == o.Id)
                         {
                             <tr>
-                                <td colspan="7">
+                                <td colspan="8">
                                     <div class="riga-form">
                                         <input class="largo" placeholder="Motivo dell'annullamento (obbligatorio)" @bind="_motivo" />
                                         <button class="pulsante pericolo" @onclick="() => AnnullaAsync(o.Id)">Conferma annullamento</button>
                                         <button class="pulsante" @onclick="() => _daAnnullare = null">Indietro</button>
                                     </div>
+                                    <p class="testo-secondario">Le quantità dell'ordine tornano «da ordinare» e i pacchetti tornano a costo Provvisorio.</p>
                                 </td>
                             </tr>
                         }
                     }
                 </tbody>
-                <tfoot>
-                    <tr class="totale">
-                        <td colspan="5">Totale ordini emessi (esclusi gli annullati)</td>
-                        <td class="num">@Formato.Euro(_elenco.Where(o => o.Stato == StatoOrdine.Emesso).Sum(o => o.Totale))</td>
-                        <td></td>
-                    </tr>
-                </tfoot>
             </table>
         </div>
     }
 </div>
 
+@if (_riepilogo is { } r && (r.Pianificato != 0 || r.Impegnato != 0))
+{
+    <div class="riquadro">
+        <h3>Costo pianificato, impegnato e da ordinare</h3>
+        <table class="tabella quadro riepilogo-categorie">
+            <tbody>
+                <tr><td>Costo pianificato (Lista della Spesa)</td><td class="num">@Formato.Euro(r.Pianificato)</td></tr>
+                <tr><td>Costo impegnato con ordini emessi</td><td class="num">@Formato.Euro(r.Impegnato)</td></tr>
+                <tr class="totale"><td>Residuo da ordinare (ai prezzi pianificati)</td><td class="num">@Formato.Euro(r.Residuo)</td></tr>
+            </tbody>
+        </table>
+
+        <div class="riga-form">
+            <label class="spunta"><input type="checkbox" @bind="_perFornitore" /> Per fornitore</label>
+        </div>
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr><th>@(_perFornitore ? "Fornitore" : "Pacchetto")</th><th class="num">Pianificato</th><th class="num">Impegnato</th><th class="num">Da ordinare</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in _perFornitore ? r.PerFornitore : r.PerPacchetto)
+                    {
+                        <tr>
+                            <td>@t.Nome</td>
+                            <td class="num">@Formato.Euro(t.Pianificato)</td>
+                            <td class="num">@(t.Impegnato == 0 ? "" : Formato.Euro(t.Impegnato))</td>
+                            <td class="num">@Formato.Euro(t.Residuo)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_perFornitore)
+        {
+            <p class="testo-secondario">
+                Il pianificato segue il fornitore dell'offerta scelta («Da assegnare» per le stime interne); l'impegnato segue il fornitore dell'ordine.
+            </p>
+        }
+    </div>
+}
+
 @code {
     [Parameter] public Guid CommessaId { get; set; }
 
     private IReadOnlyList<RigaElencoOrdini>? _elenco;
-    private Guid? _daAnnullare;
+    private RiepilogoAcquisti? _riepilogo;
+    private Guid? _daAnnullare, _aperto;
     private string? _motivo, _messaggio;
-    private bool _errore;
+    private string _filtro = "";
+    private bool _errore, _perFornitore;
 
-    protected override async Task OnParametersSetAsync() => _elenco = await Ordini.ElencoAsync(CommessaId);
+    protected override Task OnParametersSetAsync() => CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _elenco = await Ordini.ElencoAsync(CommessaId);
+        _riepilogo = await Ordini.RiepilogoAsync(CommessaId);
+    }
+
+    private async Task ChiudiAsync()
+    {
+        _aperto = null;
+        await CaricaAsync();
+    }
 
     private async Task AnnullaAsync(Guid id)
     {
         try
         {
             await Ordini.AnnullaAsync(CommessaId, id, _motivo ?? "");
-            (_messaggio, _errore, _daAnnullare, _motivo) = ("Ordine annullato: il pacchetto torna a costo Provvisorio.", false, null, null);
-            _elenco = await Ordini.ElencoAsync(CommessaId);
+            (_messaggio, _errore, _daAnnullare, _motivo) = ("Ordine annullato: le sue quantità tornano da ordinare.", false, null, null);
+            await CaricaAsync();
         }
         catch (OperazioneNonValidaException ex)
         {

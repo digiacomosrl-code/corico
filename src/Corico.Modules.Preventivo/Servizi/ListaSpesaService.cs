@@ -24,15 +24,64 @@ public sealed record RigaSpesa(
     /// <summary>Fornitore indicato quando l'offerta scelta è una stima interna o non ha il fornitore.</summary>
     public const string DaAssegnare = "Da assegnare";
 
+    /// <summary>Fornitore indicato per i pacchetti eseguiti in proprio dall'impresa.</summary>
+    public const string EsecuzioneDiretta = "Esecuzione diretta";
+
     /// <summary>Descrizione e unità normalizzate: identificano la stessa risorsa in voci diverse.</summary>
     public string Chiave => Descrizione.Trim().ToLowerInvariant() + "|" + (Unita ?? "").Trim().ToLowerInvariant();
+
+    public Guid PacchettoId { get; init; }
+    public Guid? VoceId { get; init; }
+    public Guid? OffertaId { get; init; }
+    public Guid? FornitoreId { get; init; }
+
+    /// <summary>
+    /// Chiave stabile della riga per gli ordini: pacchetto, voce, categoria e risorsa (equivale al codice risorsa).
+    /// Resta la stessa finché la riga esiste, anche se cambiano quantità o prezzi.
+    /// </summary>
+    public string ChiaveOrdine => $"{PacchettoId:N}|{VoceId?.ToString("N")}|{(int)Categoria}|{Chiave}";
+
+    /// <summary>Vero se il fornitore dell'ordine si sceglie nella bozza (stima interna o esecuzione diretta).</summary>
+    public bool FornitoreLibero => Fornitore is null or DaAssegnare or EsecuzioneDiretta;
+
+    // ---- Avanzamento degli ordini emessi ----
+
+    public decimal QuantitaOrdinata { get; init; }
+    public decimal ImportoOrdinato { get; init; }
+    public IReadOnlyList<string> Ordini { get; init; } = [];
+
+    public decimal DaOrdinare => Math.Max(0, Quantita - QuantitaOrdinata);
+
+    /// <summary>Riga interamente ordinata (anche oltre il pianificato).</summary>
+    public bool Ordinata => Quantita > 0 ? QuantitaOrdinata >= Quantita : Ordini.Count > 0;
+
+    /// <summary>Quantità ordinata oltre il pianificato.</summary>
+    public bool Eccedenza => QuantitaOrdinata > Quantita;
 }
 
 public sealed record RigaSpesaAggregata(CategoriaRisorsa Categoria, string? Codice, string Descrizione, string? Unita, decimal Quantita,
-    decimal? Prezzo, decimal Importo, int Utilizzi, string? Fornitore = null);
+    decimal? Prezzo, decimal Importo, int Utilizzi, string? Fornitore = null)
+{
+    /// <summary>Chiavi delle righe per voce che compongono la riga aggregata.</summary>
+    public IReadOnlyList<string> Chiavi { get; init; } = [];
+
+    public decimal QuantitaOrdinata { get; init; }
+    public decimal DaOrdinare { get; init; }
+    public IReadOnlyList<string> Ordini { get; init; } = [];
+    public bool Eccedenza => QuantitaOrdinata > Quantita;
+
+    /// <summary>Identificativo della riga nella vista aggregata (per la selezione).</summary>
+    public string Identificativo => string.Join(";", Chiavi);
+}
 
 public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSenzaOfferta, int VociNonAssegnate = 0)
 {
+    /// <summary>Avanzamento degli ordini per pacchetto.</summary>
+    public IReadOnlyDictionary<Guid, AvanzamentoPacchetto> Pacchetti { get; init; } = new Dictionary<Guid, AvanzamentoPacchetto>();
+
+    public decimal TotaleOrdinato => Righe.Sum(r => r.ImportoOrdinato);
+    public decimal TotaleDaOrdinare => Righe.Sum(AvanzamentoOrdini.Residuo);
+
     public decimal Totale => Righe.Sum(r => r.Importo);
 
     public IReadOnlyList<string> Fornitori =>
@@ -67,7 +116,13 @@ public sealed record ListaSpesa(IReadOnlyList<RigaSpesa> Righe, int PacchettiSen
     public IReadOnlyList<RigaSpesaAggregata> Aggregata() =>
         Righe.GroupBy(r => (r.Categoria, r.Chiave, r.Prezzo, r.Fornitore))
             .Select(g => new RigaSpesaAggregata(g.Key.Categoria, g.First().Codice, g.First().Descrizione, g.First().Unita,
-                g.Sum(r => r.Quantita), g.Key.Prezzo, g.Sum(r => r.Importo), g.Count(), g.Key.Fornitore))
+                g.Sum(r => r.Quantita), g.Key.Prezzo, g.Sum(r => r.Importo), g.Count(), g.Key.Fornitore)
+            {
+                Chiavi = g.Select(r => r.ChiaveOrdine).Distinct().ToList(),
+                QuantitaOrdinata = g.Sum(r => r.QuantitaOrdinata),
+                DaOrdinare = g.Sum(r => r.DaOrdinare),
+                Ordini = g.SelectMany(r => r.Ordini).Distinct().Order().ToList(),
+            })
             .OrderBy(r => r.Categoria).ThenBy(r => r.Codice).ThenBy(r => r.Fornitore).ThenBy(r => r.Prezzo).ToList();
 }
 
@@ -81,6 +136,22 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
     public async Task<ListaSpesa> CalcolaAsync(Guid commessaId, CancellationToken ct = default)
     {
         await using var db = await fabbrica.CreateDbContextAsync(ct);
+        return await CalcolaAsync(db, commessaId, ct);
+    }
+
+    /// <summary>Lista completa: codici risorsa e avanzamento degli ordini emessi.</summary>
+    internal static async Task<ListaSpesa> CalcolaAsync(PreventivoDbContext db, Guid commessaId, CancellationToken ct)
+    {
+        var (righe, senzaOfferta, nonAssegnate) = await RigheAsync(db, commessaId, ct);
+        righe = await AssegnaCodiciAsync(db, commessaId, righe, ct);
+        var avanzamento = await AvanzamentoOrdini.CaricaAsync(db, commessaId, righe, ct);
+        return new ListaSpesa(avanzamento.Righe, senzaOfferta, nonAssegnate) { Pacchetti = avanzamento.Pacchetti };
+    }
+
+    /// <summary>Righe della Lista della Spesa senza codici risorsa né avanzamento degli ordini.</summary>
+    internal static async Task<(List<RigaSpesa> Righe, int SenzaOfferta, int NonAssegnate)> RigheAsync(
+        PreventivoDbContext db, Guid commessaId, CancellationToken ct)
+    {
         var pacchetti = await db.Pacchetti.AsNoTracking().Include(p => p.Voci)
             .Where(p => p.CommessaId == commessaId && !p.Archiviato).OrderBy(p => p.Ordine).ToListAsync(ct);
         var offerte = await PacchettiService.CaricaOfferteAsync(db, commessaId, ct);
@@ -97,9 +168,14 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
             var perVoce = scelta.Voci.ToDictionary(v => v.VoceComputoId);
             var fornitore = Fornitore(p, scelta);
 
+            var fornitoreId = fornitore == RigaSpesa.DaAssegnare || fornitore == RigaSpesa.EsecuzioneDiretta ? null : scelta.FornitoreId;
+
             RigaSpesa Riga(CategoriaRisorsa c, string descrizione, string? unita, decimal q, decimal? prezzo, decimal importo,
                 OrigineRigaSpesa origine, VoceDiCalcolo? voce, string? fonte) =>
-                new(c, descrizione, unita, q, prezzo, importo, origine, p.Descrizione, fornitore, voce?.Tariffa, voce?.Descrizione, fonte);
+                new(c, descrizione, unita, q, prezzo, importo, origine, p.Descrizione, fornitore, voce?.Tariffa, voce?.Descrizione, fonte)
+                {
+                    PacchettoId = p.Id, VoceId = voce?.Id, OffertaId = scelta.Id, FornitoreId = fornitoreId,
+                };
 
             foreach (var vc in calcolo.Voci)
             {
@@ -143,8 +219,7 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
             .Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
         var attive = await db.VociComputo.AsNoTracking().Where(v => v.ComputoId == computoAttivo && !v.Archiviata)
             .Select(v => v.Id).ToListAsync(ct);
-        righe = await AssegnaCodiciAsync(db, commessaId, righe, ct);
-        return new ListaSpesa(righe, senzaOfferta, attive.Count(id => !assegnate.Contains(id)));
+        return (righe, senzaOfferta, attive.Count(id => !assegnate.Contains(id)));
     }
 
     /// <summary>
@@ -152,7 +227,7 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
     /// «Da assegnare» se l'offerta scelta è una stima interna o non indica il fornitore.
     /// </summary>
     public static string Fornitore(Pacchetto p, Offerta scelta) =>
-        p.Tipo == TipoAffidamento.EsecuzioneDiretta ? "Esecuzione diretta"
+        p.Tipo == TipoAffidamento.EsecuzioneDiretta ? RigaSpesa.EsecuzioneDiretta
         : scelta.Tipo == TipoOfferta.StimaInterna || string.IsNullOrWhiteSpace(scelta.NomeFornitore) ? RigaSpesa.DaAssegnare
         : scelta.NomeFornitore.Trim();
 

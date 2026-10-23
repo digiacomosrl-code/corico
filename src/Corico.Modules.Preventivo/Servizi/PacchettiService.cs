@@ -13,6 +13,20 @@ public sealed record RigaTabellone(
     string? Fornitore, StatoCosto Stato, int NumeroVoci, int NumeroOfferte, bool OffertaScelta,
     decimal RicavoNetto, decimal? Costo, NotaPacchetto? UltimaNota, decimal Integrazioni = 0)
 {
+    /// <summary>Costo dell'offerta scelta; <see cref="Costo"/> è il costo attuale (con gli ordini emessi).</summary>
+    public decimal? CostoPianificato { get; init; }
+
+    /// <summary>Costo del pacchetto nel budget di riferimento; null senza budget o se il pacchetto non c'era.</summary>
+    public decimal? CostoBudget { get; init; }
+
+    public decimal? MdcBudget { get; init; }
+    public decimal ImportoOrdinato { get; init; }
+    public decimal PercentualeOrdinata { get; init; }
+    public bool HaOrdini { get; init; }
+
+    /// <summary>Costo attuale meno costo budget: positivo = costo in aumento.</summary>
+    public decimal? Scostamento => Costo is null || CostoBudget is null ? null : Costo - CostoBudget;
+
     /// <summary>Ricavo del pacchetto (R7): ricavo netto delle voci più integrazioni a importo.</summary>
     public decimal Ricavo => RicavoNetto + Integrazioni;
     public decimal? Mdc => Costo is null ? null : Ricavo - Costo;
@@ -22,6 +36,12 @@ public sealed record RigaTabellone(
 public sealed record Tabellone(IReadOnlyList<RigaTabellone> Righe, decimal RibassoPercentuale,
     int VociNonAssegnate, decimal RicavoNonAssegnato)
 {
+    /// <summary>Budget di riferimento della colonna «Costo budget» (es. «Budget 0 approvato»); null se non c'è.</summary>
+    public string? Budget { get; init; }
+
+    public decimal? CostoBudget => Budget is null ? null : Righe.Sum(r => r.CostoBudget ?? 0);
+    public decimal? Scostamento => CostoBudget is null ? null : Righe.Where(r => r.Costo is not null).Sum(r => r.Costo!.Value - (r.CostoBudget ?? 0));
+
     public decimal RicavoPacchetti => Righe.Sum(r => r.Ricavo);
     public decimal CostoPacchetti => Righe.Sum(r => r.Costo ?? 0);
     public decimal RicavoConCosto => Righe.Where(r => r.Costo is not null).Sum(r => r.Ricavo);
@@ -56,6 +76,10 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
                 .Where(i => i.CommessaId == commessaId && i.PacchettoId != null).ToListAsync(ct))
             .GroupBy(i => i.PacchettoId!.Value).ToDictionary(g => g.Key, g => g.Sum(i => i.Importo));
 
+        var avanzamento = await AvanzamentoOrdini.CaricaAsync(db, commessaId, ct);
+        var budget = await BudgetService.RiferimentoAsync(db, commessaId, ct);
+        var pacchettiBudget = budget?.Fotografia.Pacchetti.ToDictionary(p => p.Id) ?? [];
+
         var righe = new List<RigaTabellone>();
         foreach (var p in pacchetti)
         {
@@ -73,9 +97,19 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             {
                 ricavo = CalcoloPacchetti.RicavoDaComputo(vociPacchetto, preventivo.RibassoPercentuale).Netto;
             }
+            var a = avanzamento.Di(p.Id);
+            var b = pacchettiBudget.GetValueOrDefault(p.Id);
             righe.Add(new RigaTabellone(p.Id, p.Versione, p.Ordine, p.Codice, p.Descrizione, p.Tipo, p.RiferimentoOda,
                 scelta?.NomeFornitore, p.StatoCosto, vociPacchetto.Count, offertePacchetto.Count, scelta is not null,
-                ricavo, costo, note.GetValueOrDefault(p.Id), integrazioni.GetValueOrDefault(p.Id)));
+                ricavo, a is { HaOrdini: true } ? a.CostoAttuale : costo, note.GetValueOrDefault(p.Id), integrazioni.GetValueOrDefault(p.Id))
+            {
+                CostoPianificato = costo,
+                CostoBudget = b?.Costo,
+                MdcBudget = b?.Mdc,
+                ImportoOrdinato = a?.ImportoOrdinato ?? 0,
+                PercentualeOrdinata = a?.PercentualeOrdinata ?? 0,
+                HaOrdini = a?.HaOrdini ?? false,
+            });
         }
 
         var assegnate = pacchetti.SelectMany(p => p.Voci).Select(v => v.VoceComputoId).ToHashSet();
@@ -88,7 +122,10 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
         libere = libere.Where(v => !assegnate.Contains(v.Id)).ToList();
 
         return new Tabellone(righe, preventivo.RibassoPercentuale, libere.Count,
-            CalcoloPacchetti.RicavoDaComputo(libere, preventivo.RibassoPercentuale).Netto);
+            CalcoloPacchetti.RicavoDaComputo(libere, preventivo.RibassoPercentuale).Netto)
+        {
+            Budget = budget is { } bb ? BudgetService.Etichetta(bb.Versione) : null,
+        };
     }
 
     public async Task<DettaglioPacchetto?> DettaglioAsync(Guid commessaId, Guid pacchettoId, CancellationToken ct = default)

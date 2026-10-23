@@ -1,0 +1,388 @@
+@* Ordine di acquisto in bozza (Modulo 2, rilascio 2A): testata, fornitore, righe con quantità, prezzi e note, righe libere; emissione. *@
+@inject OrdiniService Ordini
+@inject FornitoriService Fornitori
+@inject PacchettiService Pacchetti
+@inject ConflittiService Conflitti
+@inject SessioneUtente Sessione
+
+@if (_ordine is null || _verifica is null)
+{
+    <div class="riquadro"><p class="testo-secondario">Caricamento…</p></div>
+    return;
+}
+@{ var o = _ordine; var bozza = o.Stato == StatoOrdine.Bozza; }
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>@(bozza ? "Ordine in bozza" : $"Ordine {o.Numero}")@(o.Fornitore.Length > 0 ? $" – {o.Fornitore}" : "")</h3>
+        <div class="azioni-in-linea">
+            <a class="pulsante" href="@($"preventivo/{CommessaId}/ordini/{o.Id}.pdf")" target="_blank">@(bozza ? "Anteprima PDF" : "Stampa ordine (PDF)")</a>
+            <button class="pulsante" @onclick="ChiudiAsync">Chiudi</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (bozza)
+    {
+        <p class="testo-secondario">
+            Preparata da @o.CreatoDa il @Formato.DataOra(o.CreatoIl). Le bozze non consumano numeri: il numero ODA si assegna all'emissione.
+            Puoi ridurre le quantità (consegne frazionate), correggere un prezzo indicando il motivo, aggiungere righe libere (trasporto, imballo).
+        </p>
+        @foreach (var a in _verifica.Avvisi)
+        {
+            <div class="segnalazione segnalazione-informazione">@a</div>
+        }
+        @if (!_verifica.AziendaCompilata)
+        {
+            <div class="segnalazione segnalazione-attenzione">
+                I dati dell'impresa per l'intestazione non sono compilati: inseriscili in <a href="amministrazione">Amministrazione → Dati dell'impresa</a>.
+            </div>
+        }
+
+        <div class="griglia-form">
+            <label class="largo">
+                Fornitore
+                @if (o.FornitoreDaOfferta)
+                {
+                    <input value="@o.Fornitore" disabled title="Fornitore dell'offerta scelta" />
+                }
+                else
+                {
+                    <select value="@(o.FornitoreId?.ToString() ?? "")" @onchange="CambiaFornitore">
+                        <option value="">— scegli dall'anagrafica —</option>
+                        @foreach (var f in _fornitori)
+                        {
+                            <option value="@f.Id">@f.Denominazione</option>
+                        }
+                    </select>
+                }
+            </label>
+            <label>Data <input type="date" @bind="o.Data" /></label>
+            <label class="largo">Oggetto <input @bind="o.Oggetto" /></label>
+            <label class="largo">Luogo di consegna <input @bind="o.LuogoConsegna" /></label>
+            <label>Consegna (tempi) <input @bind="o.Consegna" /></label>
+            <label>Pagamento <input @bind="o.Pagamento" /></label>
+            <label class="largo">Note <textarea rows="2" @bind="o.Note"></textarea></label>
+        </div>
+    }
+    else
+    {
+        <p>
+            <strong>@o.Numero</strong> del @Formato.Data(o.Data) a <strong>@o.Fornitore</strong>, totale @Formato.Euro(o.Totale).
+            Preparato da @o.CreatoDa@(o.EmessoDa is null ? "" : $", emesso da {o.EmessoDa}").
+            @if (o.Stato == StatoOrdine.Annullato)
+            {
+                <span class="testo-negativo"> Annullato il @Formato.Data(o.AnnullatoIl): @o.MotivoAnnullamento</span>
+            }
+        </p>
+    }
+
+    <div class="scorrevole">
+        <table class="tabella">
+            <thead>
+                <tr>
+                    <th>N.</th><th>Codice</th><th>Descrizione</th><th>Pacchetto</th><th>U.M.</th>
+                    @if (bozza)
+                    {
+                        <th class="num">Da ordinare</th>
+                    }
+                    <th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Importo</th><th>Nota</th>
+                    @if (bozza)
+                    {
+                        <th></th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in o.Righe.OrderBy(r => r.Ordine))
+                {
+                    var info = _verifica.Di(r.Id);
+                    var libera = r.Origini.Count == 0;
+                    var eccedenza = info?.DaOrdinare is { } d && r.Quantita > d + 0.0001m;
+                    var prezzoDiverso = r.PrezzoPianificato is { } pp && Math.Round(pp, 4) != Math.Round(r.Prezzo, 4);
+                    <tr>
+                        <td>@r.Ordine</td>
+                        @if (bozza && libera)
+                        {
+                            <td><input class="stretto" @bind="r.Codice" /></td>
+                            <td><input class="largo" @bind="r.Descrizione" placeholder="Es. Trasporto" /></td>
+                            <td>
+                                <select @bind="r.PacchettoId">
+                                    <option value="">—</option>
+                                    @foreach (var p in _pacchetti)
+                                    {
+                                        <option value="@p.Id">@p.Descrizione</option>
+                                    }
+                                </select>
+                            </td>
+                            <td><input class="stretto" @bind="r.Unita" /></td>
+                        }
+                        else
+                        {
+                            <td class="codice">@r.Codice</td>
+                            <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
+                            <td class="descrizione-breve" title="@info?.Pacchetti">@info?.Pacchetti</td>
+                            <td>@r.Unita</td>
+                        }
+                        @if (bozza)
+                        {
+                            <td class="num">@(info?.DaOrdinare is { } da ? Formato.Numero(da) : "")</td>
+                            <td class="num"><input type="number" step="any" class="numero @(eccedenza ? "testo-negativo" : "")" @bind="r.Quantita" @bind:after="Ricalcola" /></td>
+                            <td class="num">
+                                <input type="number" step="any" class="numero @(prezzoDiverso ? "testo-differenza" : "")" @bind="r.Prezzo" @bind:after="Ricalcola" />
+                                @if (prezzoDiverso)
+                                {
+                                    <div class="testo-secondario">pianificato @Formato.Euro(r.PrezzoPianificato)</div>
+                                }
+                            </td>
+                            <td class="num">@Formato.Euro(Importi.Arrotonda(r.Quantita * r.Prezzo))</td>
+                            <td>
+                                <input class="@((eccedenza || prezzoDiverso) && string.IsNullOrWhiteSpace(r.NotaScostamento) ? "da-compilare" : "")"
+                                       placeholder="@(eccedenza || prezzoDiverso ? "Motivo (obbligatorio)" : "")" @bind="r.NotaScostamento" />
+                            </td>
+                            <td><button class="pulsante piccolo" title="Togli la riga dall'ordine" @onclick="() => Togli(r)">✕</button></td>
+                        }
+                        else
+                        {
+                            <td class="num">@Formato.Numero(r.Quantita)</td>
+                            <td class="num">@Formato.Numero(r.Prezzo, r.Prezzo == Math.Round(r.Prezzo, 2) ? 2 : 4)</td>
+                            <td class="num">@Formato.Euro(r.Importo)</td>
+                            <td>@r.NotaScostamento</td>
+                        }
+                    </tr>
+                }
+                <tr class="totale">
+                    <td colspan="@(bozza ? 8 : 7)">Totale imponibile (IVA esclusa)</td>
+                    <td class="num">@Formato.Euro(o.Righe.Sum(r => Importi.Arrotonda(r.Quantita * r.Prezzo)))</td>
+                    <td colspan="@(bozza ? 2 : 1)"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    @if (bozza)
+    {
+        <div class="riga-form">
+            <button class="pulsante piccolo" @onclick="AggiungiRigaLibera">+ Riga libera (trasporto, imballo…)</button>
+        </div>
+
+        @foreach (var i in _verifica.Impedimenti)
+        {
+            <div class="segnalazione segnalazione-attenzione">@i</div>
+        }
+
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@_occupato" @onclick="SalvaAsync">Salva bozza</button>
+            @if (Sessione.PuoEmettereOrdini)
+            {
+                @if (!_conferma)
+                {
+                    <button class="pulsante primario" disabled="@_occupato" @onclick="ChiediConfermaAsync">Emetti ordine…</button>
+                }
+                else
+                {
+                    <span class="testo-differenza">All'emissione l'ordine riceve il numero e non si modifica più. Confermi?</span>
+                    <button class="pulsante primario" disabled="@_occupato" @onclick="EmettiAsync">Conferma emissione</button>
+                    <button class="pulsante" @onclick="() => _conferma = false">Indietro</button>
+                }
+            }
+            else
+            {
+                <span class="testo-secondario">L'emissione spetta all'amministratore o a un operatore abilitato: salva la bozza e avvisalo.</span>
+            }
+            @if (!_eliminazione)
+            {
+                <button class="pulsante" @onclick="() => _eliminazione = true">Elimina bozza…</button>
+            }
+            else
+            {
+                <button class="pulsante pericolo" @onclick="EliminaAsync">Conferma eliminazione</button>
+                <button class="pulsante" @onclick="() => _eliminazione = false">Indietro</button>
+            }
+        </div>
+    }
+    else if (o.Stato == StatoOrdine.Emesso)
+    {
+        <h4>Invio e conferma (facoltativi)</h4>
+        <div class="griglia-form">
+            <label>Inviato al fornitore il <input type="date" @bind="_inviatoIl" /></label>
+            <label>Conferma d'ordine ricevuta il <input type="date" @bind="_confermatoIl" /></label>
+            <label class="largo">
+                PDF della conferma (dall'archivio della commessa)
+                <select @bind="_documentoId">
+                    <option value="">—</option>
+                    @foreach (var d in _documenti)
+                    {
+                        <option value="@d.Id">@d.NomeOriginale@(d.Descrizione is null ? "" : $" – {d.Descrizione}")</option>
+                    }
+                </select>
+            </label>
+        </div>
+        <div class="azioni">
+            <button class="pulsante" @onclick="RegistraInvioAsync">Salva invio e conferma</button>
+            @if (o.ConfermaDocumentoId is { } doc)
+            {
+                <a class="pulsante" href="@($"documenti/{doc}/scarica")" target="_blank">Apri la conferma</a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Guid OrdineId { get; set; }
+    [Parameter] public EventCallback OnChiuso { get; set; }
+
+    [Inject] private DocumentiService Documenti { get; set; } = default!;
+
+    private OrdineAcquisto? _ordine;
+    private VerificaBozza? _verifica;
+    private IReadOnlyList<DatiFornitore> _fornitori = [];
+    private IReadOnlyList<(Guid Id, int Ordine, string Descrizione)> _pacchetti = [];
+    private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
+    private DateOnly? _inviatoIl, _confermatoIl;
+    private Guid? _documentoId;
+    private string? _messaggio;
+    private bool _errore, _occupato, _conferma, _eliminazione;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _fornitori = await Fornitori.ElencoAsync();
+        _pacchetti = (await Pacchetti.AssegnazioniAsync(CommessaId)).Pacchetti;
+        _documenti = await Documenti.ElencoAsync(CommessaId);
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync()
+    {
+        _ordine = await Ordini.OttieniAsync(CommessaId, OrdineId);
+        if (_ordine is null) { await OnChiuso.InvokeAsync(); return; }
+        _verifica = await Ordini.VerificaAsync(CommessaId, OrdineId);
+        (_inviatoIl, _confermatoIl, _documentoId) = (_ordine.InviatoIl, _ordine.ConfermatoIl, _ordine.ConfermaDocumentoId);
+        _conferma = false;
+    }
+
+    private void Ricalcola() { }
+
+    private void CambiaFornitore(ChangeEventArgs e)
+    {
+        if (_ordine is null) return;
+        _ordine.FornitoreId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        _ordine.Fornitore = _fornitori.FirstOrDefault(f => f.Id == _ordine.FornitoreId)?.Denominazione ?? "";
+    }
+
+    private void AggiungiRigaLibera()
+    {
+        if (_ordine is null) return;
+        var predefinito = _ordine.PacchettoId ?? _ordine.Righe.SelectMany(r => r.Origini).Select(x => (Guid?)x.PacchettoId).FirstOrDefault();
+        _ordine.Righe.Add(new RigaOrdine
+        {
+            OrdineId = _ordine.Id, CommessaId = CommessaId, Ordine = _ordine.Righe.Count == 0 ? 1 : _ordine.Righe.Max(r => r.Ordine) + 1,
+            Unita = "a corpo", Quantita = 1, PacchettoId = predefinito,
+        });
+    }
+
+    private void Togli(RigaOrdine r) => _ordine?.Righe.Remove(r);
+
+    private async Task<bool> SalvaInternoAsync()
+    {
+        if (_ordine is null) return false;
+        try
+        {
+            await Ordini.SalvaBozzaAsync(CommessaId, _ordine);
+            await CaricaAsync();
+            return true;
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        return false;
+    }
+
+    private async Task SalvaAsync()
+    {
+        _occupato = true;
+        if (await SalvaInternoAsync()) (_messaggio, _errore) = ("Bozza salvata.", false);
+        _occupato = false;
+    }
+
+    private async Task ChiediConfermaAsync()
+    {
+        _occupato = true;
+        if (await SalvaInternoAsync())
+        {
+            _messaggio = null;
+            if (_verifica!.Emettibile) _conferma = true;
+            else (_messaggio, _errore) = ("Prima di emettere correggi i punti segnalati sotto le righe.", true);
+        }
+        _occupato = false;
+    }
+
+    private async Task EmettiAsync()
+    {
+        _occupato = true;
+        try
+        {
+            var o = await Ordini.EmettiAsync(CommessaId, OrdineId);
+            (_messaggio, _errore) = ($"Ordine {o.Numero} emesso. Lo stampi con «Stampa ordine (PDF)» e lo invii al fornitore dalla tua posta.", false);
+            await CaricaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore, _conferma) = (ex.Message, true, false);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task EliminaAsync()
+    {
+        try
+        {
+            await Ordini.EliminaBozzaAsync(CommessaId, OrdineId);
+            await OnChiuso.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task RegistraInvioAsync()
+    {
+        try
+        {
+            await Ordini.RegistraInvioAsync(CommessaId, OrdineId, _inviatoIl, _confermatoIl, _documentoId);
+            (_messaggio, _errore) = ("Date di invio e conferma salvate.", false);
+            await CaricaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private Task ChiudiAsync() => OnChiuso.InvokeAsync();
+}

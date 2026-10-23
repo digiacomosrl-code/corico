@@ -55,8 +55,13 @@ public sealed record VoceFotografia(
 public sealed record PacchettoFotografia(
     Guid Id, int Ordine, string Descrizione, TipoAffidamento Tipo, StatoCosto Stato,
     string? Fornitore, string? NumeroOfferta, DateOnly? DataOfferta, DateOnly? ScadenzaOfferta,
-    int NumeroVoci, int NumeroOfferte, decimal RicavoNetto, decimal Integrazioni, decimal? Costo)
+    int NumeroVoci, int NumeroOfferte, decimal RicavoNetto, decimal Integrazioni, decimal? Costo,
+    decimal? CostoPianificato = null, decimal ImportoOrdinato = 0, decimal PercentualeOrdinata = 0)
 {
+    // Costo: costo attuale (ordini emessi + quanto resta da ordinare ai prezzi pianificati); CostoPianificato: dall'offerta scelta.
+    // Le fotografie precedenti al Modulo 2 non hanno CostoPianificato: coincide con il costo.
+    public decimal? CostoOfferta => CostoPianificato ?? Costo;
+
     public decimal Ricavo => RicavoNetto + Integrazioni;
     public decimal? Mdc => Costo is null ? null : Ricavo - Costo;
     public decimal? MarginePercentuale => Importi.MargineSulRicavo(Ricavo, Costo);

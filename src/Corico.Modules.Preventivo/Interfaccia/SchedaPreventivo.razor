@@ -19,15 +19,23 @@
     return;
 }
 
+@if (_stato.BloccoBudget is { } blocco)
+{
+    <div class="blocco-budget">
+        @blocco: i prezzi contrattuali (computo, prezzi, quantità e ribasso d'asta) sono bloccati e cambiano solo con una perizia di variante.
+        Pacchetti, offerte e Lista della Spesa restano modificabili.
+    </div>
+}
+
 <div class="colonne-preventivo">
     <div class="riquadro">
         <h3>Quadro economico dei ricavi</h3>
         <div class="riga-form">
             <label>
                 Ribasso d'asta unico (%)
-                <input type="number" step="0.0001" min="0" max="99.9999" @bind="_ribasso" />
+                <input type="number" step="0.0001" min="0" max="99.9999" @bind="_ribasso" disabled="@(_stato.BloccoBudget is not null)" />
             </label>
-            <button class="pulsante primario" @onclick="SalvaRibassoAsync" disabled="@(_ribasso == _stato.RibassoPercentuale)">Applica</button>
+            <button class="pulsante primario" @onclick="SalvaRibassoAsync" disabled="@(_ribasso == _stato.RibassoPercentuale || _stato.BloccoBudget is not null)">Applica</button>
         </div>
         @{ var q = _stato.Quadro; }
         <table class="tabella quadro">
@@ -90,13 +98,16 @@
             <p class="testo-secondario">Nessun computo. Importa un file XPWE (PriMus) o Excel oppure inserisci le voci manualmente.</p>
         }
 
-        <div class="riga-form">
-            <label class="pulsante">
-                Importa computo (XPWE o Excel)…
-                <InputFile OnChange="LeggiFileAsync" accept="@ImportazioneComputoService.EstensioniAccettate" style="display:none" />
-            </label>
-            <button class="pulsante" @onclick="NuovaVoce">Nuova voce manuale</button>
-        </div>
+        @if (_stato.BloccoBudget is null)
+        {
+            <div class="riga-form">
+                <label class="pulsante">
+                    Importa computo (XPWE o Excel)…
+                    <InputFile OnChange="LeggiFileAsync" accept="@ImportazioneComputoService.EstensioniAccettate" style="display:none" />
+                </label>
+                <button class="pulsante" @onclick="NuovaVoce">Nuova voce manuale</button>
+            </div>
+        }
         @if (_computi.Count > 1)
         {
             <p class="testo-secondario">Computi precedenti conservati: @(_computi.Count - 1) (consultabili nello storico e nei documenti).</p>

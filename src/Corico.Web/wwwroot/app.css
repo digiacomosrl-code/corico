@@ -240,3 +240,27 @@ tr.dettaglio-annullamento .tabella { width: auto; min-width: 32rem; margin-botto
 .dialogo { background: #fff; border-radius: var(--raggio); padding: 1.25rem 1.5rem; width: 100%; max-width: 760px; max-height: 84vh; overflow: auto; box-shadow: 0 10px 32px rgba(0,0,0,.25); }
 .dialogo .tabella { margin: .5rem 0 1rem; }
 .ultima-modifica { font-size: .82rem; color: var(--testo-secondario); }
+
+/* Modulo 2: ordini in bozza, Lista della Spesa con selezione, budget (2A) */
+input.numero { width: 7rem; text-align: right; }
+input.stretto { width: 6rem; }
+input.da-compilare { border-color: var(--rosso); background: var(--rosso-chiaro); }
+tr.selezionata td { background: var(--blu-chiaro); }
+tr.ordinata td { color: var(--testo-secondario); }
+.testo-eccedenza { color: var(--rosso); font-weight: 600; }
+.barra-selezione { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: .75rem; align-items: center;
+    background: #fff; border: 1px solid var(--blu-medio); border-radius: var(--raggio); padding: .5rem .75rem; margin-top: .5rem;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.08); }
+.etichetta-budget-inapprovazione { background: var(--ambra-chiaro); color: var(--ambra); }
+.etichetta-budget-approvato { background: var(--verde-chiaro); color: var(--verde); }
+.etichetta-budget-respinto { background: var(--rosso-chiaro); color: var(--rosso); }
+.etichetta-ordine-bozza { background: var(--ambra-chiaro); color: var(--ambra); }
+.etichetta-ordine-emesso { background: var(--verde-chiaro); color: var(--verde); }
+.etichetta-ordine-annullato { background: var(--grigio-sfondo); color: var(--testo-secondario); }
+.blocco-budget { background: var(--blu-chiaro); color: var(--blu); border-radius: var(--raggio); padding: .45rem .75rem; margin-bottom: .75rem; }
+ul.controlli { list-style: none; padding: 0; margin: .5rem 0; }
+ul.controlli > li { padding: .35rem 0; border-bottom: 1px solid var(--grigio-sfondo); }
+ul.controlli ul { margin: .25rem 0 0 1.5rem; font-size: .88rem; color: var(--testo-secondario); }
+.esito-ok { color: var(--verde); font-weight: 600; }
+.esito-ko { color: var(--rosso); font-weight: 600; }
+.esito-avviso { color: var(--ambra); font-weight: 600; }

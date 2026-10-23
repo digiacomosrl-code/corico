@@ -11,7 +11,12 @@ public interface IUtenteCorrente
 }
 
 /// <summary>Dati dell'utente collegato, validi per la durata di un'operazione.</summary>
-public sealed record IdentitaUtente(Guid Id, string NomeUtente, string Nome, RuoloUtente Ruolo, bool Attivo = true, bool CambioPasswordObbligatorio = false);
+public sealed record IdentitaUtente(Guid Id, string NomeUtente, string Nome, RuoloUtente Ruolo, bool Attivo = true, bool CambioPasswordObbligatorio = false,
+    bool PuoEmettereOrdini = false)
+{
+    /// <summary>Amministratore oppure operatore con la spunta «Può emettere ordini e adottare variazioni».</summary>
+    public bool AbilitatoOrdini => Attivo && (Ruolo == RuoloUtente.Amministratore || (Ruolo == RuoloUtente.Operatore && PuoEmettereOrdini));
+}
 
 /// <summary>
 /// Utente corrente «di ambiente»: l'interfaccia lo imposta all'inizio di ogni interazione (circuito Blazor o richiesta HTTP)
@@ -28,6 +33,9 @@ public sealed class UtenteCorrente : IUtenteCorrente
 
     /// <summary>Vero per l'amministratore e per le operazioni di sistema (nessun utente collegato).</summary>
     public static bool PuoAmministrare => Corrente.Value is null || Corrente.Value.Ruolo == RuoloUtente.Amministratore;
+
+    /// <summary>Vero per chi può emettere ordini e adottare variazioni, e per le operazioni di sistema.</summary>
+    public static bool PuoEmettereOrdini => Corrente.Value is null || Corrente.Value.AbilitatoOrdini;
 
     /// <summary>Imposta l'utente per l'operazione in corso; il valore precedente torna al termine (Dispose).</summary>
     public static IDisposable Imposta(IdentitaUtente? identita)

@@ -11,7 +11,7 @@ public sealed record EsitoAccesso(IdentitaUtente? Identita, string? Errore)
 }
 
 public sealed record RigaUtente(Guid Id, int Versione, string NomeUtente, string NomeCompleto, string? Email, RuoloUtente Ruolo,
-    bool Attivo, bool CambioPasswordObbligatorio, DateTime? UltimoAccesso);
+    bool Attivo, bool CambioPasswordObbligatorio, DateTime? UltimoAccesso, bool PuoEmettereOrdini = false);
 
 /// <summary>
 /// Utenti, accesso e password (sez. 4). Blocco temporaneo dopo <see cref="TentativiMassimi"/> tentativi errati;
@@ -37,7 +37,7 @@ public sealed class UtentiService(IDbContextFactory<CoreDbContext> fabbrica, Tim
         return (await db.Utenti.AsNoTracking().ToListAsync(ct))
             .OrderBy(u => !u.Attivo).ThenBy(u => u.NomeCompleto, StringComparer.CurrentCultureIgnoreCase)
             .Select(u => new RigaUtente(u.Id, u.Versione, u.NomeUtente, u.NomeCompleto, u.Email, u.Ruolo, u.Attivo,
-                u.CambioPasswordObbligatorio, u.UltimoAccesso))
+                u.CambioPasswordObbligatorio, u.UltimoAccesso, u.PuoEmettereOrdini))
             .ToList();
     }
 
@@ -117,11 +117,16 @@ public sealed class UtentiService(IDbContextFactory<CoreDbContext> fabbrica, Tim
     }
 
     /// <summary>Nuovo utente con password provvisoria, da cambiare al primo accesso. Restituisce la password provvisoria.</summary>
-    public async Task<string> CreaAsync(string nomeUtente, string nomeCompleto, string? email, RuoloUtente ruolo, CancellationToken ct = default)
+    public async Task<string> CreaAsync(string nomeUtente, string nomeCompleto, string? email, RuoloUtente ruolo, CancellationToken ct = default) =>
+        await CreaAsync(nomeUtente, nomeCompleto, email, ruolo, puoEmettereOrdini: false, ct);
+
+    public async Task<string> CreaAsync(string nomeUtente, string nomeCompleto, string? email, RuoloUtente ruolo, bool puoEmettereOrdini,
+        CancellationToken ct = default)
     {
         var provvisoria = Password.Provvisoria();
         await using var db = await fabbrica.CreateDbContextAsync(ct);
         var u = Nuovo(nomeUtente, nomeCompleto, email, ruolo, provvisoria, cambioObbligatorio: true);
+        u.PuoEmettereOrdini = puoEmettereOrdini && ruolo == RuoloUtente.Operatore;
         if (await db.Utenti.AnyAsync(x => x.NomeUtente == u.NomeUtente, ct))
             throw new OperazioneNonValidaException($"Esiste già un utente «{u.NomeUtente}».");
         db.Utenti.Add(u);
@@ -130,7 +135,12 @@ public sealed class UtentiService(IDbContextFactory<CoreDbContext> fabbrica, Tim
         return provvisoria;
     }
 
-    public async Task ModificaAsync(Guid id, int versione, string nomeCompleto, string? email, RuoloUtente ruolo, bool attivo, CancellationToken ct = default)
+    public Task ModificaAsync(Guid id, int versione, string nomeCompleto, string? email, RuoloUtente ruolo, bool attivo, CancellationToken ct = default) =>
+        ModificaAsync(id, versione, nomeCompleto, email, ruolo, attivo, puoEmettereOrdini: null, ct);
+
+    /// <summary>Modifica dell'utente; <paramref name="puoEmettereOrdini"/> null lascia invariata l'abilitazione agli ordini.</summary>
+    public async Task ModificaAsync(Guid id, int versione, string nomeCompleto, string? email, RuoloUtente ruolo, bool attivo, bool? puoEmettereOrdini,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(nomeCompleto)) throw new OperazioneNonValidaException("Il nome e cognome è obbligatorio.");
         await using var db = await fabbrica.CreateDbContextAsync(ct);
@@ -144,6 +154,8 @@ public sealed class UtentiService(IDbContextFactory<CoreDbContext> fabbrica, Tim
         u.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
         u.Ruolo = ruolo;
         u.Attivo = attivo;
+        if (puoEmettereOrdini is { } abilitato) u.PuoEmettereOrdini = abilitato;
+        if (ruolo != RuoloUtente.Operatore) u.PuoEmettereOrdini = false;
         await db.SaveChangesAsync(ct);
         _cache.Clear();
     }

@@ -242,6 +242,96 @@ public static class EsportazioneExcel
         return Salva(wb);
     }
 
+    /// <summary>Nome del foglio dell'Excel di una richiesta d'offerta (riconosciuto alla lettura del file compilato).</summary>
+    public const string FoglioRichiesta = "Richiesta";
+
+    /// <summary>Colonna del prezzo unitario da compilare; la successiva è lo sconto. La colonna 1 (nascosta) è l'identificativo della riga.</summary>
+    public const int ColonnaPrezzoRichiesta = 7;
+
+    /// <summary>
+    /// Richiesta d'offerta per un fornitore: voci senza prezzi, con le colonne prezzo e sconto da compilare, l'importo calcolato
+    /// e le condizioni da indicare. Il fornitore può restituire il file compilato: Corico ne legge i prezzi.
+    /// </summary>
+    public static byte[] Richiesta(Corico.Core.Servizi.DatiAzienda azienda, Dominio.RichiestaOfferta r, string? fornitore, string commessa)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.AddWorksheet(FoglioRichiesta);
+        const int colonne = 9;
+        ws.Cell(1, 2).Value = $"RICHIESTA D'OFFERTA {r.Numero} del {Corico.Core.Calcolo.Formato.Data(r.Data)}";
+        ws.Cell(1, 2).Style.Font.SetBold().Font.SetFontSize(14).Font.SetFontColor(XLColor.FromHtml(Stile.Primario));
+        ws.Range(1, 2, 1, colonne).Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        ws.Range(1, 2, 1, colonne).Style.Border.BottomBorderColor = XLColor.FromHtml(Stile.Primario);
+        var riga = 2;
+        void Info(string etichetta, string? valore, bool grassetto = false)
+        {
+            if (string.IsNullOrWhiteSpace(valore)) return;
+            ws.Cell(riga, 2).Value = etichetta;
+            ws.Cell(riga, 2).Style.Font.FontColor = XLColor.FromHtml(Stile.TestoSecondario);
+            ws.Cell(riga, 4).Value = valore;
+            ws.Cell(riga, 4).Style.Font.Bold = grassetto;
+            riga++;
+        }
+        Info("Da", string.Join(" – ", azienda.Intestazione().Take(2)) is { Length: > 0 } a ? a : null, true);
+        Info("Spett.le", fornitore, true);
+        Info("Commessa", commessa);
+        Info("Oggetto", r.Oggetto, true);
+        Info("Luogo dei lavori", r.LuogoLavori);
+        Info("Risposta entro il", Corico.Core.Calcolo.Formato.Data(r.Scadenza) is { Length: > 0 } sc ? sc : null, true);
+        Info("Note", r.Note);
+        riga++;
+        ws.Cell(riga, 2).Value = "Compilate le colonne gialle (prezzo unitario e sconto) e restituite il file: l'importo si calcola da solo. " +
+                                 "Non modificate la struttura del foglio.";
+        ws.Cell(riga, 2).Style.Font.Italic = true;
+        riga += 2;
+
+        string[] titoli = ["Id", "N.", "Codice", "Descrizione", "U.M.", "Quantità", "Prezzo unitario €", "Sconto %", "Importo €"];
+        riga = Titoli(ws, riga, titoli);
+        var primo = riga;
+        foreach (var x in r.Righe.OrderBy(x => x.Ordine))
+        {
+            ws.Cell(riga, 1).Value = x.Id.ToString();
+            ws.Cell(riga, 2).Value = x.Ordine;
+            ws.Cell(riga, 3).Value = x.Codice;
+            ws.Cell(riga, 4).Value = x.Descrizione;
+            ws.Cell(riga, 5).Value = x.Unita;
+            ws.Cell(riga, 6).Value = x.Quantita;
+            ws.Cell(riga, 9).FormulaA1 = $"IF(G{riga}=\"\",\"\",ROUND(F{riga}*G{riga}*(1-H{riga}/100),2))";
+            riga++;
+        }
+        StileCorpo(ws.Range(primo, 1, riga - 1, colonne));
+        var gialle = ws.Range(primo, ColonnaPrezzoRichiesta, riga - 1, ColonnaPrezzoRichiesta + 1);
+        gialle.Style.Fill.BackgroundColor = XLColor.FromHtml("#FFF7D6");
+        ws.Cell(riga, 4).Value = "Totale imponibile (IVA esclusa)";
+        ws.Cell(riga, 9).FormulaA1 = $"SUM(I{primo}:I{riga - 1})";
+        StileTotale(ws.Range(riga, 2, riga, colonne));
+        ws.Range(primo, 6, riga, 6).Style.NumberFormat.Format = FormatoNumero;
+        ws.Range(primo, 7, riga, 7).Style.NumberFormat.Format = "#,##0.00##";
+        ws.Range(primo, 8, riga, 8).Style.NumberFormat.Format = "0.00";
+        ws.Range(primo, 9, riga, 9).Style.NumberFormat.Format = FormatoEuro;
+        var ultima = riga;
+        riga += 2;
+
+        ws.Cell(riga, 2).Value = "Condizioni dell'offerta";
+        ws.Cell(riga, 2).Style.Font.SetBold().Font.SetFontColor(XLColor.FromHtml(Stile.Primario));
+        riga++;
+        foreach (var etichetta in new[] { "Vostro numero d'offerta", "Validità dell'offerta (giorni)", "Pagamento", "Tempi di consegna", "Esclusioni e oneri a vostro carico" })
+        {
+            ws.Cell(riga, 2).Value = etichetta;
+            ws.Range(riga, 2, riga, 2).Style.Font.Bold = true;
+            ws.Cell(riga, 3).Style.Fill.BackgroundColor = XLColor.FromHtml("#FFF7D6");
+            ws.Range(riga, 3, riga, colonne).Merge().Style.Border.BottomBorder = XLBorderStyleValues.Hair;
+            riga++;
+        }
+
+        Larghezze(ws, 4, 9, 14, 60, 8, 12, 14, 10, 15);
+        ws.Column(1).Hide();
+        ws.Column(4).Style.Alignment.WrapText = true;
+        ws.SheetView.FreezeRows(primo - 1);
+        Pagina(ws, orizzontale: false, primo - 1);
+        ws.PageSetup.PrintAreas.Add(1, 2, Math.Max(ultima, riga), colonne);
+        return Salva(wb);
+    }
+
     // ---- Stile comune ----
 
     private static int Intestazione(IXLWorksheet ws, IntestazioneStampa i, string titolo, int colonne)

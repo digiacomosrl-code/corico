@@ -507,7 +507,7 @@ public sealed class OrdiniService(
         return s.Length == 0 ? null : "Cantiere: " + s;
     }
 
-    private static string DatiDel(DatiFornitore f) =>
+    internal static string DatiDel(DatiFornitore f) =>
         string.Join("\n", new[]
         {
             string.Join(" ", new[] { f.Indirizzo, f.Comune, f.Provincia is { Length: > 0 } pr ? $"({pr})" : null }.Where(x => !string.IsNullOrWhiteSpace(x))),

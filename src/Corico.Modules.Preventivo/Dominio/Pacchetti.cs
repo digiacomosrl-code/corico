@@ -51,6 +51,10 @@ public sealed class Pacchetto : EntitaBase, ICancellazioneRiservata
     /// <summary>Offerta di riferimento, che alimenta costo e MDC del pacchetto.</summary>
     public Guid? OffertaSceltaId { get; set; }
 
+    /// <summary>Chi ha scelto l'offerta di riferimento e quando (confronto avanzato, rilascio 2B).</summary>
+    public string? OffertaSceltaDa { get; set; }
+    public DateTime? OffertaSceltaIl { get; set; }
+
     public string? Note { get; set; }
     public bool Archiviato { get; set; }
 
@@ -111,6 +115,7 @@ public sealed class Offerta : EntitaBase, ICancellazioneRiservata
     public List<OffertaVoce> Voci { get; } = [];
     public List<RigaOfferta> Righe { get; } = [];
     public List<CostoACorpo> CostiACorpo { get; } = [];
+    public List<StimaEsclusione> StimeEsclusioni { get; } = [];
 }
 
 /// <summary>

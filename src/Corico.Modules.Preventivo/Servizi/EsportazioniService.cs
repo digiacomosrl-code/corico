@@ -9,7 +9,7 @@ public sealed record FileEsportato(byte[] Contenuto, string TipoContenuto, strin
 /// <summary>Esportazioni del preventivo: Excel del computo e del riepilogo, PDF A4 del riepilogo e delle schede pacchetto.</summary>
 public sealed class EsportazioniService(
     RiepilogoService riepilogo, VersioniService versioni, PacchettiService pacchetti, ListaSpesaService listaSpesa,
-    OrdiniService ordini, CommesseService commesse, ImpostazioniService impostazioni, TimeProvider orologio)
+    OrdiniService ordini, RichiesteService richieste, CommesseService commesse, ImpostazioniService impostazioni, TimeProvider orologio)
 {
     public const string TipoExcel = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public const string TipoPdf = "application/pdf";
@@ -73,6 +73,19 @@ public sealed class EsportazioniService(
             ? $"Bozza ordine {Pulisci(ordine.Fornitore)}.pdf"
             : $"{ordine.Numero.Replace('/', '-')} {Pulisci(ordine.Fornitore)}{(ordine.Stato == Dominio.StatoOrdine.Annullato ? " ANNULLATO" : "")}.pdf";
         return new(EsportazionePdf.Ordine(azienda, ordine, NomeCommessa(commessa)), TipoPdf, nome);
+    }
+
+    public async Task<FileEsportato?> RichiestaAsync(Guid commessaId, Guid richiestaId, Guid? destinatarioId, bool excel, CancellationToken ct = default)
+    {
+        var commessa = await commesse.OttieniAsync(commessaId, ct);
+        var r = await richieste.OttieniAsync(commessaId, richiestaId, ct);
+        if (commessa is null || r is null) return null;
+        var fornitore = destinatarioId is null ? null : r.Destinatari.FirstOrDefault(d => d.Id == destinatarioId)?.Fornitore;
+        var azienda = await impostazioni.LeggiAziendaAsync(ct);
+        var nome = $"{r.Numero.Replace('/', '-')}{(fornitore is null ? "" : " " + Pulisci(fornitore))}";
+        return excel
+            ? new(EsportazioneExcel.Richiesta(azienda, r, fornitore, NomeCommessa(commessa)), TipoExcel, nome + ".xlsx")
+            : new(EsportazionePdf.Richiesta(azienda, r, fornitore, NomeCommessa(commessa)), TipoPdf, nome + ".pdf");
     }
 
     private async Task<(IntestazioneStampa Intestazione, Fotografia Fotografia, string Riferimento, string Codice)?> DatiAsync(

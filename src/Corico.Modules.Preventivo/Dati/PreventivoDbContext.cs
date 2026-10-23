@@ -37,6 +37,12 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<OrdineAcquisto> Ordini => Set<OrdineAcquisto>();
     public DbSet<RigaOrdine> RigheOrdine => Set<RigaOrdine>();
     public DbSet<RigaOrdineOrigine> RigheOrdineOrigini => Set<RigaOrdineOrigine>();
+    public DbSet<RichiestaOfferta> Richieste => Set<RichiestaOfferta>();
+    public DbSet<RigaRichiesta> RigheRichiesta => Set<RigaRichiesta>();
+    public DbSet<DestinatarioRichiesta> DestinatariRichiesta => Set<DestinatarioRichiesta>();
+    public DbSet<StimaEsclusione> StimeEsclusioni => Set<StimaEsclusione>();
+    public DbSet<AggiornamentoPrezzi> AggiornamentiPrezzi => Set<AggiornamentoPrezzi>();
+    public DbSet<RigaAggiornamento> RigheAggiornamento => Set<RigaAggiornamento>();
 
     protected override bool PossiedeTabelleCore => false;
 
@@ -229,6 +235,7 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.Property(x => x.Descrizione).HasMaxLength(300).IsRequired();
             e.Property(x => x.Codice).HasMaxLength(100);
             e.Property(x => x.RiferimentoOda).HasMaxLength(200);
+            e.Property(x => x.OffertaSceltaDa).HasMaxLength(100);
             e.HasMany(x => x.Voci).WithOne().HasForeignKey(x => x.PacchettoId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -257,6 +264,56 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.HasMany(x => x.Voci).WithOne().HasForeignKey(x => x.OffertaId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(x => x.Righe).WithOne().HasForeignKey(x => x.OffertaId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(x => x.CostiACorpo).WithOne().HasForeignKey(x => x.OffertaId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.StimeEsclusioni).WithOne().HasForeignKey(x => x.OffertaId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StimaEsclusione>(e =>
+        {
+            e.ToTable("PRV_StimeEsclusioni");
+            e.HasIndex(x => new { x.OffertaId, x.Ordine });
+            e.Property(x => x.Descrizione).HasMaxLength(500).IsRequired();
+        });
+
+        modelBuilder.Entity<RichiestaOfferta>(e =>
+        {
+            e.ToTable("PRV_RichiesteOfferta");
+            e.HasIndex(x => new { x.Anno, x.Progressivo }).IsUnique();
+            e.HasIndex(x => x.CommessaId);
+            e.Property(x => x.Numero).HasMaxLength(30).IsRequired();
+            e.Property(x => x.Oggetto).HasMaxLength(500).IsRequired();
+            e.HasMany(x => x.Righe).WithOne().HasForeignKey(r => r.RichiestaId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Destinatari).WithOne().HasForeignKey(r => r.RichiestaId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RigaRichiesta>(e =>
+        {
+            e.ToTable("PRV_RigheRichiesta");
+            e.HasIndex(x => new { x.RichiestaId, x.Ordine });
+            e.Property(x => x.Descrizione).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Codice).HasMaxLength(100);
+            e.Property(x => x.Unita).HasMaxLength(30);
+        });
+
+        modelBuilder.Entity<DestinatarioRichiesta>(e =>
+        {
+            e.ToTable("PRV_DestinatariRichiesta");
+            e.HasIndex(x => x.RichiestaId);
+            e.Property(x => x.Fornitore).HasMaxLength(300).IsRequired();
+        });
+
+        modelBuilder.Entity<AggiornamentoPrezzi>(e =>
+        {
+            e.ToTable("PRV_AggiornamentiPrezzi");
+            e.HasIndex(x => x.CommessaId);
+            e.HasMany(x => x.Righe).WithOne().HasForeignKey(r => r.AggiornamentoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RigaAggiornamento>(e =>
+        {
+            e.ToTable("PRV_RigheAggiornamento");
+            e.HasIndex(x => x.AggiornamentoId);
+            e.Property(x => x.Descrizione).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.Campo).HasMaxLength(40);
         });
 
         modelBuilder.Entity<OffertaVoce>(e =>

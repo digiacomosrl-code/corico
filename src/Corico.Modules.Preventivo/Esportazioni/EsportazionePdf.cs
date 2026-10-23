@@ -357,6 +357,99 @@ public static class EsportazionePdf
         return Rendi(doc);
     }
 
+    /// <summary>Richiesta d'offerta A4: voci con descrizione estesa, unità e quantità, senza alcun prezzo dell'impresa o di contratto.</summary>
+    public static byte[] Richiesta(DatiAzienda azienda, Dominio.RichiestaOfferta r, string? fornitore, string commessa)
+    {
+        var (doc, sec) = Pagina($"Richiesta d'offerta {r.Numero}", orizzontale: false);
+
+        var testa = sec.AddTable();
+        testa.AddColumn(Unit.FromCentimeter(10.5));
+        testa.AddColumn(Unit.FromCentimeter(7.5)).Format.Alignment = ParagraphAlignment.Right;
+        var rt = testa.AddRow();
+        var righeAzienda = azienda.Intestazione().ToList();
+        if (righeAzienda.Count == 0) righeAzienda.Add("Dati dell'impresa non compilati (Amministrazione → Dati dell'impresa)");
+        for (var i = 0; i < righeAzienda.Count; i++)
+        {
+            var par = rt.Cells[0].AddParagraph(righeAzienda[i]);
+            if (i == 0) { par.Format.Font.Size = 12; par.Format.Font.Bold = true; par.Format.Font.Color = Colore(Stile.Primario); }
+            else par.Format.Font.Size = 8;
+        }
+        var tit = rt.Cells[1].AddParagraph("RICHIESTA D'OFFERTA");
+        tit.Format.Font.Size = 13;
+        tit.Format.Font.Bold = true;
+        tit.Format.Font.Color = Colore(Stile.Primario);
+        var num = rt.Cells[1].AddParagraph($"{r.Numero} del {Formato.Data(r.Data)}");
+        num.Format.Font.Size = 11;
+        num.Format.Font.Bold = true;
+        rt.Borders.Bottom.Width = Unit.FromPoint(0.75);
+        rt.Borders.Bottom.Color = Colore(Stile.Primario);
+        rt.BottomPadding = Unit.FromPoint(6);
+
+        var dest = sec.AddTable();
+        dest.TopPadding = Unit.FromPoint(8);
+        dest.AddColumn(Unit.FromCentimeter(9));
+        dest.AddColumn(Unit.FromCentimeter(9));
+        var rd = dest.AddRow();
+        rd.Cells[0].AddParagraph("Spett.le").Format.Font.Color = Colore(Stile.TestoSecondario);
+        var f = rd.Cells[0].AddParagraph(string.IsNullOrWhiteSpace(fornitore) ? "______________________________" : fornitore);
+        f.Format.Font.Bold = true;
+        f.Format.Font.Size = 10;
+        void Rif(string etichetta, string? valore)
+        {
+            if (string.IsNullOrWhiteSpace(valore)) return;
+            var par = rd.Cells[1].AddParagraph();
+            par.AddFormattedText(etichetta + ": ", TextFormat.Bold);
+            par.AddText(valore);
+            par.Format.SpaceAfter = Unit.FromPoint(1.5);
+        }
+        Rif("Commessa", commessa);
+        Rif("Luogo dei lavori", r.LuogoLavori);
+        Rif("Risposta entro il", r.Scadenza is null ? null : Formato.Data(r.Scadenza));
+
+        var ogg = sec.AddParagraph();
+        ogg.Format.SpaceBefore = Unit.FromPoint(10);
+        ogg.Format.SpaceAfter = Unit.FromPoint(6);
+        ogg.AddFormattedText("Oggetto: ", TextFormat.Bold);
+        ogg.AddText(r.Oggetto);
+        sec.AddParagraph("Vi chiediamo la Vostra migliore offerta per quanto segue, indicando prezzo unitario e importo di ogni voce:")
+            .Format.SpaceAfter = Unit.FromPoint(4);
+
+        var tab = Tabella(sec, ("N.", 0.7, false), ("Codice", 2.0, false), ("Descrizione", 8.3, false), ("U.M.", 1.3, false),
+            ("Quantità", 1.8, true), ("Prezzo unitario", 1.9, true), ("Importo", 2.0, true));
+        tab.Format.Font.Size = 8;
+        foreach (var x in r.Righe.OrderBy(x => x.Ordine))
+            Riga(tab, x.Ordine.ToString(), x.Codice ?? "", Breve(x.Descrizione, 1500), x.Unita ?? "", Formato.Numero(x.Quantita), "", "");
+        RigaTotale(tab, "", "", "Totale imponibile (IVA esclusa)", "", "", "", "");
+
+        Titoletto(sec, "Da indicare nell'offerta");
+        var cond = Tabella(sec, [("", 6, false), ("", 12, false)], intestazioneColonne: false);
+        foreach (var etichetta in new[] { "Vostro numero d'offerta", "Validità dell'offerta", "Pagamento", "Tempi di consegna", "Esclusioni e oneri a vostro carico" })
+        {
+            var rr = Riga(cond, etichetta, "");
+            rr.Cells[0].Format.Font.Bold = true;
+            rr.Height = Unit.FromPoint(16);
+        }
+        if (!string.IsNullOrWhiteSpace(r.Note))
+        {
+            Titoletto(sec, "Note");
+            sec.AddParagraph(r.Note);
+        }
+        var nota = sec.AddParagraph("La presente richiesta non costituisce ordine né impegno. Citare il numero della richiesta nell'offerta. " +
+                                    "Su richiesta inviamo lo stesso elenco in Excel, da compilare e restituire.");
+        nota.Format.Font.Size = 7.5;
+        nota.Format.Font.Italic = true;
+        nota.Format.SpaceBefore = Unit.FromPoint(10);
+
+        var piede = sec.Footers.Primary.AddParagraph();
+        piede.Format.Font.Size = 7.5;
+        piede.Format.Font.Color = Colore(Stile.TestoSecondario);
+        piede.AddText($"{r.Numero} del {Formato.Data(r.Data)}{(string.IsNullOrWhiteSpace(fornitore) ? "" : " – " + fornitore)} – pagina ");
+        piede.AddPageField();
+        piede.AddText(" di ");
+        piede.AddNumPagesField();
+        return Rendi(doc);
+    }
+
     // ---- Struttura comune ----
 
     private static (Document, Section) Documento(IntestazioneStampa intestazione, string titolo, bool orizzontale)

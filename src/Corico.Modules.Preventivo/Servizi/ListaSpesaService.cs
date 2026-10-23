@@ -35,6 +35,13 @@ public sealed record RigaSpesa(
     public Guid? OffertaId { get; init; }
     public Guid? FornitoreId { get; init; }
 
+    /// <summary>Elemento dell'offerta da cui viene la riga (risorsa, voce d'offerta, riga d'offerta o voce a corpo), per aggiornarne il prezzo.</summary>
+    public ElementoPrezzo? Elemento { get; init; }
+    public Guid? ElementoId { get; init; }
+
+    /// <summary>Analisi aziendale da cui è stata copiata la risorsa, se presente.</summary>
+    public Guid? AnalisiId { get; init; }
+
     /// <summary>
     /// Chiave stabile della riga per gli ordini: pacchetto, voce, categoria e risorsa (equivale al codice risorsa).
     /// Resta la stessa finché la riga esiste, anche se cambiano quantità o prezzi.
@@ -185,19 +192,20 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
                 {
                     foreach (var r in ov.Risorse.OrderBy(r => r.Ordine))
                         righe.Add(Riga(r.Categoria, r.Descrizione, r.Unita, q * Risorse.FabbisognoEffettivo(r), r.Prezzo,
-                            q * Risorse.CostoUnitario(r), OrigineRigaSpesa.Risorsa, vc.Voce, r.Fonte));
+                            q * Risorse.CostoUnitario(r), OrigineRigaSpesa.Risorsa, vc.Voce, r.Fonte)
+                            with { Elemento = ElementoPrezzo.Risorsa, ElementoId = r.Id, AnalisiId = r.AnalisiId });
                     continue;
                 }
                 // Livello sintetico: ogni colonna diventa una riga nella categoria corrispondente.
                 if (ov.Fornitura != 0)
                     righe.Add(Riga(CategoriaRisorsa.Materiali, vc.Voce.Descrizione, vc.Voce.Unita, q, ov.Fornitura,
-                        q * ov.Fornitura, OrigineRigaSpesa.Sintetico, vc.Voce, null));
+                        q * ov.Fornitura, OrigineRigaSpesa.Sintetico, vc.Voce, null) with { Elemento = ElementoPrezzo.Sintetico, ElementoId = ov.Id });
                 if (ov.FornituraEPosa != 0)
                     righe.Add(Riga(CategoriaRisorsa.Subappalti, vc.Voce.Descrizione, vc.Voce.Unita, q, ov.FornituraEPosa,
-                        q * ov.FornituraEPosa, OrigineRigaSpesa.Sintetico, vc.Voce, null));
+                        q * ov.FornituraEPosa, OrigineRigaSpesa.Sintetico, vc.Voce, null) with { Elemento = ElementoPrezzo.Sintetico, ElementoId = ov.Id });
                 if (ov.ManodoperaENoli != 0)
                     righe.Add(Riga(CategoriaRisorsa.Manodopera, vc.Voce.Descrizione, vc.Voce.Unita, q, ov.ManodoperaENoli,
-                        q * ov.ManodoperaENoli, OrigineRigaSpesa.Sintetico, vc.Voce, null));
+                        q * ov.ManodoperaENoli, OrigineRigaSpesa.Sintetico, vc.Voce, null) with { Elemento = ElementoPrezzo.Sintetico, ElementoId = ov.Id });
             }
 
             var vociPerId = vociPacchetto.ToDictionary(v => v.Id);
@@ -207,11 +215,11 @@ public sealed class ListaSpesaService(IDbContextFactory<PreventivoDbContext> fab
                 righe.Add(Riga(CategoriaRighe(scelta.Tipo), r.Descrizione, r.Unita, r.Quantita,
                     CalcoloPacchetti.PrezzoNetto(r.PrezzoListino, r.ScontoPercentuale),
                     CalcoloPacchetti.ImportoRiga(r.Quantita, r.PrezzoListino, r.ScontoPercentuale), OrigineRigaSpesa.RigaOfferta, voce,
-                    scelta.Numero is null ? null : $"Offerta {scelta.Numero}"));
+                    scelta.Numero is null ? null : $"Offerta {scelta.Numero}") with { Elemento = ElementoPrezzo.RigaOfferta, ElementoId = r.Id });
             }
             foreach (var c in scelta.CostiACorpo.Where(c => !c.Incluso).OrderBy(c => c.Ordine))
                 righe.Add(Riga(CategoriaCorpo(c.Descrizione), c.Descrizione, "a corpo", 1, c.Importo, c.Importo, OrigineRigaSpesa.ACorpo, null,
-                    scelta.Numero is null ? null : $"Offerta {scelta.Numero}"));
+                    scelta.Numero is null ? null : $"Offerta {scelta.Numero}") with { Elemento = ElementoPrezzo.ACorpo, ElementoId = c.Id });
         }
         var assegnate = pacchetti.SelectMany(p => p.Voci).Select(v => v.VoceComputoId).ToHashSet();
         // Stesso criterio del tabellone: voci attive del computo attivo che non stanno in nessun pacchetto.

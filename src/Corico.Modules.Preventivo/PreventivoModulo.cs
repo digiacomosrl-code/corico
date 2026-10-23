@@ -48,6 +48,9 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<ListaSpesaService>();
         servizi.AddSingleton<OrdiniService>();
         servizi.AddSingleton<BudgetService>();
+        servizi.AddSingleton<RichiesteService>();
+        servizi.AddSingleton<ConfrontoService>();
+        servizi.AddSingleton<AggiornamentoPrezziService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)
@@ -107,6 +110,10 @@ public sealed class PreventivoModulo : ICoricoModulo
             Rispondi(e.PacchettoPdfAsync(commessaId, pacchettoId, ct)));
         gruppo.MapGet("/ordini/{ordineId:guid}.pdf", (Guid commessaId, Guid ordineId, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.OrdinePdfAsync(commessaId, ordineId, ct)));
+        gruppo.MapGet("/richieste/{richiestaId:guid}.pdf", (Guid commessaId, Guid richiestaId, Guid? destinatario, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.RichiestaAsync(commessaId, richiestaId, destinatario, excel: false, ct)));
+        gruppo.MapGet("/richieste/{richiestaId:guid}.xlsx", (Guid commessaId, Guid richiestaId, Guid? destinatario, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.RichiestaAsync(commessaId, richiestaId, destinatario, excel: true, ct)));
     }
 
     private static async Task<IResult> Rispondi(Task<FileEsportato?> esportazione) =>

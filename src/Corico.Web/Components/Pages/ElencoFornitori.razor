@@ -1,4 +1,5 @@
 @page "/fornitori"
+@inject SessioneUtente Sessione
 @inject ConflittiService Conflitti
 @inject FornitoriService Fornitori
 
@@ -6,8 +7,19 @@
 
 <div class="intestazione">
     <h1>Fornitori</h1>
-    <button class="pulsante primario" @onclick="() => Modifica(new DatiFornitore())">Nuovo fornitore</button>
+    <div class="riga-form">
+        @if (!Sessione.SolaConsultazione)
+        {
+            <button class="pulsante" @onclick="() => _importa = !_importa">Importa da Excel o CSV…</button>
+        }
+        <button class="pulsante primario" @onclick="() => Modifica(new DatiFornitore())">Nuovo fornitore</button>
+    </div>
 </div>
+
+@if (_importa)
+{
+    <ImportaAnagrafiche Tipo="TipoAnagrafica.Fornitori" OnChiudi="() => _importa = false" OnImportati="ImportatiAsync" />
+}
 
 <Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
 
@@ -67,6 +79,14 @@
 </table>
 
 @code {
+    private bool _importa;
+
+    private async Task ImportatiAsync(int n)
+    {
+        (_importa, _messaggio, _errore) = (false, $"Importati {n} fornitori. Prima dell'importazione è stato eseguito un backup.", false);
+        await CaricaAsync();
+    }
+
     private IReadOnlyList<DatiFornitore> _elenco = [];
     private DatiFornitore? _modifica;
     private IReadOnlyList<PossibileDuplicato> _duplicati = [];

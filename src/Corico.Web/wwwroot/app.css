@@ -292,3 +292,4 @@ tr.riga-memoria td { color: var(--testo-secondario); font-style: italic; }
 .tabella-totali { max-width: 640px; margin-top: .75rem; }
 .spazio-sopra { margin-top: .75rem; }
 details > summary { cursor: pointer; font-weight: 600; padding: .25rem 0; }
+textarea.descrizione-riga { width: 100%; min-width: 28rem; }

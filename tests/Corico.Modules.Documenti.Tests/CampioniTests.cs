@@ -36,3 +36,29 @@ public class CampioniTests
         Assert.All(pagine, p => Assert.True(LettorePdf.SenzaTesto(p.Testo)));
     }
 }
+
+public class CampioniMailTests
+{
+    [Fact]
+    public void Mail_outlook_con_codifica_windows_e_immagini_della_firma_escluse()
+    {
+        if (CampioniTests.Campione("Offerte fornitori/Da fimas srl.msg") is not { } percorso) return;
+        var (testo, dati) = LettoreMail.LeggiMsg(percorso);
+        Assert.Contains("fimas@fimas.it", dati.Mittente);
+        Assert.Contains("Monostrato Vulcanico", testo);
+        // Logo e firma sono immagini in linea: resta solo il PDF scansionato dell'ordine.
+        Assert.Equal("MX-2630N_20260302_180531.pdf", Assert.Single(dati.Allegati).Nome);
+    }
+
+    [Fact]
+    public async Task Offerta_scansionata_letta_con_l_ocr()
+    {
+        if (CampioniTests.Campione("Offerte fornitori/edilzeta sol 2.pdf") is not { } percorso) return;
+        var ocr = new OcrTesseract();
+        if (!ocr.Disponibile) return;
+        var esito = await new LetturaDocumento(ocr).LeggiAsync(percorso, ".pdf", null, default);
+        Assert.All(esito.Pagine, p => Assert.True(p.DaOcr));
+        Assert.Contains("22.374,00", esito.Pagine[0].Testo);
+        Assert.Equal(Classificatore.Offerta, Classificatore.Proponi(esito.Pagine.Select(p => p.Testo).ToList(), mail: false)!.Tipo);
+    }
+}

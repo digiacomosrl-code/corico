@@ -87,6 +87,9 @@ public static class LettoreExcel
 
 public static class LettoreMail
 {
+    // Le mail di Outlook (.msg) usano codifiche Windows (es. Windows-1252), che .NET non include se non registrate.
+    static LettoreMail() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
     /// <summary>File .eml (MIME): testo della mail e allegati.</summary>
     public static (string Testo, DatiMail Dati) LeggiEml(string percorso)
     {
@@ -109,8 +112,9 @@ public static class LettoreMail
     {
         using var messaggio = new MsgReader.Outlook.Storage.Message(percorso);
         var testo = messaggio.BodyText ?? DaHtml(messaggio.BodyHtml);
+        // Le immagini «in linea» (logo e firma nel testo della mail) non sono documenti da archiviare.
         var allegati = messaggio.Attachments.OfType<MsgReader.Outlook.Storage.Attachment>()
-            .Where(a => a.Data is { Length: > 0 })
+            .Where(a => a.Data is { Length: > 0 } && !a.IsInline)
             .Select(a => new AllegatoLetto(a.FileName ?? "allegato", a.MimeType, a.Data))
             .ToList();
         var mittente = messaggio.Sender is { } s ? $"{s.DisplayName} <{s.Email}>".Trim() : null;

@@ -276,3 +276,19 @@ ul.controlli ul { margin: .25rem 0 0 1.5rem; font-size: .88rem; color: var(--tes
 .esito-ok { color: var(--verde); font-weight: 600; }
 .esito-ko { color: var(--rosso); font-weight: 600; }
 .esito-avviso { color: var(--ambra); font-weight: 600; }
+
+/* Modulo 2, rilascio 2B: richieste d'offerta, confronto avanzato, aggiorna prezzi */
+.riquadro-interno { border: 1px solid var(--grigio-bordo); border-radius: var(--raggio); background: var(--grigio-sfondo); padding: .75rem 1rem; margin: .75rem 0; }
+.riquadro-interno legend { font-weight: 600; padding: 0 .35rem; }
+.riquadro-interno h4 { margin: 0 0 .5rem; }
+input.scelta-larga, .scelta-larga input, .scelta-larga select { min-width: 18rem; flex: 1; }
+.etichetta-risposta-dainviare { color: var(--testo-secondario); background: var(--grigio-sfondo); }
+.etichetta-risposta-inviata { color: var(--blu-medio); background: var(--blu-chiaro); }
+.etichetta-risposta-ricevuta { color: var(--verde); background: var(--verde-chiaro); }
+.etichetta-risposta-declinata { color: var(--rosso); background: var(--rosso-chiaro); }
+.etichetta-migliore { color: var(--verde); background: var(--verde-chiaro); margin-top: .2rem; }
+td.cella-migliore { background: var(--verde-chiaro); font-weight: 600; }
+tr.riga-memoria td { color: var(--testo-secondario); font-style: italic; }
+.tabella-totali { max-width: 640px; margin-top: .75rem; }
+.spazio-sopra { margin-top: .75rem; }
+details > summary { cursor: pointer; font-weight: 600; padding: .25rem 0; }

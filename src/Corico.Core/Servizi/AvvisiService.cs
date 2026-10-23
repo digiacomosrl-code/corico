@@ -10,7 +10,8 @@ public enum GravitaAvviso { Informazione, Attenzione, Errore }
 public sealed record Avviso(GravitaAvviso Gravita, string Problema, string AzioneSuggerita, string? Indirizzo = null);
 
 /// <summary>Avvisi di sistema mostrati in evidenza (sez. 6.3, 6.5 e 19).</summary>
-public sealed class AvvisiService(BackupService backup, IOptions<CoricoOpzioni> opzioni, TimeProvider orologio)
+public sealed class AvvisiService(BackupService backup, IOptions<CoricoOpzioni> opzioni, TimeProvider orologio,
+    Moduli.RegistroModuli moduli, IServiceProvider servizi)
 {
     public async Task<IReadOnlyList<Avviso>> AvvisiDiSistemaAsync(CancellationToken ct = default)
     {
@@ -32,6 +33,18 @@ public sealed class AvvisiService(BackupService backup, IOptions<CoricoOpzioni> 
                 $"L'ultimo backup su disco esterno risale a {(int)(adesso - ultimoEsterno.Value).TotalDays} giorni fa.",
                 "Collega il disco esterno ed esegui il backup da Amministrazione.", "/amministrazione"));
 
+        return avvisi;
+    }
+
+    /// <summary>Avvisi di lavoro dei moduli (scadenze di offerte e richieste), per tutti gli utenti. Un modulo in errore non blocca gli altri.</summary>
+    public async Task<IReadOnlyList<Avviso>> AvvisiDeiModuliAsync(CancellationToken ct = default)
+    {
+        var avvisi = new List<Avviso>();
+        foreach (var m in moduli.Attivi)
+        {
+            try { avvisi.AddRange(await m.AvvisiAsync(servizi, ct)); }
+            catch (Exception) when (!ct.IsCancellationRequested) { }
+        }
         return avvisi;
     }
 }

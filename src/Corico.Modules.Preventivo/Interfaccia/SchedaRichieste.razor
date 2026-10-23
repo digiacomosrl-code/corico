@@ -1,0 +1,144 @@
+@* Richieste d'offerta della commessa o di un pacchetto (Modulo 2, rilascio 2B): elenco con lo stato delle risposte, nuova richiesta dal pacchetto. *@
+@inject RichiesteService Richieste
+@inject PacchettiService Pacchetti
+@inject SessioneUtente Sessione
+@inject TimeProvider Orologio
+
+@if (_aperta is { } aperta)
+{
+    <EditorRichiesta CommessaId="CommessaId" RichiestaId="aperta" OnChiuso="ChiudiAsync" OnOffertaRegistrata="OffertaRegistrataAsync" />
+    return;
+}
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Richieste d'offerta@(PacchettoId is null ? "" : " del pacchetto")</h3>
+        @if (!Sessione.SolaConsultazione)
+        {
+            <div class="azioni-in-linea">
+                @if (PacchettoId is null)
+                {
+                    <select @bind="_pacchetto" aria-label="Pacchetto">
+                        <option value="">— pacchetto —</option>
+                        @foreach (var p in _pacchetti)
+                        {
+                            <option value="@p.Id">@p.Ordine. @p.Descrizione</option>
+                        }
+                    </select>
+                }
+                <button class="pulsante primario" disabled="@(_occupato || (PacchettoId is null && _pacchetto.Length == 0))" @onclick="NuovaAsync">
+                    Prepara richiesta d'offerta…
+                </button>
+            </div>
+        }
+    </div>
+    @if (PacchettoId is null)
+    {
+        <p class="testo-secondario">
+            Una richiesta si prepara da un pacchetto (tutte le sue voci) oppure dalla Lista della Spesa, spuntando le righe da far quotare.
+            Contiene descrizioni, unità e quantità, senza prezzi; si invia a ogni fornitore in PDF o in Excel da compilare.
+        </p>
+    }
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (_elenco is null)
+    {
+        <p class="testo-secondario">Caricamento…</p>
+    }
+    else if (_elenco.Count == 0)
+    {
+        <p class="testo-secondario">Nessuna richiesta d'offerta.</p>
+    }
+    else
+    {
+        var oggi = DateOnly.FromDateTime(Orologio.GetLocalNow().DateTime);
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead><tr><th>Numero</th><th>Data</th><th>Oggetto</th>@if (PacchettoId is null) { <th>Pacchetti</th> }<th>Risposta entro</th><th>Fornitori</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var r in _elenco)
+                    {
+                        <tr>
+                            <td class="nowrap"><strong>@r.Numero</strong></td>
+                            <td>@Formato.Data(r.Data)</td>
+                            <td class="descrizione-breve" title="@r.Oggetto">@r.Oggetto</td>
+                            @if (PacchettoId is null) { <td class="descrizione-breve">@(r.Pacchetto ?? "—")</td> }
+                            <td class="@(r.Scaduta(oggi) ? "testo-negativo" : "")">@Formato.Data(r.Scadenza)@(r.Scaduta(oggi) ? " (scaduta)" : "")</td>
+                            <td>
+                                @foreach (var d in r.Destinatari)
+                                {
+                                    <div>
+                                        @d.Fornitore:
+                                        <span class="etichetta etichetta-risposta-@d.Stato.ToString().ToLowerInvariant()">@Testi.StatoRisposta(d.Stato)</span>
+                                    </div>
+                                }
+                                @if (r.Destinatari.Count == 0) { <span class="testo-secondario">nessuno</span> }
+                            </td>
+                            <td class="nowrap"><button class="pulsante piccolo" @onclick="() => _aperta = r.Id">Apri</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+
+    /// <summary>Se indicato, mostra solo le richieste del pacchetto (dettaglio del pacchetto).</summary>
+    [Parameter] public Guid? PacchettoId { get; set; }
+
+    /// <summary>Offerta registrata dalla richiesta, per riaprire il pacchetto.</summary>
+    [Parameter] public EventCallback OnOffertaRegistrata { get; set; }
+
+    private IReadOnlyList<RigaElencoRichieste>? _elenco;
+    private IReadOnlyList<(Guid Id, int Ordine, string Descrizione)> _pacchetti = [];
+    private Guid? _aperta;
+    private string _pacchetto = "";
+    private string? _messaggio;
+    private bool _errore, _occupato;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (PacchettoId is null) (_pacchetti, _) = await Pacchetti.AssegnazioniAsync(CommessaId);
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync() => _elenco = await Richieste.ElencoAsync(CommessaId, PacchettoId);
+
+    private async Task NuovaAsync()
+    {
+        var pid = PacchettoId ?? (Guid.TryParse(_pacchetto, out var p) ? p : (Guid?)null);
+        if (pid is null) return;
+        _occupato = true;
+        try
+        {
+            _aperta = await Richieste.CreaDaPacchettoAsync(CommessaId, pid.Value);
+            _messaggio = null;
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task ChiudiAsync()
+    {
+        _aperta = null;
+        await CaricaAsync();
+    }
+
+    private Task OffertaRegistrataAsync((Guid Pacchetto, Guid Offerta) _) => OnOffertaRegistrata.InvokeAsync();
+}

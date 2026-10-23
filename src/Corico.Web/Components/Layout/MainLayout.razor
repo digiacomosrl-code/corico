@@ -94,7 +94,8 @@
         // In prerender il circuito non c'è ancora: l'identità si ricava dal cookie di accesso.
         if (Sessione.Identita is null && StatoAccesso is not null && SessioneUtente.IdDa((await StatoAccesso).User) is { } id)
             Sessione.Identita = await Utenti.IdentitaAsync(id);
-        _avvisi = Sessione.Amministratore ? await AvvisiSistema.AvvisiDiSistemaAsync() : [];
+        _avvisi = [.. Sessione.Amministratore ? await AvvisiSistema.AvvisiDiSistemaAsync() : [],
+            .. Sessione.Identita is null || Sessione.SolaConsultazione ? [] : await AvvisiSistema.AvvisiDeiModuliAsync()];
     }
 
     protected override void OnParametersSet()

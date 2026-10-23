@@ -1,0 +1,346 @@
+@* Richiesta d'offerta (Modulo 2, rilascio 2B): testata, voci senza prezzi, fornitori con lo stato della risposta, PDF ed Excel
+   per fornitore, registrazione dell'offerta ricevuta (anche leggendo i prezzi dall'Excel compilato dal fornitore). *@
+@inject RichiesteService Richieste
+@inject FornitoriService Fornitori
+@inject PacchettiService Pacchetti
+@inject ConflittiService Conflitti
+@inject SessioneUtente Sessione
+
+@if (_r is null)
+{
+    <div class="riquadro"><p class="testo-secondario">Caricamento…</p></div>
+    return;
+}
+@{ var r = _r; var modificabile = !Sessione.SolaConsultazione; }
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Richiesta d'offerta @r.Numero</h3>
+        <div class="azioni-in-linea">
+            <a class="pulsante" href="@($"preventivo/{CommessaId}/richieste/{r.Id}.pdf")" target="_blank">PDF generico</a>
+            <button class="pulsante" @onclick="ChiudiAsync">Chiudi</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    <p class="testo-secondario">
+        Preparata da @r.CreatoDa il @Formato.DataOra(r.CreatoIl). La richiesta non riporta prezzi dell'impresa né prezzi di contratto.
+        Scarica il PDF o l'Excel di ogni fornitore e invialo dalla tua posta; il fornitore può restituire l'Excel compilato e Corico ne legge i prezzi.
+    </p>
+
+    <div class="griglia-form">
+        <label class="largo">Oggetto <input @bind="r.Oggetto" disabled="@(!modificabile)" /></label>
+        <label>Data <input type="date" @bind="r.Data" disabled="@(!modificabile)" /></label>
+        <label>Risposta entro il <input type="date" @bind="r.Scadenza" disabled="@(!modificabile)" /></label>
+        <label class="largo">Luogo dei lavori <input @bind="r.LuogoLavori" disabled="@(!modificabile)" /></label>
+        <label class="largo">Note per i fornitori <textarea rows="2" @bind="r.Note" disabled="@(!modificabile)"></textarea></label>
+    </div>
+</div>
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Fornitori (@r.Destinatari.Count)</h3>
+        @if (modificabile)
+        {
+            <div class="azioni-in-linea scelta-larga">
+                <SceltaConRicerca Voci="_vociFornitori" Etichetta="Aggiungi fornitore" Segnaposto="Aggiungi un fornitore dall'anagrafica…"
+                                  Valore="@null" ValoreChanged="AggiungiFornitore" />
+            </div>
+        }
+    </div>
+    @if (r.Destinatari.Count == 0)
+    {
+        <p class="testo-secondario">Nessun fornitore: aggiungine almeno uno dall'anagrafica.</p>
+    }
+    else
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead><tr><th>Fornitore</th><th>Stato</th><th>Inviata il</th><th>Risposta il</th><th>Note</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var d in r.Destinatari)
+                    {
+                        var registrata = d.OffertaId is not null;
+                        <tr>
+                            <td><strong>@d.Fornitore</strong></td>
+                            <td>
+                                @if (registrata)
+                                {
+                                    <span class="etichetta etichetta-risposta-ricevuta">Offerta registrata</span>
+                                }
+                                else
+                                {
+                                    <select @bind="d.Stato" disabled="@(!modificabile)">
+                                        @foreach (var s in Enum.GetValues<StatoRisposta>())
+                                        {
+                                            <option value="@s">@Testi.StatoRisposta(s)</option>
+                                        }
+                                    </select>
+                                }
+                            </td>
+                            <td><input type="date" @bind="d.InviataIl" disabled="@(!modificabile)" /></td>
+                            <td><input type="date" @bind="d.RispostaIl" disabled="@(!modificabile || d.Stato is StatoRisposta.DaInviare or StatoRisposta.Inviata)" /></td>
+                            <td><input @bind="d.Note" disabled="@(!modificabile)" /></td>
+                            <td class="nowrap">
+                                <a class="pulsante piccolo" href="@($"preventivo/{CommessaId}/richieste/{r.Id}.pdf?destinatario={d.Id}")" target="_blank">PDF</a>
+                                <a class="pulsante piccolo" href="@($"preventivo/{CommessaId}/richieste/{r.Id}.xlsx?destinatario={d.Id}")" download>Excel</a>
+                                @if (modificabile && !registrata && d.Id != Guid.Empty)
+                                {
+                                    <button class="pulsante piccolo primario" @onclick="() => (_registra, _file, _nomeFile) = (d.Id, null, null)">Registra offerta…</button>
+                                }
+                                @if (modificabile && !registrata)
+                                {
+                                    <button class="pulsante piccolo" title="Togli il fornitore" @onclick="() => r.Destinatari.Remove(d)">✕</button>
+                                }
+                            </td>
+                        </tr>
+                        @if (_registra == d.Id)
+                        {
+                            <tr>
+                                <td colspan="6">
+                                    <div class="riquadro-interno">
+                                        <p>
+                                            Registra l'offerta di <strong>@d.Fornitore</strong>: Corico la crea nel pacchetto con una riga per ogni voce richiesta
+                                            (quantità e unità già compilate). Se il fornitore ha restituito l'Excel della richiesta compilato, caricalo: i prezzi entrano da soli.
+                                        </p>
+                                        <div class="riga-form">
+                                            @if (_pacchettiRichiesta.Count > 1)
+                                            {
+                                                <label>
+                                                    Pacchetto
+                                                    <select @bind="_pacchettoScelto">
+                                                        <option value="">— scegli —</option>
+                                                        @foreach (var p in _pacchettiRichiesta)
+                                                        {
+                                                            <option value="@p.Id">@p.Descrizione</option>
+                                                        }
+                                                    </select>
+                                                </label>
+                                            }
+                                            <label class="pulsante">
+                                                @(_nomeFile is null ? "Carica Excel compilato (facoltativo)…" : $"File: {_nomeFile}")
+                                                <InputFile OnChange="LeggiFileAsync" accept=".xlsx" style="display:none" />
+                                            </label>
+                                            <button class="pulsante primario" disabled="@_occupato" @onclick="() => RegistraAsync(d)">Registra offerta</button>
+                                            <button class="pulsante" @onclick="() => _registra = null">Annulla</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Voci richieste (@r.Righe.Count)</h3>
+        @if (modificabile)
+        {
+            <div class="azioni-in-linea">
+                <button class="pulsante" @onclick="AggiungiRiga">Aggiungi riga</button>
+            </div>
+        }
+    </div>
+    <div class="scorrevole">
+        <table class="tabella">
+            <thead><tr><th>N.</th><th>Codice</th><th>Descrizione</th><th>U.M.</th><th class="num">Quantità</th><th></th></tr></thead>
+            <tbody>
+                @for (var i = 0; i < r.Righe.Count; i++)
+                {
+                    var x = r.Righe[i];
+                    <tr>
+                        <td>@(i + 1)</td>
+                        <td><input class="stretto" @bind="x.Codice" disabled="@(!modificabile)" /></td>
+                        <td><textarea rows="2" class="largo" @bind="x.Descrizione" disabled="@(!modificabile)"></textarea></td>
+                        <td><input class="stretto" @bind="x.Unita" disabled="@(!modificabile)" /></td>
+                        <td class="num"><input class="numero" type="number" step="any" @bind="x.Quantita" disabled="@(!modificabile)" /></td>
+                        <td>
+                            @if (modificabile)
+                            {
+                                <button class="pulsante piccolo" title="Togli la riga" @onclick="() => r.Righe.Remove(x)">✕</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (modificabile)
+    {
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@_occupato" @onclick="SalvaAsync">Salva</button>
+            @if (r.Destinatari.Any(d => d.Stato == StatoRisposta.DaInviare && d.Id != Guid.Empty))
+            {
+                <button class="pulsante" disabled="@_occupato" @onclick="SegnaInviataAsync" title="Dopo aver inviato PDF o Excel dalla tua posta">Segna come inviata</button>
+            }
+            <span class="spazio"></span>
+            @if (Sessione.Amministratore && r.Destinatari.All(d => d.OffertaId is null))
+            {
+                <button class="pulsante pericolo" disabled="@_occupato" @onclick="EliminaAsync">Elimina richiesta</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Guid RichiestaId { get; set; }
+    [Parameter] public EventCallback OnChiuso { get; set; }
+
+    /// <summary>Offerta registrata: pacchetto e offerta, per aprirla.</summary>
+    [Parameter] public EventCallback<(Guid Pacchetto, Guid Offerta)> OnOffertaRegistrata { get; set; }
+
+    private RichiestaOfferta? _r;
+    private IReadOnlyList<DatiFornitore> _fornitori = [];
+    private IReadOnlyList<VoceScelta> _vociFornitori = [];
+    private List<(Guid Id, string Descrizione)> _pacchettiRichiesta = [];
+    private Guid? _registra;
+    private string _pacchettoScelto = "";
+    private byte[]? _file;
+    private string? _nomeFile, _messaggio;
+    private bool _errore, _occupato;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _fornitori = await Fornitori.ElencoAsync();
+        _vociFornitori = VoceScelta.Da(_fornitori);
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync()
+    {
+        _r = await Richieste.OttieniAsync(CommessaId, RichiestaId);
+        if (_r is null) return;
+        var (pacchetti, _) = await Pacchetti.AssegnazioniAsync(CommessaId);
+        var ids = RichiesteService.PacchettiDi(_r).ToHashSet();
+        _pacchettiRichiesta = pacchetti.Where(p => ids.Contains(p.Id)).Select(p => (p.Id, p.Descrizione)).ToList();
+        _pacchettoScelto = _pacchettiRichiesta.Count == 1 ? _pacchettiRichiesta[0].Id.ToString() : "";
+    }
+
+    private void AggiungiFornitore(string? valore)
+    {
+        if (_r is null || !Guid.TryParse(valore, out var id) || _fornitori.FirstOrDefault(f => f.Id == id) is not { } f) return;
+        if (_r.Destinatari.Any(d => d.FornitoreId == id || string.Equals(d.Fornitore, f.Denominazione, StringComparison.OrdinalIgnoreCase)))
+        {
+            (_messaggio, _errore) = ($"{f.Denominazione} è già tra i destinatari.", true);
+            return;
+        }
+        _r.Destinatari.Add(new DestinatarioRichiesta { Id = Guid.Empty, FornitoreId = id, Fornitore = f.Denominazione });
+        (_messaggio, _errore) = ($"{f.Denominazione} aggiunto: premi «Salva» per registrarlo.", false);
+    }
+
+    private void AggiungiRiga() =>
+        _r?.Righe.Add(new RigaRichiesta { Id = Guid.Empty, Descrizione = "", Quantita = 1, PacchettoId = _r.PacchettoId });
+
+    private async Task<bool> SalvaAsync()
+    {
+        if (_r is null) return false;
+        _occupato = true;
+        try
+        {
+            await Richieste.SalvaAsync(CommessaId, _r);
+            await CaricaAsync();
+            (_messaggio, _errore) = ("Richiesta salvata.", false);
+            return true;
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+        return false;
+    }
+
+    private async Task SegnaInviataAsync()
+    {
+        if (!await SalvaAsync()) return;
+        await Richieste.SegnaInviataAsync(CommessaId, RichiestaId);
+        await CaricaAsync();
+        (_messaggio, _errore) = ("Richiesta segnata come inviata ai fornitori.", false);
+    }
+
+    private async Task LeggiFileAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(20 * 1024 * 1024).CopyToAsync(ms);
+            _file = ms.ToArray();
+            _nomeFile = e.File.Name;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            (_messaggio, _errore) = ("Il file non si può leggere: " + ex.Message, true);
+        }
+    }
+
+    private async Task RegistraAsync(DestinatarioRichiesta d)
+    {
+        _occupato = true;
+        try
+        {
+            PrezziCompilati? prezzi = null;
+            if (_file is not null)
+            {
+                try
+                {
+                    using var ms = new MemoryStream(_file);
+                    prezzi = RichiesteService.LeggiExcelCompilato(ms);
+                }
+                catch (Exception ex) when (ex is not OperazioneNonValidaException)
+                {
+                    throw new OperazioneNonValidaException("Il file non è un Excel leggibile: " + ex.Message);
+                }
+            }
+            Guid? pacchetto = Guid.TryParse(_pacchettoScelto, out var p) ? p : null;
+            var esito = await Richieste.RegistraOffertaAsync(CommessaId, d.Id, pacchetto, prezzi);
+            _registra = null;
+            await CaricaAsync();
+            (_messaggio, _errore) = ($"Offerta di {d.Fornitore} registrata" +
+                (prezzi is null ? "" : $" con {esito.Prezzi} prezzi letti dall'Excel") +
+                ". Aprila dal pacchetto (scheda Pacchetti) per completarla e confrontarla.", false);
+            await OnOffertaRegistrata.InvokeAsync((esito.PacchettoId, esito.OffertaId));
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task EliminaAsync()
+    {
+        try
+        {
+            await Richieste.EliminaAsync(CommessaId, RichiestaId);
+            await OnChiuso.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private Task ChiudiAsync() => OnChiuso.InvokeAsync();
+}

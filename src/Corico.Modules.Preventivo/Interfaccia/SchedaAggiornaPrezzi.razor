@@ -1,0 +1,260 @@
+@* Scheda «Aggiorna prezzi» (Modulo 2, rilascio 2B): prezzi di costo superati, scelta riga per riga con l'effetto su costo e MDC, storico annullabile. *@
+@inject AggiornamentoPrezziService Aggiornamenti
+@inject SessioneUtente Sessione
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Aggiorna prezzi di costo</h3>
+    </div>
+    <p class="testo-secondario">
+        Qui compaiono i prezzi di costo della bozza che risultano superati: analisi aziendali modificate, nuove revisioni delle offerte scelte
+        e, se le indichi, variazioni percentuali per categoria. Spunta le righe da applicare: l'effetto vale solo per la parte non ancora ordinata.
+        I prezzi contrattuali e le versioni approvate non cambiano mai. Gli ordini emessi a prezzo diverso compaiono solo per memoria.
+    </p>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    <fieldset class="riquadro-interno">
+        <legend>Variazioni percentuali per categoria (facoltative)</legend>
+        <div class="griglia-form">
+            @foreach (var c in Enum.GetValues<CategoriaRisorsa>())
+            {
+                <label>
+                    @Testi.Categoria(c) (%)
+                    <input type="number" step="0.01" class="numero stretto" value="@(_variazioni.TryGetValue(c, out var v) ? v.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")"
+                           @onchange="e => ImpostaVariazione(c, e.Value?.ToString())" />
+                </label>
+            }
+        </div>
+        <button class="pulsante" disabled="@_occupato" @onclick="CaricaAsync">Ricalcola le proposte</button>
+    </fieldset>
+
+    @if (_proposte is null)
+    {
+        <p class="testo-secondario">Caricamento…</p>
+    }
+    else if (_proposte.Righe.Count == 0)
+    {
+        <p class="testo-secondario">Nessun prezzo da aggiornare: i costi della bozza sono allineati alle analisi e alle offerte scelte.</p>
+    }
+    else
+    {
+        var applicabili = _proposte.Righe.Where(r => !r.SoloMemoria).ToList();
+        var scelte = applicabili.Where(r => _scelte.Contains(r.Id)).ToList();
+        var dopo = _proposte.Dopo(scelte);
+        <div class="azioni-in-linea">
+            <button class="pulsante piccolo" @onclick="() => { _scelte = applicabili.Select(r => r.Id).ToHashSet(); }">Spunta tutte</button>
+            <button class="pulsante piccolo" @onclick="() => _scelte.Clear()">Togli tutte</button>
+        </div>
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th></th><th>Fonte</th><th>Pacchetto</th><th>Voce</th><th>Descrizione</th><th>U.M.</th>
+                        <th class="num">Quantità</th><th class="num">Prezzo attuale</th><th class="num">Prezzo nuovo</th>
+                        <th class="num">Da ordinare</th><th class="num">Δ costo</th><th class="num">Δ MDC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _proposte.Righe)
+                    {
+                        <tr class="@(r.SoloMemoria ? "riga-memoria" : "")">
+                            <td>
+                                @if (!r.SoloMemoria)
+                                {
+                                    <input type="checkbox" checked="@_scelte.Contains(r.Id)" aria-label="Applica" @onchange="e => Spunta(r.Id, e.Value is true)" />
+                                }
+                            </td>
+                            <td class="nowrap">@Testi.FontePrezzo(r.Fonte)</td>
+                            <td class="descrizione-breve" title="@r.Pacchetto">@r.Pacchetto</td>
+                            <td class="nowrap">@(r.Tariffa ?? r.Voce ?? "")</td>
+                            <td class="descrizione-breve" title="@(r.Nota ?? r.Descrizione)">@r.Descrizione@if (r.Nota is { } n) { <div class="testo-secondario">@n</div> }</td>
+                            <td>@r.Unita</td>
+                            <td class="num">@Formato.Numero(r.Quantita)</td>
+                            <td class="num">@Formato.Euro(r.PrezzoAttuale)</td>
+                            <td class="num"><strong>@Formato.Euro(r.PrezzoNuovo)</strong></td>
+                            <td class="num">@Formato.Percento(r.QuotaDaOrdinare * 100)</td>
+                            <td class="num @(r.DifferenzaCosto > 0 ? "testo-negativo" : "")">@(r.SoloMemoria ? "per memoria" : Formato.Euro(r.DifferenzaCosto))</td>
+                            <td class="num @(r.DifferenzaMdc < 0 ? "testo-negativo" : "")">@(r.SoloMemoria ? "" : Formato.Euro(r.DifferenzaMdc))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <table class="tabella tabella-totali">
+            <thead><tr><th></th><th class="num">Prima</th><th class="num">Dopo le righe spuntate</th><th class="num">Differenza</th></tr></thead>
+            <tbody>
+                <tr><td>Ricavo</td><td class="num">@Formato.Euro(_proposte.Ricavo)</td><td class="num">@Formato.Euro(_proposte.Ricavo)</td><td class="num">—</td></tr>
+                <tr><td>Costo attuale</td><td class="num">@Formato.Euro(_proposte.CostoAttuale)</td><td class="num">@Formato.Euro(dopo.Costo)</td><td class="num">@Formato.Euro(dopo.Costo - _proposte.CostoAttuale)</td></tr>
+                <tr><td><strong>MDC</strong></td><td class="num">@Formato.Euro(_proposte.Mdc)</td><td class="num"><strong>@Formato.Euro(dopo.Mdc)</strong></td><td class="num @(dopo.Mdc < _proposte.Mdc ? "testo-negativo" : "")">@Formato.Euro(dopo.Mdc - _proposte.Mdc)</td></tr>
+                <tr><td>MDC %</td><td class="num">@Formato.Percento(_proposte.MarginePercentuale)</td><td class="num">@Formato.Percento(dopo.Margine)</td><td class="num">@Formato.Percento(dopo.Margine - _proposte.MarginePercentuale)</td></tr>
+            </tbody>
+        </table>
+
+        @if (Sessione.PuoEmettereOrdini && !Sessione.SolaConsultazione)
+        {
+            <div class="azioni-in-linea">
+                <input type="text" class="scelta-larga" placeholder="Nota (facoltativa), es. listino ferro novembre" @bind="_nota" maxlength="500" />
+                <button class="pulsante primario" disabled="@(_occupato || scelte.Count == 0)" @onclick="ConfermaAsync">
+                    Applica @scelte.Count righe
+                </button>
+            </div>
+        }
+        else
+        {
+            <p class="testo-secondario">L'applicazione degli aggiornamenti è riservata all'amministratore e agli operatori abilitati agli ordini.</p>
+        }
+    }
+</div>
+
+<div class="riquadro">
+    <div class="intestazione-riquadro"><h3>Aggiornamenti confermati</h3></div>
+    @if (_storico is null || _storico.Count == 0)
+    {
+        <p class="testo-secondario">Nessun aggiornamento confermato.</p>
+    }
+    else
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead><tr><th>Data</th><th>Autore</th><th>Nota</th><th class="num">Righe</th><th class="num">Δ costo</th><th class="num">MDC prima</th><th class="num">MDC dopo</th><th>Stato</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var a in _storico)
+                    {
+                        <tr>
+                            <td class="nowrap">@Formato.DataOra(a.Data)</td>
+                            <td>@a.CreatoDa</td>
+                            <td class="descrizione-breve" title="@a.Nota">@a.Nota</td>
+                            <td class="num">@a.NumeroRighe</td>
+                            <td class="num">@Formato.Euro(a.DifferenzaCosto)</td>
+                            <td class="num">@Formato.Euro(a.MdcPrima)</td>
+                            <td class="num">@Formato.Euro(a.MdcDopo)</td>
+                            <td>@(a.AnnullatoIl is null ? "In vigore" : $"Annullato da {a.AnnullatoDa} il {Formato.DataOra(a.AnnullatoIl)}")</td>
+                            <td class="nowrap">
+                                <button class="pulsante piccolo" @onclick="() => _dettaglio = _dettaglio == a.Id ? null : a.Id">@(_dettaglio == a.Id ? "Chiudi" : "Righe")</button>
+                                @if (a.AnnullatoIl is null && Sessione.PuoEmettereOrdini && !Sessione.SolaConsultazione)
+                                {
+                                    @if (_conferma == a.Id)
+                                    {
+                                        <button class="pulsante piccolo pericolo" disabled="@_occupato" @onclick="() => AnnullaAsync(a.Id)">Conferma annullamento</button>
+                                        <button class="pulsante piccolo" @onclick="() => _conferma = null">No</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="pulsante piccolo" @onclick="() => _conferma = a.Id">Annulla in blocco</button>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                        @if (_dettaglio == a.Id)
+                        {
+                            <tr>
+                                <td colspan="9">
+                                    <table class="tabella">
+                                        <thead><tr><th>Fonte</th><th>Descrizione</th><th class="num">Prezzo prima</th><th class="num">Prezzo dopo</th><th class="num">Δ costo</th></tr></thead>
+                                        <tbody>
+                                            @foreach (var r in a.Righe)
+                                            {
+                                                <tr>
+                                                    <td class="nowrap">@Testi.FontePrezzo(r.Fonte)</td>
+                                                    <td class="descrizione-breve" title="@r.Descrizione">@r.Descrizione</td>
+                                                    <td class="num">@Formato.Euro(r.PrezzoPrima)</td>
+                                                    <td class="num">@Formato.Euro(r.PrezzoDopo)</td>
+                                                    <td class="num">@Formato.Euro(r.DifferenzaCosto)</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+
+    private PropostePrezzi? _proposte;
+    private IReadOnlyList<AggiornamentoPrezzi>? _storico;
+    private readonly Dictionary<CategoriaRisorsa, decimal> _variazioni = [];
+    private HashSet<string> _scelte = [];
+    private string? _nota, _messaggio;
+    private Guid? _dettaglio, _conferma;
+    private bool _errore, _occupato;
+
+    protected override Task OnParametersSetAsync() => CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _proposte = await Aggiornamenti.ProposteAsync(CommessaId, _variazioni);
+        var ids = _proposte.Righe.Select(r => r.Id).ToHashSet();
+        _scelte.IntersectWith(ids);
+        _storico = await Aggiornamenti.StoricoAsync(CommessaId);
+    }
+
+    private void ImpostaVariazione(CategoriaRisorsa c, string? testo)
+    {
+        testo = testo?.Trim().Replace(',', '.');
+        if (decimal.TryParse(testo, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var v) && v != 0)
+            _variazioni[c] = v;
+        else
+            _variazioni.Remove(c);
+    }
+
+    private void Spunta(string id, bool si)
+    {
+        if (si) _scelte.Add(id); else _scelte.Remove(id);
+    }
+
+    private async Task ConfermaAsync()
+    {
+        _occupato = true;
+        try
+        {
+            var a = await Aggiornamenti.ConfermaAsync(CommessaId, _scelte.ToList(), _variazioni, _nota);
+            (_messaggio, _errore) = ($"Aggiornate {a.NumeroRighe} righe: costo {Formato.Euro(a.DifferenzaCosto)}, MDC da {Formato.Euro(a.MdcPrima)} a {Formato.Euro(a.MdcDopo)}.", false);
+            _scelte.Clear();
+            _nota = null;
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task AnnullaAsync(Guid id)
+    {
+        _occupato = true;
+        try
+        {
+            await Aggiornamenti.AnnullaAsync(CommessaId, id);
+            (_messaggio, _errore) = ("Aggiornamento annullato: ripristinati i prezzi precedenti.", false);
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+            _conferma = null;
+        }
+    }
+}

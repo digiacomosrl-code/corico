@@ -107,7 +107,7 @@ public sealed class RichiesteService(IDbContextFactory<PreventivoDbContext> fabb
             throw new OperazioneNonValidaException("Le righe selezionate non sono più nella Lista della Spesa: aggiorna la pagina.");
 
         var pacchetti = selezionate.Select(s => s.PacchettoId).Distinct().ToList();
-        var oggetto = pacchetti.Count == 1 ? selezionate[0].Pacchetto : string.Join(", ", selezionate.Select(s => Testi.Categoria(s.Categoria)).Distinct());
+        var oggetto = pacchetti.Count == 1 ? selezionate[0].Pacchetto : string.Join(", ", selezionate.Select(s => Interfaccia.Testi.Categoria(s.Categoria)).Distinct());
         var r = Nuova(commessaId, oggetto);
         if (pacchetti.Count == 1) r.PacchettoId = pacchetti[0];
         var ordine = 0;
@@ -195,8 +195,6 @@ public sealed class RichiesteService(IDbContextFactory<PreventivoDbContext> fabb
             a.VoceComputoId = b.VoceComputoId;
             a.Chiavi = b.Chiavi;
         }, commessaId, x => x.RichiestaId = r.Id);
-        foreach (var d in dati.Destinatari.Where(d => d.OffertaId is not null && d.Stato != StatoRisposta.Ricevuta))
-            d.OffertaId = null;
         Sincronizza(db, r.Destinatari, dati.Destinatari, (a, b) =>
         {
             a.FornitoreId = b.FornitoreId;

@@ -2,8 +2,14 @@
    Modulo 2 (2A): quantità già ordinate e da ordinare, selezione delle righe e preparazione dell'ordine. *@
 @inject ListaSpesaService ListaSpesa
 @inject OrdiniService Ordini
+@inject RichiesteService Richieste
 @inject SessioneUtente Sessione
 
+@if (_richiesta is { } richiesta)
+{
+    <EditorRichiesta CommessaId="CommessaId" RichiestaId="richiesta" OnChiuso="ChiudiRichiestaAsync" />
+    return;
+}
 @if (_bozza is { } bozza)
 {
     <EditorOrdine CommessaId="CommessaId" OrdineId="bozza" OnChiuso="ChiudiBozzaAsync" />
@@ -187,6 +193,7 @@
             <span class="testo-secondario">Fornitore: @(nominati.FirstOrDefault() ?? "da scegliere nella bozza")</span>
         }
         <button class="pulsante primario" disabled="@(nominati.Count > 1 || _occupato)" @onclick="PreparaAsync">Prepara ordine</button>
+        <button class="pulsante" disabled="@_occupato" @onclick="RichiestaAsync" title="Richiesta d'offerta senza prezzi per le righe selezionate, anche di più fornitori">Richiesta d'offerta…</button>
         <button class="pulsante" @onclick="() => _selezione.Clear()">Togli la selezione</button>
     </div>
 }
@@ -199,7 +206,7 @@
     private string _fornitore = "", _cerca = "";
     private readonly HashSet<string> _selezione = [];
     private HashSet<string> _aperte = [];
-    private Guid? _bozza;
+    private Guid? _bozza, _richiesta;
     private string? _messaggio;
     private bool _errore, _occupato;
 
@@ -240,6 +247,31 @@
         {
             _occupato = false;
         }
+    }
+
+    private async Task RichiestaAsync()
+    {
+        _occupato = true;
+        try
+        {
+            _richiesta = await Richieste.CreaDaListaAsync(CommessaId, _selezione.ToList());
+            _selezione.Clear();
+            _messaggio = null;
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task ChiudiRichiestaAsync()
+    {
+        _richiesta = null;
+        await CaricaAsync();
     }
 
     private async Task ChiudiBozzaAsync()

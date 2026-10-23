@@ -34,6 +34,24 @@ public static class Testi
         _ => s.ToString(),
     };
 
+    public static string StatoRisposta(Dominio.StatoRisposta s) => s switch
+    {
+        Dominio.StatoRisposta.DaInviare => "Da inviare",
+        Dominio.StatoRisposta.Inviata => "Inviata",
+        Dominio.StatoRisposta.Ricevuta => "Offerta ricevuta",
+        Dominio.StatoRisposta.Declinata => "Declinata",
+        _ => s.ToString(),
+    };
+
+    public static string FontePrezzo(Dominio.FontePrezzo f) => f switch
+    {
+        Dominio.FontePrezzo.OrdineEmesso => "Ordine emesso",
+        Dominio.FontePrezzo.Analisi => "Analisi aggiornata",
+        Dominio.FontePrezzo.Revisione => "Nuova revisione",
+        Dominio.FontePrezzo.Variazione => "Variazione %",
+        _ => f.ToString(),
+    };
+
     public static string StatoOrdine(Dominio.StatoOrdine s) => s switch
     {
         Dominio.StatoOrdine.Bozza => "Bozza",

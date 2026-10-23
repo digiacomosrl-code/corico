@@ -59,7 +59,7 @@ public sealed record DettaglioPacchetto(Pacchetto Pacchetto, IReadOnlyList<VoceD
 }
 
 /// <summary>Pacchetti di affidamento, offerte alternative, scelta, stato del costo e note (sez. 14.1).</summary>
-public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabbrica, BackupService backup)
+public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabbrica, BackupService backup, IUtenteCorrente utente, TimeProvider orologio)
 {
     public async Task<Tabellone> TabelloneAsync(Guid commessaId, CancellationToken ct = default)
     {
@@ -267,6 +267,8 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
             throw new OperazioneNonValidaException("L'offerta non appartiene al pacchetto.");
         db.Entry(p).Property(x => x.Versione).OriginalValue = versioneLetta;
         p.OffertaSceltaId = offertaId;
+        p.OffertaSceltaDa = offertaId is null ? null : utente.Nome;
+        p.OffertaSceltaIl = offertaId is null ? null : orologio.GetUtcNow().UtcDateTime;
         db.NotaStorico = offertaId is null ? "Nessuna offerta di riferimento" : "Scelta dell'offerta di riferimento";
         await db.SaveChangesAsync(ct);
     }

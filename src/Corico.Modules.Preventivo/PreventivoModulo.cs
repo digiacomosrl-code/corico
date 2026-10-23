@@ -26,8 +26,10 @@ public sealed class PreventivoModulo : ICoricoModulo
     [
         new("Preventivo", typeof(SchedaPreventivo), Ordine: 10),
         new("Pacchetti", typeof(SchedaPacchetti), Ordine: 20),
+        new("Richieste d'offerta", typeof(SchedaRichieste), Ordine: 22),
         new("Lista della Spesa", typeof(SchedaListaSpesa), Ordine: 25),
         new("Ordini", typeof(SchedaOrdini), Ordine: 27),
+        new("Aggiorna prezzi", typeof(SchedaAggiornaPrezzi), Ordine: 28),
         new("Riepilogo economico", typeof(SchedaRiepilogo), Ordine: 30),
         new("Budget", typeof(SchedaVersioni), Ordine: 40),
     ];
@@ -114,6 +116,35 @@ public sealed class PreventivoModulo : ICoricoModulo
             Rispondi(e.RichiestaAsync(commessaId, richiestaId, destinatario, excel: false, ct)));
         gruppo.MapGet("/richieste/{richiestaId:guid}.xlsx", (Guid commessaId, Guid richiestaId, Guid? destinatario, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.RichiestaAsync(commessaId, richiestaId, destinatario, excel: true, ct)));
+    }
+
+    /// <summary>Richieste d'offerta senza risposta oltre la scadenza e offerte scelte scadute o in scadenza, per commessa.</summary>
+    public async Task<IReadOnlyList<Corico.Core.Servizi.Avviso>> AvvisiAsync(IServiceProvider servizi, CancellationToken ct)
+    {
+        var richieste = await servizi.GetRequiredService<RichiesteService>().ScaduteAsync(ct);
+        var offerte = await servizi.GetRequiredService<ConfrontoService>().ScadenzeAsync(ct);
+        var commesse = servizi.GetRequiredService<Corico.Core.Servizi.CommesseService>();
+        var avvisi = new List<Corico.Core.Servizi.Avviso>();
+        foreach (var id in richieste.Select(r => r.CommessaId).Concat(offerte.Select(o => o.CommessaId)).Distinct())
+        {
+            var c = await commesse.OttieniAsync(id, ct);
+            if (c is null || c.Archiviata) continue;
+            var parti = new List<string>();
+            var rr = richieste.Where(r => r.CommessaId == id).ToList();
+            if (rr.Count > 0)
+                parti.Add(rr.Count == 1 ? $"la {rr[0].Numero} ha {rr[0].SenzaRisposta} fornitori senza risposta dopo la scadenza del {Corico.Core.Calcolo.Formato.Data(rr[0].Scadenza)}"
+                    : $"{rr.Count} richieste d'offerta hanno fornitori senza risposta dopo la scadenza");
+            if (offerte.FirstOrDefault(o => o.CommessaId == id) is { } o && (o.Scadute > 0 || o.InScadenza > 0))
+                parti.Add(string.Join(" e ", new[]
+                {
+                    o.Scadute > 0 ? $"{o.Scadute} offerte scelte sono scadute" : null,
+                    o.InScadenza > 0 ? $"{o.InScadenza} scadono entro {ConfrontoService.GiorniPreavviso} giorni" : null,
+                }.Where(x => x is not null)));
+            if (parti.Count == 0) continue;
+            avvisi.Add(new(Corico.Core.Servizi.GravitaAvviso.Attenzione, $"Commessa {c.Codice}: {string.Join("; ", parti)}.",
+                "Sollecita i fornitori o chiedi la conferma dei prezzi.", $"/commesse/{id}"));
+        }
+        return avvisi;
     }
 
     private static async Task<IResult> Rispondi(Task<FileEsportato?> esportazione) =>

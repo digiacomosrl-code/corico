@@ -39,6 +39,10 @@ public interface ICoricoModulo
     /// </summary>
     Task<IReadOnlyList<EsitoControllo>> ControlliDopoAggiornamentoAsync(IServiceProvider servizi, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<EsitoControllo>>([]);
+
+    /// <summary>Avvisi del modulo da mostrare in evidenza a chi lavora (es. scadenze). Facoltativo.</summary>
+    Task<IReadOnlyList<Servizi.Avviso>> AvvisiAsync(IServiceProvider servizi, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<Servizi.Avviso>>([]);
 }
 
 public sealed record EsitoControllo(string Controllo, bool Superato, string Dettaglio);

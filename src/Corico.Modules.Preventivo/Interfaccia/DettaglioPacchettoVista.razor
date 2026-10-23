@@ -172,6 +172,11 @@
     }
 </div>
 
+<ConfrontoAvanzato CommessaId="CommessaId" PacchettoId="PacchettoId" OnCambiato="AggiornaAsync"
+                   Chiave="@($"{_dettaglio.Pacchetto.Versione}|{string.Join(',', _dettaglio.Offerte.Select(o => o.Offerta.Versione))}")" />
+
+<SchedaRichieste CommessaId="CommessaId" PacchettoId="PacchettoId" OnOffertaRegistrata="AggiornaAsync" />
+
 <PannelloOrdine CommessaId="CommessaId" PacchettoId="PacchettoId" OnCambiato="AggiornaAsync"
                 Chiave="@($"{_dettaglio.Pacchetto.Versione}|{_dettaglio.Pacchetto.OffertaSceltaId}|{_dettaglio.Scelta?.Risultato.Costo}|{_dettaglio.Scelta?.Offerta.Versione}")" />
 

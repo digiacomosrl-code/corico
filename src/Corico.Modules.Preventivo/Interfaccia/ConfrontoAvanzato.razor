@@ -1,0 +1,281 @@
+@* Confronto avanzato delle offerte di un pacchetto (Modulo 2, rilascio 2B): prezzo per voce, esclusioni stimate, costo a pari condizioni, storico prezzi. *@
+@inject ConfrontoService Confronto
+@inject SessioneUtente Sessione
+
+@if (_confronto is { } c && c.Offerte.Count > 0)
+{
+    <div class="riquadro">
+        <h3>Confronto a pari condizioni</h3>
+        <p class="testo-secondario">
+            Il costo confrontabile somma all'offerta le esclusioni stimate in euro e le voci non quotate, valorizzate con la stima interna@(c.ConStimaInterna ? "" : " (manca: le voci non quotate restano a zero)").
+            Il prezzo migliore di ogni voce è evidenziato; passando sul prezzo si vedono i prezzi dello stesso fornitore in ordini di altre commesse.
+        </p>
+        @if (c.SceltaDa is not null || c.SceltaIl is not null)
+        {
+            <p>Offerta di riferimento scelta da <strong>@(c.SceltaDa ?? "—")</strong> il @Formato.DataOra(c.SceltaIl).</p>
+        }
+
+        @if (!string.IsNullOrEmpty(_messaggio))
+        {
+            <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+                @_messaggio
+                <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+            </div>
+        }
+
+        <div class="scorrevole">
+            <table class="tabella confronto">
+                <thead>
+                    <tr>
+                        <th></th>
+                        @foreach (var o in c.Offerte)
+                        {
+                            <th class="num @(o.Scelta ? "colonna-scelta" : "")">
+                                @(o.Offerta.NomeFornitore ?? "Senza fornitore")
+                                @if (c.Migliore?.Offerta.Id == o.Offerta.Id) { <div class="etichetta etichetta-migliore">più conveniente</div> }
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Validità</td>
+                        @foreach (var o in c.Offerte)
+                        {
+                            <td class="num @ClasseValidita(o.Validita)">@TestoValidita(o)</td>
+                        }
+                    </tr>
+                    <tr><td>Costo dell'offerta</td>@foreach (var o in c.Offerte) { <td class="num">@Formato.Euro(o.Risultato.Costo)</td> }</tr>
+                    <tr>
+                        <td>Esclusioni stimate</td>
+                        @foreach (var o in c.Offerte)
+                        {
+                            <td class="num">
+                                @Formato.Euro(o.TotaleStime)
+                                @if (!Sessione.SolaConsultazione)
+                                {
+                                    <div><button class="pulsante piccolo" @onclick="() => ApriStime(o)">@(o.Stime.Count == 0 ? "Stima…" : "Modifica…")</button></div>
+                                }
+                            </td>
+                        }
+                    </tr>
+                    <tr>
+                        <td>Voci non quotate</td>
+                        @foreach (var o in c.Offerte)
+                        {
+                            <td class="num">@(o.ACorpo ? "offerta a corpo" : o.VociNonQuotate == 0 ? "—" : $"{o.VociNonQuotate}: {Formato.Euro(o.ValoreNonQuotate)}")</td>
+                        }
+                    </tr>
+                    <tr class="totale"><td>Costo confrontabile</td>@foreach (var o in c.Offerte) { <td class="num">@Formato.Euro(o.CostoConfrontabile)</td> }</tr>
+                    <tr><td>MDC</td>@foreach (var o in c.Offerte) { <td class="num @(o.Mdc < 0 ? "testo-negativo" : "")">@Formato.Euro(o.Mdc)</td> }</tr>
+                    <tr><td>MDC %</td>@foreach (var o in c.Offerte) { <td class="num">@Formato.Percento(o.MarginePercentuale)</td> }</tr>
+                </tbody>
+            </table>
+        </div>
+
+        @if (_stimeDi is { } od)
+        {
+            <div class="riquadro-interno">
+                <h4>Esclusioni stimate: @(od.Offerta.NomeFornitore ?? "offerta")</h4>
+                @if (!string.IsNullOrWhiteSpace(od.Offerta.Esclusioni))
+                {
+                    <p class="testo-secondario">Dal testo dell'offerta: «@od.Offerta.Esclusioni»</p>
+                }
+                <table class="tabella">
+                    <thead><tr><th>Esclusione</th><th class="num">Importo stimato</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var s in _stime)
+                        {
+                            var bloccata = s.CostoACorpoId is not null;
+                            <tr>
+                                <td><input class="scelta-larga" @bind="s.Descrizione" disabled="@bloccata" maxlength="500" /></td>
+                                <td class="num"><input type="number" step="0.01" class="numero stretto" @bind="s.Importo" disabled="@bloccata" /></td>
+                                <td class="nowrap">
+                                    @if (bloccata) { <span class="testo-secondario">già nel costo del pacchetto</span> }
+                                    else { <button class="pulsante piccolo" @onclick="() => _stime.Remove(s)">✕</button> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <div class="azioni-in-linea">
+                    <button class="pulsante" @onclick="() => _stime.Add(new StimaEsclusione())">Aggiungi esclusione</button>
+                    <button class="pulsante primario" disabled="@_occupato" @onclick="SalvaStimeAsync">Salva stime</button>
+                    <button class="pulsante" @onclick="() => _stimeDi = null">Chiudi</button>
+                </div>
+            </div>
+        }
+
+        @if (c.Offerte.FirstOrDefault(o => o.Scelta) is { } scelta && scelta.StimeDaTrasformare.Count > 0 && !Sessione.SolaConsultazione)
+        {
+            <div class="riquadro-interno">
+                <h4>Esclusioni dell'offerta scelta</h4>
+                <p class="testo-secondario">
+                    Le esclusioni restano a carico dell'impresa: confermale una alla volta per aggiungerle al costo del pacchetto (voce a corpo dell'offerta).
+                </p>
+                <table class="tabella">
+                    <tbody>
+                        @foreach (var s in scelta.StimeDaTrasformare)
+                        {
+                            <tr>
+                                <td>@s.Descrizione</td>
+                                <td class="num">@Formato.Euro(s.Importo)</td>
+                                <td class="nowrap"><button class="pulsante piccolo" disabled="@_occupato" @onclick="() => TrasformaAsync(s.Id)">Aggiungi al costo</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (c.Voci.Count > 0)
+        {
+            <details class="spazio-sopra">
+                <summary>Prezzo per voce (@c.Voci.Count voci)</summary>
+                <div class="scorrevole">
+                    <table class="tabella">
+                        <thead>
+                            <tr>
+                                <th>Tariffa</th><th>Descrizione</th><th>U.M.</th><th class="num">Quantità</th>
+                                @foreach (var o in c.Offerte)
+                                {
+                                    <th class="num @(o.Scelta ? "colonna-scelta" : "")">@(o.Offerta.NomeFornitore ?? "offerta")</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var v in c.Voci)
+                            {
+                                <tr>
+                                    <td class="codice">@v.Voce.Tariffa</td>
+                                    <td class="descrizione-breve" title="@v.Voce.Descrizione">@v.Voce.Descrizione</td>
+                                    <td>@v.Voce.Unita</td>
+                                    <td class="num">@Formato.Numero(v.Quantita)</td>
+                                    @for (var i = 0; i < v.Celle.Count; i++)
+                                    {
+                                        var cella = v.Celle[i];
+                                        var o = c.Offerte[i];
+                                        <td class="num @(o.Scelta ? "colonna-scelta" : "") @(cella.Migliore ? "cella-migliore" : "")" title="@TitoloStorico(cella)">
+                                            @if (!cella.Quotata)
+                                            {
+                                                <span class="testo-secondario">non quotata@(cella.ValoreStimato is { } vs ? $" ({Formato.Euro(vs)})" : "")</span>
+                                            }
+                                            else
+                                            {
+                                                @Formato.Numero(cella.CostoUnitario)
+                                                @if (cella.ScartoPercentuale is { } sc && sc > 0) { <div class="testo-nota">+@Formato.Percento(sc)</div> }
+                                                @if (cella.Storico.Count > 0) { <div class="testo-nota">storico: @Formato.Numero(cella.Storico[0].Prezzo)</div> }
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Guid PacchettoId { get; set; }
+
+    /// <summary>Cambia quando il pacchetto o le sue offerte cambiano, per ricaricare il confronto.</summary>
+    [Parameter] public string? Chiave { get; set; }
+
+    /// <summary>Il costo del pacchetto è cambiato (esclusione trasformata in costo).</summary>
+    [Parameter] public EventCallback OnCambiato { get; set; }
+
+    private ConfrontoPacchetto? _confronto;
+    private OffertaConfronto? _stimeDi;
+    private List<StimaEsclusione> _stime = [];
+    private string? _messaggio, _chiaveCaricata;
+    private bool _errore, _occupato;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var chiave = $"{PacchettoId}|{Chiave}";
+        if (chiave == _chiaveCaricata) return;
+        _chiaveCaricata = chiave;
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync() => _confronto = await Confronto.ConfrontoAsync(CommessaId, PacchettoId);
+
+    private void ApriStime(OffertaConfronto o)
+    {
+        _stimeDi = o;
+        _stime = o.Stime.Select(s => new StimaEsclusione
+        {
+            Id = s.Id, OffertaId = s.OffertaId, Descrizione = s.Descrizione, Importo = s.Importo, CostoACorpoId = s.CostoACorpoId,
+        }).ToList();
+        if (_stime.Count == 0)
+            _stime = ConfrontoService.EsclusioniDaTesto(o.Offerta.Esclusioni).Select(t => new StimaEsclusione { Descrizione = t }).ToList();
+        if (_stime.Count == 0) _stime.Add(new StimaEsclusione());
+    }
+
+    private async Task SalvaStimeAsync()
+    {
+        if (_stimeDi is null) return;
+        _occupato = true;
+        try
+        {
+            // le righe nuove arrivano con Id vuoto: il servizio le crea
+            var dati = _stime.Where(s => !string.IsNullOrWhiteSpace(s.Descrizione) || s.Importo != 0)
+                .Select(s => new StimaEsclusione { Id = _stimeDi.Stime.Any(x => x.Id == s.Id) ? s.Id : Guid.Empty, Descrizione = s.Descrizione, Importo = s.Importo })
+                .ToList();
+            await Confronto.SalvaStimeAsync(CommessaId, _stimeDi.Offerta.Id, dati);
+            (_messaggio, _errore, _stimeDi) = ("Esclusioni stimate salvate.", false, null);
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task TrasformaAsync(Guid stimaId)
+    {
+        _occupato = true;
+        try
+        {
+            await Confronto.TrasformaInCostoAsync(CommessaId, stimaId);
+            (_messaggio, _errore) = ("Esclusione aggiunta al costo del pacchetto.", false);
+            await CaricaAsync();
+            await OnCambiato.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private static string ClasseValidita(ValiditaOfferta v) => v switch
+    {
+        ValiditaOfferta.Scaduta => "testo-negativo",
+        ValiditaOfferta.InScadenza => "testo-differenza",
+        _ => "",
+    };
+
+    private static string TestoValidita(OffertaConfronto o) => o.Validita switch
+    {
+        ValiditaOfferta.NonIndicata => "non indicata",
+        ValiditaOfferta.Scaduta => $"scaduta il {Formato.Data(o.Offerta.Scadenza)}",
+        ValiditaOfferta.InScadenza => $"scade il {Formato.Data(o.Offerta.Scadenza)}",
+        _ => $"fino al {Formato.Data(o.Offerta.Scadenza)}",
+    };
+
+    private static string? TitoloStorico(CellaConfronto c) => c.Storico.Count == 0 ? null
+        : "Prezzi dello stesso fornitore in altre commesse:\n" + string.Join("\n",
+            c.Storico.Select(s => $"{Formato.Data(s.Data)} · {s.Commessa} · ordine {s.Ordine}: {Formato.Numero(s.Prezzo)} {s.Unita}"));
+}

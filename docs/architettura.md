@@ -12,6 +12,28 @@ Riferimento: prompt strategico v2.1, sezioni 3, 4, 6, 9, 11, 18.
   e storico delle modifiche; la tabella `CORE_Storico` è del Core ed è esclusa dalle migrazioni dei moduli.
 - Le pagine non contengono logica di business: usano i servizi del Core o del modulo.
 
+| Modulo | Progetto | Tabelle |
+|---|---|---|
+| Preventivo (Moduli 1 e 2) | `Corico.Modules.Preventivo` | `PRV_` |
+| Documenti e AI (Modulo 3) | `Corico.Modules.Documenti` | `DOC_` |
+
+## Modulo Documenti e AI (rilascio 3A)
+
+- Lettura del contenuto dei documenti del Core in sottofondo (`CodaLettura`), uno alla volta: PDF (PdfPig),
+  Word .docx e Excel (Open XML SDK), mail .eml (MimeKit) e .msg (MsgReader), immagini.
+- Le pagine PDF senza testo e le immagini si leggono con l'OCR locale **Tesseract** (modello `ita`), avviato come
+  programma separato: si cerca in `Corico:Ocr:Percorso`, poi nella cartella `ocr\` accanto a Corico, poi nel PATH.
+  Le pagine si trasformano in immagine a 300 dpi con PDFium (PDFtoImage). Senza Tesseract le scansioni restano
+  archiviate senza testo e la lettura è segnata come parziale. Il pacchetto Windows include Tesseract 5.4 (build
+  UB-Mannheim, solo `tesseract.exe` e le DLL necessarie) con `tessdata\ita.traineddata`: `scripts\pubblica.ps1` lo
+  copia da `strumenti\ocr\`, cartella esclusa dal repository.
+- Ricerca nel contenuto: tabella virtuale FTS5 `DOC_Ricerca` (maiuscole e accenti ignorati), usata solo da
+  `IndiceRicerca`, l'unico punto con SQL specifico di SQLite; si ricostruisce dal testo (`DOC_Pagine`) se manca.
+- Tipo di documento proposto con regole sul testo (`Classificatore`), applicato solo dopo conferma.
+- Duplicati simili con firma MinHash su sequenze di 5 parole (`Somiglianza`), soglia 80%.
+- Gli allegati delle mail diventano documenti del Core nella stessa commessa (`DOC_AllegatiMail`).
+- Nessun servizio esterno: l'AI esterna arriva con il rilascio 3B.
+
 ## Regole trasversali
 
 | Regola | Implementazione |

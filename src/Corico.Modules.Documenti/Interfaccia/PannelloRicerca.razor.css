@@ -1,0 +1,5 @@
+.estratto { margin: .15rem 0 .35rem; line-height: 1.4; }
+.estratto a { font-weight: 600; margin-right: .35rem; white-space: nowrap; }
+.estratto mark { background: var(--ambra-chiaro); color: var(--testo); padding: 0 .1rem; }
+.ocr { font-size: .72rem; font-weight: 600; color: var(--testo-secondario); border: 1px solid var(--grigio-bordo); border-radius: var(--raggio); padding: 0 .3rem; margin-right: .35rem; }
+.proposta { color: var(--blu); background: var(--blu-chiaro); border: 1px solid var(--blu-medio); border-radius: 10px; padding: .1rem .55rem; font-size: .8rem; font-weight: 600; }

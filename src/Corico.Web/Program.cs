@@ -5,6 +5,7 @@ using Corico.Core.Backup;
 using Corico.Core.Configurazione;
 using Corico.Core.Moduli;
 using Corico.Core.Servizi;
+using Corico.Modules.Documenti;
 using Corico.Modules.Preventivo;
 using Corico.Web.Components;
 using Corico.Web.Infrastruttura;
@@ -71,7 +72,7 @@ builder.Services.AddAuthorization(o => o.FallbackPolicy = new AuthorizationPolic
 builder.Services.AddCascadingAuthenticationState();
 
 // Moduli funzionali: ognuno è attivo salvo disattivazione esplicita in configurazione.
-ICoricoModulo[] moduliDisponibili = [new PreventivoModulo()];
+ICoricoModulo[] moduliDisponibili = [new PreventivoModulo(), new DocumentiModulo()];
 var moduliAttivi = moduliDisponibili.Where(m => !opzioni.Moduli.TryGetValue(m.Codice, out var attivo) || attivo).ToList();
 
 builder.Services.AggiungiCorico(percorsi, moduliAttivi);

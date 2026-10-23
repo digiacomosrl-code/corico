@@ -1,0 +1,260 @@
+@* Ricerca nel contenuto, stato della lettura, tipi proposti e duplicati simili (specifica Modulo 3, sez. 4). *@
+@implements IDisposable
+@inject RicercaDocumentiService Ricerca
+@inject LetturaArchivioService Lettura
+@inject CommesseService Commesse
+
+<div class="riquadro">
+    <div class="riga-form">
+        <input class="largo cerca-contenuto" type="search" placeholder="Cerca nel contenuto dei documenti (es. porta REI60)…"
+               @bind="_testo" @bind:event="oninput" @bind:after="CercaAsync" />
+    </div>
+    <div class="filtri">
+        @if (CommessaId is null)
+        {
+            <select @bind="_commessaId" @bind:after="CercaAsync">
+                <option value="">Tutte le commesse</option>
+                @foreach (var c in _commesse)
+                {
+                    <option value="@c.Id">@c.Codice – @c.Descrizione</option>
+                }
+            </select>
+        }
+        <select @bind="_tipo" @bind:after="CercaAsync">
+            <option value="">Tutti i tipi</option>
+            @foreach (var t in Classificatore.Tipi)
+            {
+                <option value="@t">@t</option>
+            }
+        </select>
+        <label>dal <input type="date" @bind="_dal" @bind:after="CercaAsync" /></label>
+        <label>al <input type="date" @bind="_al" @bind:after="CercaAsync" /></label>
+    </div>
+    <p class="testo-secondario">
+        Si cercano tutte le parole scritte, senza distinguere maiuscole, accenti e a capo; l'ultima vale anche come inizio di parola.
+        Un clic sul numero di pagina apre il documento a quella pagina.
+    </p>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (_risultati is not null)
+    {
+        @if (_risultati.Count == 0)
+        {
+            <p class="vuoto">Nessun documento contiene queste parole.</p>
+        }
+        else
+        {
+            <p class="testo-secondario">Documenti trovati: @_risultati.Count</p>
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th>Documento</th>
+                        @if (CommessaId is null) { <th>Commessa</th> }
+                        <th>Tipo</th>
+                        <th>Dove</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _risultati)
+                    {
+                        <tr>
+                            <td><a href="documenti/@r.Documento.Id/scarica" target="_blank">@r.Documento.NomeOriginale</a></td>
+                            @if (CommessaId is null) { <td class="codice">@r.Documento.CodiceCommessa</td> }
+                            <td>@r.Documento.Tipo</td>
+                            <td>
+                                @foreach (var p in r.Pagine)
+                                {
+                                    <div class="estratto">
+                                        <a href="documenti/@r.Documento.Id/scarica#page=@p.Numero" target="_blank">pag. @p.Numero</a>
+                                        @if (p.DaOcr) { <span class="ocr" title="Testo letto con l'OCR: può contenere errori di lettura">OCR</span> }
+                                        @foreach (var (parte, evidenza) in Parti(p.Estratto))
+                                        {
+                                            if (evidenza) { <mark>@parte</mark> } else { @parte }
+                                        }
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+</div>
+
+@if (_proposte.Count > 0)
+{
+    <div class="riquadro">
+        <h3>Tipo di documento proposto</h3>
+        <p class="testo-secondario">Corico propone il tipo leggendo intestazione e prime pagine. Il tipo cambia solo se lo confermi.</p>
+        <table class="tabella">
+            <thead><tr><th>Documento</th><th>Tipo attuale</th><th>Tipo proposto</th><th>Perché</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var p in _proposte)
+                {
+                    <tr>
+                        <td><a href="documenti/@p.Documento.Id/scarica" target="_blank">@p.Documento.NomeOriginale</a></td>
+                        <td>@(p.Documento.Tipo ?? "—")</td>
+                        <td><span class="proposta">@p.Tipo</span></td>
+                        <td class="testo-secondario">@p.Motivo</td>
+                        <td class="num">
+                            <button class="pulsante piccolo primario" @onclick="() => EsaminaAsync(p, true)">Conferma</button>
+                            <button class="pulsante piccolo" @onclick="() => EsaminaAsync(p, false)">Scarta</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_simili.Count > 0)
+{
+    <div class="riquadro">
+        <h3>Possibili duplicati</h3>
+        <p class="testo-secondario">
+            Documenti con testo quasi identico, ad esempio la stessa offerta rimandata o scansionata due volte.
+            Corico non decide quale sia valido: se uno è superato puoi archiviarlo dall'archivio documenti.
+        </p>
+        <table class="tabella">
+            <thead><tr><th>Caricato prima</th><th>Caricato dopo</th><th class="num">Somiglianza</th></tr></thead>
+            <tbody>
+                @foreach (var c in _simili)
+                {
+                    <tr>
+                        <td><a href="documenti/@c.A.Id/scarica" target="_blank">@c.A.NomeOriginale</a> <span class="testo-secondario">@Formato.DataOra(c.A.CaricatoIl)</span></td>
+                        <td><a href="documenti/@c.B.Id/scarica" target="_blank">@c.B.NomeOriginale</a> <span class="testo-secondario">@Formato.DataOra(c.B.CaricatoIl)</span></td>
+                        <td class="num">@($"{c.Somiglianza:P0}")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_stato is { } s)
+{
+    <div class="riquadro">
+        <h3>Lettura dei documenti</h3>
+        <p>
+            Documenti letti: <strong>@s.Letti</strong> · in attesa di lettura: <strong>@s.InCoda</strong>
+            @foreach (var l in s.InCorso)
+            {
+                <span> · in lettura «@l.Nome»@(l.PagineTotali > 0 ? $": pagina {l.PagineFatte} di {l.PagineTotali} con l'OCR" : "")</span>
+            }
+        </p>
+        @if (!s.OcrDisponibile)
+        {
+            <div class="messaggio messaggio-errore">
+                Il programma di OCR non è installato: le scansioni si archiviano ma non si possono cercare.
+                Dopo l'installazione usa «Rileggi» sui documenti indicati qui sotto.
+            </div>
+        }
+        @if (s.DaVerificare.Count > 0)
+        {
+            <table class="tabella">
+                <thead><tr><th>Documento</th><th>Esito</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var (doc, testo) in s.DaVerificare)
+                    {
+                        <tr>
+                            <td><a href="documenti/@doc.Id/scarica" target="_blank">@doc.NomeOriginale</a></td>
+                            <td>@testo.Messaggio</td>
+                            <td class="num"><button class="pulsante piccolo" @onclick="() => RileggiAsync(doc.Id)">Rileggi</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        <p class="testo-secondario">
+            I documenti caricati si leggono in sottofondo, uno alla volta: le scansioni lunghe richiedono qualche minuto.
+            Il documento è consultabile subito; la ricerca nel suo contenuto è disponibile a lettura finita.
+        </p>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid? CommessaId { get; set; }
+
+    private IReadOnlyList<CommessaRiepilogo> _commesse = [];
+    private IReadOnlyList<DocumentoTrovato>? _risultati;
+    private IReadOnlyList<PropostaTipo> _proposte = [];
+    private IReadOnlyList<CoppiaSimile> _simili = [];
+    private StatoLettura? _stato;
+    private string? _testo, _tipo, _messaggio;
+    private Guid? _commessaId;
+    private DateOnly? _dal, _al;
+    private bool _errore;
+    private Timer? _aggiornamento;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (CommessaId is null) _commesse = await Commesse.ElencoAsync();
+        await AggiornaAsync();
+    }
+
+    protected override void OnInitialized() =>
+        // Avanzamento della lettura in sottofondo.
+        _aggiornamento = new Timer(_ => InvokeAsync(async () => { await AggiornaStatoAsync(); StateHasChanged(); }), null,
+            TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+
+    private Guid? Commessa => CommessaId ?? _commessaId;
+
+    private async Task AggiornaAsync()
+    {
+        await AggiornaStatoAsync();
+        _proposte = await Ricerca.ProposteTipoAsync(Commessa);
+        _simili = await Ricerca.DuplicatiSimiliAsync(Commessa);
+        await CercaAsync();
+    }
+
+    private async Task AggiornaStatoAsync() => _stato = await Ricerca.StatoAsync(Commessa);
+
+    private async Task CercaAsync()
+    {
+        _risultati = string.IsNullOrWhiteSpace(_testo) ? null
+            : await Ricerca.CercaAsync(new FiltroRicerca(_testo, Commessa, string.IsNullOrEmpty(_tipo) ? null : _tipo, _dal, _al));
+    }
+
+    private async Task EsaminaAsync(PropostaTipo p, bool conferma)
+    {
+        try
+        {
+            await Ricerca.EsaminaTipoAsync(p.Documento.Id, conferma);
+            (_messaggio, _errore) = (conferma ? $"«{p.Documento.NomeOriginale}»: tipo impostato a «{p.Tipo}»." : null, false);
+        }
+        catch (Exception ex) { (_messaggio, _errore) = (ex.Message, true); }
+        await AggiornaAsync();
+    }
+
+    private async Task RileggiAsync(Guid id)
+    {
+        try
+        {
+            await Lettura.RileggiAsync(id);
+            (_messaggio, _errore) = ("Il documento è di nuovo in coda e sarà letto tra pochi secondi.", false);
+        }
+        catch (Exception ex) { (_messaggio, _errore) = (ex.Message, true); }
+        await AggiornaAsync();
+    }
+
+    /// <summary>Estratto diviso in parti normali e parti da evidenziare (le parole trovate).</summary>
+    private static IEnumerable<(string Parte, bool Evidenza)> Parti(string estratto)
+    {
+        var evidenza = false;
+        foreach (var pezzo in estratto.Split(IndiceRicerca.InizioEvidenza, IndiceRicerca.FineEvidenza))
+        {
+            if (pezzo.Length > 0) yield return (pezzo, evidenza);
+            evidenza = !evidenza;
+        }
+    }
+
+    public void Dispose() => _aggiornamento?.Dispose();
+}

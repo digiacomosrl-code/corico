@@ -101,7 +101,7 @@ public sealed class RigaAnalisiAziendale : EntitaBase, IRisorsa
 /// Codice di una risorsa nella Lista della Spesa della commessa (es. «MAT.001»), assegnato automaticamente
 /// alla prima comparsa e mai riutilizzato: resta lo stesso anche quando la lista cambia.
 /// </summary>
-public sealed class CodiceRisorsa : EntitaBase
+public sealed class CodiceRisorsa : EntitaBase, IDatoTecnico
 {
     public Guid CommessaId { get; set; }
     public CategoriaRisorsa Categoria { get; set; }

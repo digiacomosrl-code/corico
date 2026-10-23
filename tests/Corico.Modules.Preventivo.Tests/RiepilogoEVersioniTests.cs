@@ -1,3 +1,4 @@
+using Corico.Core.Utenti;
 using ClosedXML.Excel;
 using Corico.Core.Dominio;
 using Corico.Core.Servizi;
@@ -203,5 +204,31 @@ public class RiepilogoEVersioniTests
         var dopo = (await servizio.CalcolaAsync(id)).Aggregata();
         Assert.Equal(["MAT.001", "MAT.002", "MAT.003"], dopo.Select(r => r.Codice).ToArray());
         Assert.Equal("Maniglione antipanico", dopo.Single(r => r.Codice == "MAT.003").Descrizione);
+    }
+
+    [Fact]
+    public async Task Pubblicazione_riservata_all_amministratore_e_consultazione_in_lettura()
+    {
+        var (amb, id, _, _) = await PreparaAsync();
+        await using var _ = amb;
+        var operatore = new IdentitaUtente(Guid.NewGuid(), "operatore", "Oreste Operatore", RuoloUtente.Operatore);
+        var lettore = new IdentitaUtente(Guid.NewGuid(), "lettore", "Lucia Lettrice", RuoloUtente.Consultazione);
+
+        using (UtenteCorrente.Imposta(operatore))
+        {
+            var ex = await Assert.ThrowsAsync<OperazioneNonValidaException>(() => amb.Get<VersioniService>().PubblicaAsync(id, "Offerta di gara"));
+            Assert.Contains("amministratore", ex.Message);
+        }
+
+        using (UtenteCorrente.Imposta(lettore))
+        {
+            // Consultare preventivo, riepilogo e lista della spesa non è una modifica.
+            Assert.NotEmpty(await amb.Get<PreventivoService>().VociAsync(id));
+            await amb.Get<RiepilogoService>().AvvisiAsync(id);
+            await amb.Get<ListaSpesaService>().CalcolaAsync(id);
+            var voce = (await amb.Get<PreventivoService>().VociAsync(id)).First();
+            await Assert.ThrowsAsync<OperazioneNonValidaException>(() => amb.Get<PreventivoService>().SalvaVoceAsync(id,
+                new DatiVoce { Id = voce.Id, Versione = voce.Versione, Tariffa = voce.Tariffa, Descrizione = "Cambiata", Unita = voce.Unita, Quantita = 1, Prezzo = 1 }));
+        }
     }
 }

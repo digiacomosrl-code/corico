@@ -217,3 +217,22 @@ tr.dettaglio-annullamento .tabella { width: auto; min-width: 32rem; margin-botto
 .cerca-voce .tendina li { display: grid; grid-template-columns: 7rem 1fr auto; gap: .75rem; padding: .4rem .6rem; cursor: pointer; border-bottom: 1px solid var(--grigio-sfondo); }
 .cerca-voce .tendina li:hover { background: var(--blu-chiaro); }
 .cerca-voce .tendina li.testo-secondario { display: block; cursor: default; }
+
+/* Accesso, cambio password e utente collegato (1.0) */
+.pagina-accesso { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--blu); padding: 1rem; }
+.scheda-accesso { width: 100%; max-width: 400px; background: #fff; border-radius: var(--raggio); padding: 1.5rem 1.75rem; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.scheda-accesso form, .modulo-stretto { display: flex; flex-direction: column; gap: .75rem; }
+.scheda-accesso label, .modulo-stretto label { display: flex; flex-direction: column; gap: .25rem; font-weight: 500; font-size: .88rem; }
+.scheda-accesso .pulsante { margin-top: .25rem; }
+.marchio-accesso { color: var(--blu); text-align: center; margin-bottom: 1.25rem; }
+.versione-accesso { text-align: center; font-size: .78rem; color: var(--testo-secondario); margin: 1.25rem 0 0; }
+.modulo-stretto { max-width: 420px; }
+.utente-collegato { display: flex; align-items: center; gap: .6rem; font-size: .88rem; white-space: nowrap; }
+.utente-collegato .nome { font-weight: 600; color: var(--blu); }
+.utente-collegato a, .utente-collegato button { font-size: .85rem; }
+.collegamento { background: none; border: none; color: var(--blu-medio); text-decoration: underline; cursor: pointer; padding: 0; font: inherit; }
+.etichetta-ruolo { color: var(--blu); background: var(--blu-chiaro); }
+.etichetta-consultazione { color: var(--ambra); background: var(--ambra-chiaro); }
+.etichetta-disattivo { color: var(--testo-secondario); background: var(--grigio-sfondo); }
+.presenza { background: var(--blu-chiaro); color: var(--blu); border-radius: var(--raggio); padding: .45rem .75rem; margin-bottom: .75rem; }
+.password-provvisoria { font-family: Consolas, monospace; font-size: 1.15rem; letter-spacing: .08em; background: #fff; border: 1px dashed var(--blu-medio); padding: .2rem .6rem; border-radius: var(--raggio); }

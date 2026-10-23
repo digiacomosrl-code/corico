@@ -54,6 +54,19 @@ Reinstallare o aggiornare il programma non modifica mai la cartella dati.
 
 Per provare il ritorno automatico sull'ambiente di prova: aggiungere `-SimulaErrore`.
 
+## Utenti e accesso dagli altri uffici (versione 1.0)
+
+- Al primo avvio, **dal PC sede** (collegamento sul desktop, `http://127.0.0.1:5080`), si crea l'amministratore.
+  Dagli altri uffici il primo amministratore non si può creare.
+- L'amministratore crea gli utenti dalla pagina **Utenti** (ruoli Amministratore, Operatore, Consultazione):
+  ogni utente riceve una password provvisoria da cambiare al primo accesso.
+- Corico ascolta solo su `127.0.0.1`. Per gli altri uffici: `scripts\pubblica-tailscale.cmd` pubblica Corico
+  in HTTPS nella rete privata Tailscale (`https://<nome-pc>.<rete>.ts.net`), senza aprire porte e senza Funnel.
+  `pubblica-tailscale.cmd disattiva` toglie la pubblicazione.
+- Password dimenticata dall'unico amministratore: sul PC sede, con Corico chiuso,
+  `Corico.Web.exe --utenti reimposta-password <nome>` stampa una nuova password provvisoria;
+  `Corico.Web.exe --utenti elenco` elenca gli utenti.
+
 ## Aggiungere un modulo
 
 1. Creare un progetto Razor Class Library `src/Corico.Modules.<Nome>` che referenzia `Corico.Core`.

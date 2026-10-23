@@ -1,0 +1,272 @@
+@page "/utenti"
+@attribute [Authorize(Roles = nameof(RuoloUtente.Amministratore))]
+@implements IDisposable
+@inject UtentiService ServizioUtenti
+@inject PresenzaService Presenza
+
+<PageTitle>Utenti — Corico</PageTitle>
+
+<h1>Utenti</h1>
+<p class="testo-secondario">
+    Ogni collega accede con il proprio nome utente e la propria password; ogni modifica resta registrata con il suo nome.
+    <strong>Amministratore</strong>: tutto, compresi utenti, backup e aggiornamenti.
+    <strong>Operatore</strong>: lavora su commesse, preventivi, pacchetti e ordini.
+    <strong>Consultazione</strong>: vede e stampa, non modifica.
+</p>
+
+<Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+@if (_provvisoria is { } pr)
+{
+    <div class="riquadro">
+        <h3>Password provvisoria per @pr.Nome</h3>
+        <p>Comunicala a voce o di persona (non per e-mail): <span class="password-provvisoria">@pr.Password</span></p>
+        <p class="testo-secondario">Non sarà più visibile dopo la chiusura. Al primo accesso il collega dovrà sceglierne una personale.</p>
+        <button class="pulsante" @onclick="() => _provvisoria = null">Ho preso nota, chiudi</button>
+    </div>
+}
+
+<div class="riquadro">
+    <h3>Nuovo utente</h3>
+    <div class="griglia-form">
+        <label>Nome e cognome <input @bind="_nuovo.NomeCompleto" /></label>
+        <label>Nome utente <input @bind="_nuovo.NomeUtente" placeholder="es. mario.rossi" /></label>
+        <label>E-mail (facoltativa) <input type="email" @bind="_nuovo.Email" /></label>
+        <label>
+            Ruolo
+            <select @bind="_nuovo.Ruolo">
+                @foreach (var r in Enum.GetValues<RuoloUtente>())
+                {
+                    <option value="@r">@r</option>
+                }
+            </select>
+        </label>
+    </div>
+    <div class="azioni">
+        <button class="pulsante primario" @onclick="CreaAsync">Crea utente</button>
+    </div>
+</div>
+
+<div class="riquadro">
+    <h3>Elenco utenti</h3>
+    <div class="scorrevole">
+        <table class="tabella">
+            <thead>
+                <tr><th>Nome e cognome</th><th>Nome utente</th><th>E-mail</th><th>Ruolo</th><th>Stato</th><th>Ultimo accesso</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var u in _utenti)
+                {
+                    @if (_modifica?.Id == u.Id)
+                    {
+                        <tr>
+                            <td><input @bind="_modifica.NomeCompleto" /></td>
+                            <td class="codice">@u.NomeUtente</td>
+                            <td><input type="email" @bind="_modifica.Email" /></td>
+                            <td>
+                                <select @bind="_modifica.Ruolo">
+                                    @foreach (var r in Enum.GetValues<RuoloUtente>())
+                                    {
+                                        <option value="@r">@r</option>
+                                    }
+                                </select>
+                            </td>
+                            <td><label><input type="checkbox" @bind="_modifica.Attivo" /> Attivo</label></td>
+                            <td></td>
+                            <td class="azioni-riga">
+                                <button class="pulsante primario" @onclick="SalvaAsync">Salva</button>
+                                <button class="pulsante" @onclick="() => _modifica = null">Annulla</button>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr>
+                            <td>@u.NomeCompleto</td>
+                            <td class="codice">@u.NomeUtente</td>
+                            <td>@u.Email</td>
+                            <td>@u.Ruolo</td>
+                            <td>
+                                @if (!u.Attivo)
+                                {
+                                    <span class="etichetta etichetta-disattivo">Disattivato</span>
+                                }
+                                else if (u.CambioPasswordObbligatorio)
+                                {
+                                    <span class="etichetta etichetta-consultazione" title="Deve ancora scegliere la propria password">Password provvisoria</span>
+                                }
+                                else
+                                {
+                                    <span class="etichetta etichetta-attiva">Attivo</span>
+                                }
+                            </td>
+                            <td>@(u.UltimoAccesso is { } d ? Formato.DataOra(d) : "—")</td>
+                            <td class="azioni-riga">
+                                <button class="pulsante" @onclick="() => ApriModifica(u)">Modifica</button>
+                                <button class="pulsante" @onclick="() => ReimpostaAsync(u)">Reimposta password</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="riquadro">
+    <h3>Collegati adesso</h3>
+    @if (Presenza.Collegati.Count == 0)
+    {
+        <p class="testo-secondario">Nessuno.</p>
+    }
+    else
+    {
+        <table class="tabella">
+            <thead><tr><th>Utente</th><th>Collegato dalle</th><th>Commessa aperta</th></tr></thead>
+            <tbody>
+                @foreach (var c in Presenza.Collegati)
+                {
+                    <tr>
+                        <td>@c.Nome</td>
+                        <td>@Formato.DataOra(c.DalUtc)</td>
+                        <td>@(c.CommessaId is { } id ? (_commesse.TryGetValue(id, out var nome) ? nome : "aperta") : "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="testo-secondario">Una scheda del browser aperta conta come un collegamento.</p>
+    }
+</div>
+
+<div class="riquadro">
+    <h3>Registro accessi e modifiche degli utenti</h3>
+    <div class="scorrevole">
+        <table class="tabella">
+            <thead><tr><th>Data e ora</th><th>Eseguito da</th><th>Operazione</th><th>Dettaglio</th></tr></thead>
+            <tbody>
+                @foreach (var v in _registro)
+                {
+                    <tr>
+                        <td>@Formato.DataOra(v.DataOra)</td>
+                        <td>@(v.Operazione == "Accesso non riuscito" ? "—" : v.Utente)</td>
+                        <td>@v.Operazione</td>
+                        <td>@Dettaglio(v)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private sealed class DatiUtente
+    {
+        public Guid Id { get; set; }
+        public int Versione { get; set; }
+        public string? NomeUtente { get; set; }
+        public string? NomeCompleto { get; set; }
+        public string? Email { get; set; }
+        public RuoloUtente Ruolo { get; set; } = RuoloUtente.Operatore;
+        public bool Attivo { get; set; } = true;
+    }
+
+    private IReadOnlyList<RigaUtente> _utenti = [];
+    private IReadOnlyList<VoceStorico> _registro = [];
+    private Dictionary<Guid, string> _commesse = [];
+    private DatiUtente _nuovo = new();
+    private DatiUtente? _modifica;
+    private (string Nome, string Password)? _provvisoria;
+    private string? _messaggio;
+    private bool _errore;
+
+    [Inject] private CommesseService Commesse { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Presenza.Cambiato += AggiornaPresenze;
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync()
+    {
+        _utenti = await ServizioUtenti.ElencoAsync();
+        _registro = await ServizioUtenti.RegistroAccessiAsync();
+        _commesse = (await Commesse.ElencoAsync(includiArchiviate: true))
+            .ToDictionary(c => c.Id, c => $"{c.Codice} – {c.Descrizione}");
+    }
+
+    private void AggiornaPresenze() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task CreaAsync()
+    {
+        try
+        {
+            var password = await ServizioUtenti.CreaAsync(_nuovo.NomeUtente ?? "", _nuovo.NomeCompleto ?? "", _nuovo.Email, _nuovo.Ruolo);
+            _provvisoria = (_nuovo.NomeCompleto!.Trim(), password);
+            (_messaggio, _errore) = ($"Utente «{UtentiService.Normalizza(_nuovo.NomeUtente!)}» creato.", false);
+            _nuovo = new();
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private void ApriModifica(RigaUtente u) => _modifica = new DatiUtente
+    {
+        Id = u.Id, Versione = u.Versione, NomeCompleto = u.NomeCompleto, Email = u.Email, Ruolo = u.Ruolo, Attivo = u.Attivo,
+    };
+
+    private async Task SalvaAsync()
+    {
+        if (_modifica is not { } m) return;
+        try
+        {
+            await ServizioUtenti.ModificaAsync(m.Id, m.Versione, m.NomeCompleto ?? "", m.Email, m.Ruolo, m.Attivo);
+            (_messaggio, _errore, _modifica) = ("Utente aggiornato. Le modifiche valgono subito, anche per chi è già collegato.", false, null);
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task ReimpostaAsync(RigaUtente u)
+    {
+        try
+        {
+            _provvisoria = (u.NomeCompleto, await ServizioUtenti.ReimpostaPasswordAsync(u.Id));
+            _messaggio = null;
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    /// <summary>Nota dell'operazione oppure, per inserimenti e modifiche, i dati cambiati in forma leggibile.</summary>
+    private static string? Dettaglio(VoceStorico v)
+    {
+        if (v.Nota is not null) return v.Nota;
+        static Dictionary<string, string> Leggi(string? json) => json is null ? [] :
+            System.Text.Json.JsonDocument.Parse(json).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => Valore(p.Name, p.Value));
+        static string Valore(string campo, System.Text.Json.JsonElement e) => e.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.Null => "—",
+            System.Text.Json.JsonValueKind.True => "sì",
+            System.Text.Json.JsonValueKind.False => "no",
+            System.Text.Json.JsonValueKind.Number when campo == nameof(RigaUtente.Ruolo) => ((RuoloUtente)e.GetInt32()).ToString(),
+            _ => e.ToString(),
+        };
+        var dopo = Leggi(v.ValoriSuccessivi);
+        if (v.Operazione == "Inserimento")
+            return $"Nuovo utente {dopo.GetValueOrDefault("NomeUtente")} – {dopo.GetValueOrDefault("NomeCompleto")} ({dopo.GetValueOrDefault("Ruolo")})";
+        var prima = Leggi(v.ValoriPrecedenti);
+        return string.Join("; ", dopo.Select(d => $"{d.Key}: {prima.GetValueOrDefault(d.Key, "—")} → {d.Value}"));
+    }
+
+    public void Dispose() => Presenza.Cambiato -= AggiornaPresenze;
+}

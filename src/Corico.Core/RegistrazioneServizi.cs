@@ -18,7 +18,9 @@ public static class RegistrazioneServizi
 
         servizi.AddSingleton(percorsi);
         servizi.AddSingleton(TimeProvider.System);
-        servizi.AddSingleton<IUtenteCorrente, UtenteWindows>();
+        servizi.AddSingleton<IUtenteCorrente, UtenteCorrente>();
+        servizi.AddSingleton<UtentiService>();
+        servizi.AddSingleton<PresenzaService>();
         servizi.AddSingleton(new RegistroModuli(attivi));
         servizi.AddSingleton<MonitorAttivita>();
 

@@ -1,6 +1,9 @@
 @page "/commesse/{Id:guid}"
 @inject CommesseService Commesse
 @inject RegistroModuli Moduli
+@inject PresenzaService Presenza
+@inject SessioneUtente Sessione
+@implements IDisposable
 
 <PageTitle>@(_commessa?.Codice ?? "Commessa") — Corico</PageTitle>
 
@@ -17,6 +20,14 @@ else
         </div>
         <div><EtichettaStato Stato="_commessa.Stato" Archiviata="_commessa.Archiviata" /></div>
     </div>
+
+    @if (_altri.Count > 0)
+    {
+        <div class="presenza" role="status">
+            Anche @string.Join(", ", _altri) @(_altri.Count == 1 ? "sta" : "stanno") lavorando su questa commessa.
+            Se modificate gli stessi dati, Corico salva la prima modifica e avvisa l'altro prima di sovrascrivere.
+        </div>
+    }
 
     <div class="schede" role="tablist">
         @foreach (var titolo in Schede())
@@ -53,10 +64,31 @@ else
     private bool _caricata;
     private string _schedaAttiva = "Dati generali";
 
+    private IReadOnlyList<string> _altri = [];
+    private bool _inAscolto;
+
     protected override async Task OnParametersSetAsync()
     {
         _commessa = await Commesse.OttieniAsync(Id);
         _caricata = true;
+        Presenza.ApriCommessa(Sessione.Id, Id);
+        if (!_inAscolto) { Presenza.Cambiato += AggiornaPresenze; _inAscolto = true; }
+        _altri = AltriUtenti();
+    }
+
+    private IReadOnlyList<string> AltriUtenti() =>
+        Sessione.Identita is { } u ? Presenza.AltriSullaCommessa(Id, u.Id) : [];
+
+    private void AggiornaPresenze() => _ = InvokeAsync(() =>
+    {
+        _altri = AltriUtenti();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        Presenza.Cambiato -= AggiornaPresenze;
+        Presenza.ApriCommessa(Sessione.Id, null);
     }
 
     /// <summary>Dopo un annullamento dallo storico i dati della commessa possono essere cambiati.</summary>

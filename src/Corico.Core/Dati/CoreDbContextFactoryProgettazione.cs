@@ -12,6 +12,6 @@ internal sealed class CoreDbContextFactoryProgettazione : IDesignTimeDbContextFa
         var options = new DbContextOptionsBuilder<CoreDbContext>()
             .UseSqlite("Data Source=progettazione.db", o => o.MigrationsHistoryTable(CoreDbContext.TabellaMigrazioni))
             .Options;
-        return new CoreDbContext(options, new UtenteWindows(), TimeProvider.System);
+        return new CoreDbContext(options, new UtenteCorrente(), TimeProvider.System);
     }
 }

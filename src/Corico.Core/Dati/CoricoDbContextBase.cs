@@ -107,12 +107,29 @@ public abstract class CoricoDbContextBase : DbContext
         catch (DbUpdateConcurrencyException ex) { throw Conflitto(ex); }
     }
 
-    private static ConflittoModificaException Conflitto(DbUpdateConcurrencyException ex) =>
-        new("I dati sono stati modificati in un'altra scheda o finestra dopo che li avevi aperti. " +
-            "Ricarica la pagina per vedere la versione aggiornata prima di salvare di nuovo.", ex);
+    /// <summary>Avviso di modifica contemporanea: dice, se possibile, chi ha salvato per primo e quando.</summary>
+    private static ConflittoModificaException Conflitto(DbUpdateConcurrencyException ex)
+    {
+        string? chi = null;
+        try
+        {
+            var attuali = ex.Entries.FirstOrDefault()?.GetDatabaseValues();
+            if (attuali is null)
+                return new("I dati sono stati eliminati da un altro utente dopo che li avevi aperti. Ricarica la pagina.", ex);
+            if (attuali.Properties.Any(p => p.Name == nameof(EntitaBase.ModificatoDa))
+                && attuali[nameof(EntitaBase.ModificatoDa)] is string da && attuali[nameof(EntitaBase.ModificatoIl)] is DateTime il)
+                chi = $"{da} alle {DateTime.SpecifyKind(il, DateTimeKind.Utc).ToLocalTime():HH:mm} del {DateTime.SpecifyKind(il, DateTimeKind.Utc).ToLocalTime():dd/MM}";
+        }
+        catch (Exception) { /* l'avviso resta generico */ }
+        return new((chi is null
+                ? "I dati sono stati modificati da un altro utente o in un'altra finestra dopo che li avevi aperti. "
+                : $"I dati sono stati modificati da {chi}, dopo che li avevi aperti. ") +
+            "Ricarica la pagina per vedere la versione aggiornata prima di salvare di nuovo: le tue modifiche non sono state salvate.", ex);
+    }
 
     private void PreparaSalvataggio()
     {
+        ControllaPermessi();
         var adesso = _orologio.GetUtcNow().UtcDateTime;
         var utente = _utente.Nome;
         var voci = new List<VoceStorico>();
@@ -150,10 +167,46 @@ public abstract class CoricoDbContextBase : DbContext
         NotaStorico = null;
     }
 
+    /// <summary>
+    /// Permessi applicati a ogni salvataggio, qualunque sia la pagina di partenza:
+    /// la consultazione non modifica nulla (salvo i dati tecnici creati in lettura);
+    /// gli utenti li gestisce solo l'amministratore, mentre ciascuno può cambiare la propria password.
+    /// Senza utente collegato (operazioni di sistema) non ci sono limiti.
+    /// </summary>
+    private void ControllaPermessi()
+    {
+        if (_utente.Identita is not { } chi) return;
+        var modifiche = ChangeTracker.Entries()
+            .Where(e => e.Entity is not VoceStorico && e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .ToList();
+        if (modifiche.Count == 0) return;
+
+        if (!chi.Attivo)
+            throw new OperazioneNonValidaException("Il tuo utente è stato disattivato: esci e rivolgiti all'amministratore.");
+        if (chi.Ruolo == RuoloUtente.Consultazione && modifiche.Any(e => e.Entity is not Utente && !(e.State == EntityState.Added && e.Entity is IDatoTecnico)))
+            throw new OperazioneNonValidaException("Il tuo profilo è di sola consultazione: non puoi modificare i dati.");
+
+        if (chi.Ruolo != RuoloUtente.Amministratore && modifiche.Any(e => e.Entity is IRiservatoAmministratore && e.State == EntityState.Added))
+            throw new OperazioneNonValidaException("Questa operazione è riservata all'amministratore.");
+
+        if (chi.Ruolo != RuoloUtente.Amministratore)
+        {
+            string[] propri = [nameof(Utente.HashPassword), nameof(Utente.CambioPasswordObbligatorio), nameof(Utente.UltimoAccesso)];
+            foreach (var e in modifiche.Where(e => e.Entity is Utente))
+            {
+                var ammessa = e.State == EntityState.Modified && ((Utente)e.Entity).Id == chi.Id
+                    && e.Properties.Where(p => p.IsModified).All(p => propri.Contains(p.Metadata.Name) || CampiTecnici.Contains(p.Metadata.Name));
+                if (!ammessa) throw new OperazioneNonValidaException("Solo l'amministratore può gestire gli utenti.");
+            }
+        }
+    }
+
     private static readonly HashSet<string> CampiTecnici =
     [
         nameof(EntitaBase.Versione), nameof(EntitaBase.CreatoIl), nameof(EntitaBase.CreatoDa),
         nameof(EntitaBase.ModificatoIl), nameof(EntitaBase.ModificatoDa),
+        // L'impronta della password non va mai nello storico.
+        nameof(Utente.HashPassword), nameof(Utente.UltimoAccesso), nameof(Utente.CambioPasswordObbligatorio),
     ];
 
     private VoceStorico? CreaVoceStorico(EntityEntry entry, DateTime adesso, string utente)

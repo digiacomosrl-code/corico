@@ -10,13 +10,21 @@
     <link rel="stylesheet" href="@Assets["Corico.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" href="data:," />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="ModalitaPagina" />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="ModalitaPagina" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 
 </html>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    // La pagina di accesso è statica (imposta il cookie); tutte le altre sono interattive.
+    private IComponentRenderMode? ModalitaPagina =>
+        HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+}

@@ -16,6 +16,7 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
     public DbSet<ContatoreCodice> ContatoriCodice => Set<ContatoreCodice>();
     public DbSet<Impostazione> Impostazioni => Set<Impostazione>();
     public DbSet<RegistroBackup> RegistroBackup => Set<RegistroBackup>();
+    public DbSet<Utente> Utenti => Set<Utente>();
 
     protected override bool PossiedeTabelleCore => true;
 
@@ -32,6 +33,16 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
             e.Property(x => x.ProvinciaCantiere).HasMaxLength(5);
             e.HasOne(x => x.Cliente).WithMany().HasForeignKey(x => x.ClienteId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Documento>().WithMany().HasForeignKey(x => x.ContrattoDocumentoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Utente>(e =>
+        {
+            e.ToTable("CORE_Utenti");
+            e.HasIndex(x => x.NomeUtente).IsUnique();
+            e.Property(x => x.NomeUtente).HasMaxLength(50).IsRequired();
+            e.Property(x => x.NomeCompleto).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Email).HasMaxLength(200);
+            e.Property(x => x.HashPassword).HasMaxLength(200).IsRequired();
         });
 
         modelBuilder.Entity<Cliente>(e =>

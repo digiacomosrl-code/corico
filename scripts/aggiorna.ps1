@@ -40,7 +40,7 @@ function Avvia-Corico {
 function Attendi-Avvio($porta) {
     for ($i = 0; $i -lt 30; $i++) {
         try {
-            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$porta/" -UseBasicParsing -TimeoutSec 3
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$porta/accesso" -UseBasicParsing -TimeoutSec 3
             if ($r.StatusCode -eq 200) { return $true }
         } catch { }
         Start-Sleep -Seconds 2

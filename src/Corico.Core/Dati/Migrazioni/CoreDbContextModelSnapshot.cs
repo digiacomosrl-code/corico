@@ -449,6 +449,70 @@ namespace Corico.Core.Dati.Migrazioni
                     b.ToTable("CORE_Storico", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Core.Utenti.Utente", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Attivo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("CambioPasswordObbligatorio")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HashPassword")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NomeCompleto")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NomeUtente")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ruolo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("UltimoAccesso")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NomeUtente")
+                        .IsUnique();
+
+                    b.ToTable("CORE_Utenti", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Core.Dominio.Commessa", b =>
                 {
                     b.HasOne("Corico.Core.Dominio.Cliente", "Cliente")

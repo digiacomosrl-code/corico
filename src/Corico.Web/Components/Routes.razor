@@ -2,7 +2,18 @@
 
 <Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="_assemblyModuli" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <VaiAdAccesso />
+                }
+                else
+                {
+                    <div class="riquadro"><h3>Accesso non consentito</h3><p>Questa pagina è riservata all'amministratore.</p></div>
+                }
+            </NotAuthorized>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>

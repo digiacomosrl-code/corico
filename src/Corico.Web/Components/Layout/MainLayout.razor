@@ -3,6 +3,11 @@
 @inject RegistroModuli Moduli
 @inject AvvisiService AvvisiSistema
 @inject NavigationManager Nav
+@inject SessioneUtente Sessione
+@inject UtentiService Utenti
+@inject IJSRuntime JS
+@inject Microsoft.Extensions.Options.IOptions<Corico.Core.Configurazione.CoricoOpzioni> Opzioni
+@implements IDisposable
 
 <div class="pagina">
     <aside class="laterale">
@@ -19,8 +24,12 @@
             {
                 <NavLink class="voce" href="@voce.Indirizzo">@voce.Titolo</NavLink>
             }
-            <div class="separatore"></div>
-            <NavLink class="voce voce-admin" href="amministrazione">Amministrazione</NavLink>
+            @if (Sessione.Amministratore)
+            {
+                <div class="separatore"></div>
+                <NavLink class="voce voce-admin" href="utenti">Utenti</NavLink>
+                <NavLink class="voce voce-admin" href="amministrazione">Amministrazione</NavLink>
+            }
         </nav>
     </aside>
 
@@ -30,6 +39,22 @@
                 <input type="search" placeholder="Cerca commessa per codice o descrizione…" @bind="_ricerca" aria-label="Ricerca commesse" />
             </form>
             <span class="versione-programma" title="Versione installata: @ControlliAggiornamento.VersioneProgramma">Corico versione @ControlliAggiornamento.VersioneBreve</span>
+            @if (Sessione.Identita is { } u)
+            {
+                <span class="utente-collegato">
+                    <span class="nome" title="Utente: @u.NomeUtente">@u.Nome</span>
+                    @if (Sessione.SolaConsultazione)
+                    {
+                        <span class="etichetta etichetta-consultazione" title="Puoi consultare e stampare, non modificare">Sola consultazione</span>
+                    }
+                    else
+                    {
+                        <span class="etichetta etichetta-ruolo">@u.Ruolo</span>
+                    }
+                    <a href="password">Cambia password</a>
+                    <a href="esci" data-enhance-nav="false">Esci</a>
+                </span>
+            }
         </header>
 
         @foreach (var avviso in _avvisi)
@@ -56,10 +81,53 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? StatoAccesso { get; set; }
+
     private string? _ricerca;
     private IReadOnlyList<Avviso> _avvisi = [];
+    private Timer? _controllo;
+    private DateTimeOffset _ultimoRinnovo = DateTimeOffset.UtcNow;
 
-    protected override async Task OnInitializedAsync() => _avvisi = await AvvisiSistema.AvvisiDiSistemaAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        // In prerender il circuito non c'è ancora: l'identità si ricava dal cookie di accesso.
+        if (Sessione.Identita is null && StatoAccesso is not null && SessioneUtente.IdDa((await StatoAccesso).User) is { } id)
+            Sessione.Identita = await Utenti.IdentitaAsync(id);
+        _avvisi = Sessione.Amministratore ? await AvvisiSistema.AvvisiDiSistemaAsync() : [];
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Primo accesso o password reimpostata: prima si sceglie una password personale.
+        if (Sessione.Identita?.CambioPasswordObbligatorio == true && !Nav.ToBaseRelativePath(Nav.Uri).StartsWith("password", StringComparison.OrdinalIgnoreCase))
+            Nav.NavigateTo("password");
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) _controllo = new Timer(_ => _ = InvokeAsync(ControllaSessioneAsync), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+    }
+
+    /// <summary>Uscita automatica dopo il tempo di inattività; finché si lavora il cookie di accesso viene rinnovato.</summary>
+    private async Task ControllaSessioneAsync()
+    {
+        var adesso = DateTimeOffset.UtcNow;
+        if (adesso - Sessione.UltimaAttivita > TimeSpan.FromMinutes(Opzioni.Value.MinutiInattivita))
+        {
+            _controllo?.Dispose();
+            Nav.NavigateTo("esci?motivo=inattivita", forceLoad: true);
+            return;
+        }
+        if (Sessione.UltimaAttivita > _ultimoRinnovo && adesso - _ultimoRinnovo > TimeSpan.FromMinutes(5))
+        {
+            _ultimoRinnovo = adesso;
+            try { await JS.InvokeVoidAsync("fetch", "rinnova"); }
+            catch (JSException) { }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    public void Dispose() => _controllo?.Dispose();
 
     private void Cerca() => Nav.NavigateTo("?cerca=" + Uri.EscapeDataString(_ricerca ?? ""));
 }

@@ -1,0 +1,120 @@
+@page "/accesso"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout LayoutAccesso
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@inject UtentiService Utenti
+@inject NavigationManager Nav
+
+<PageTitle>Accesso — Corico</PageTitle>
+
+@if (!string.IsNullOrEmpty(_errore))
+{
+    <div class="messaggio messaggio-errore" role="alert">@_errore</div>
+}
+else if (Scaduta == 1)
+{
+    <div class="messaggio messaggio-ok" role="status">La sessione è scaduta per inattività: accedi di nuovo.</div>
+}
+
+@if (!_esistonoUtenti)
+{
+    @if (_dalPcSede)
+    {
+        <h3>Primo avvio: crea l'amministratore</h3>
+        <p class="testo-secondario">L'amministratore gestisce utenti, backup e aggiornamenti. Dopo l'accesso potrai creare gli utenti dei colleghi.</p>
+        <EditForm Model="Primo" method="post" OnSubmit="CreaAmministratoreAsync" FormName="primo-amministratore">
+            <label>Nome e cognome <InputText @bind-Value="Primo.NomeCompleto" autocomplete="name" /></label>
+            <label>Nome utente <InputText @bind-Value="Primo.NomeUtente" autocomplete="username" placeholder="es. salvatore" /></label>
+            <label>Password (almeno 8 caratteri, con lettere e numeri) <InputText type="password" @bind-Value="Primo.Password" autocomplete="new-password" /></label>
+            <label>Ripeti la password <InputText type="password" @bind-Value="Primo.Conferma" autocomplete="new-password" /></label>
+            <button type="submit" class="pulsante primario">Crea l'amministratore ed entra</button>
+        </EditForm>
+    }
+    else
+    {
+        <h3>Corico non è ancora configurato</h3>
+        <p>Il primo utente (amministratore) si crea dal PC della sede, dal collegamento «Corico» sul desktop (indirizzo <code>http://127.0.0.1:5080</code>).</p>
+    }
+}
+else
+{
+    <h3>Accedi</h3>
+    <EditForm Model="Dati" method="post" OnSubmit="AccediAsync" FormName="accesso">
+        <label>Nome utente <InputText @bind-Value="Dati.NomeUtente" autocomplete="username" autofocus /></label>
+        <label>Password <InputText type="password" @bind-Value="Dati.Password" autocomplete="current-password" /></label>
+        <button type="submit" class="pulsante primario">Entra</button>
+    </EditForm>
+    <p class="testo-secondario">Password dimenticata? Chiedi all'amministratore di reimpostarla.</p>
+}
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromQuery] private string? Ritorno { get; set; }
+    [SupplyParameterFromQuery] private int? Scaduta { get; set; }
+    [SupplyParameterFromForm(FormName = "accesso")] private DatiAccesso Dati { get; set; } = new();
+    [SupplyParameterFromForm(FormName = "primo-amministratore")] private DatiPrimo Primo { get; set; } = new();
+
+    private bool _esistonoUtenti, _dalPcSede;
+    private string? _errore;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _esistonoUtenti = await Utenti.EsistonoUtentiAsync();
+        _dalPcSede = RegoleAccesso.DalPcSede(HttpContext);
+        if (HttpMethods.IsGet(HttpContext.Request.Method) && HttpContext.User.Identity?.IsAuthenticated == true)
+            Nav.NavigateTo(RegoleAccesso.Ritorno(Ritorno));
+    }
+
+    private async Task AccediAsync()
+    {
+        var esito = await Utenti.AccediAsync(Dati.NomeUtente ?? "", Dati.Password ?? "");
+        if (!esito.Riuscito)
+        {
+            _errore = esito.Errore;
+            return;
+        }
+        await EntraAsync(esito.Identita!);
+    }
+
+    private async Task CreaAmministratoreAsync()
+    {
+        if (!_dalPcSede || _esistonoUtenti) return;
+        if (Primo.Password != Primo.Conferma)
+        {
+            _errore = "Le due password non coincidono.";
+            return;
+        }
+        try
+        {
+            var u = await Utenti.CreaPrimoAmministratoreAsync(Primo.NomeUtente ?? "", Primo.NomeCompleto ?? "", Primo.Password ?? "");
+            await Utenti.AccediAsync(u.NomeUtente, Primo.Password!);
+            await EntraAsync(u);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            _errore = ex.Message;
+        }
+    }
+
+    private async Task EntraAsync(IdentitaUtente u)
+    {
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, RegoleAccesso.Principale(u));
+        Nav.NavigateTo(u.CambioPasswordObbligatorio ? "/password" : RegoleAccesso.Ritorno(Ritorno));
+    }
+
+    private sealed class DatiAccesso
+    {
+        public string? NomeUtente { get; set; }
+        public string? Password { get; set; }
+    }
+
+    private sealed class DatiPrimo
+    {
+        public string? NomeCompleto { get; set; }
+        public string? NomeUtente { get; set; }
+        public string? Password { get; set; }
+        public string? Conferma { get; set; }
+    }
+}

@@ -3,7 +3,7 @@ using Corico.Core.Dominio;
 namespace Corico.Modules.Preventivo.Dominio;
 
 /// <summary>Preventivo in bozza della commessa: uno per commessa.</summary>
-public sealed class Preventivo : EntitaBase
+public sealed class Preventivo : EntitaBase, IDatoTecnico
 {
     public Guid CommessaId { get; set; }
 

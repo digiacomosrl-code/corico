@@ -1,0 +1,13 @@
+@inherits LayoutComponentBase
+@using Corico.Core.Aggiornamento
+
+<div class="pagina-accesso">
+    <div class="scheda-accesso">
+        <div class="marchio-accesso">
+            <span class="marchio-nome">CORICO</span>
+            <span class="marchio-sotto">Pianificazione commesse</span>
+        </div>
+        @Body
+        <p class="versione-accesso">Corico versione @ControlliAggiornamento.VersioneBreve</p>
+    </div>
+</div>

@@ -12,6 +12,6 @@ internal sealed class PreventivoDbContextFactoryProgettazione : IDesignTimeDbCon
         var options = new DbContextOptionsBuilder<PreventivoDbContext>()
             .UseSqlite("Data Source=progettazione.db", o => o.MigrationsHistoryTable(PreventivoDbContext.TabellaMigrazioni))
             .Options;
-        return new PreventivoDbContext(options, new UtenteWindows(), TimeProvider.System);
+        return new PreventivoDbContext(options, new UtenteCorrente(), TimeProvider.System);
     }
 }

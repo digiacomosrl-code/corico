@@ -27,6 +27,9 @@ public abstract class CoricoDbContextBase : DbContext
 
     public DbSet<VoceStorico> Storico => Set<VoceStorico>();
 
+    /// <summary>Utente che esegue il salvataggio (null per le operazioni di sistema).</summary>
+    protected IdentitaUtente? UtenteCollegato => _utente.Identita;
+
     /// <summary>
     /// True solo per il DbContext del Core, proprietario della tabella dello storico.
     /// I moduli la usano senza includerla nelle proprie migrazioni.

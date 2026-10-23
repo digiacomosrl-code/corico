@@ -222,7 +222,7 @@ public static class EsportazionePdf
     /// <summary>Ordine di acquisto al fornitore, A4 verticale, con l'intestazione dell'impresa.</summary>
     public static byte[] Ordine(DatiAzienda azienda, Dominio.OrdineAcquisto o, string commessa)
     {
-        var (doc, sec) = Pagina($"Ordine {o.Numero}", orizzontale: false);
+        var (doc, sec) = Pagina($"Ordine {o.NumeroVisibile}", orizzontale: false);
 
         // Intestazione: impresa a sinistra, estremi dell'ordine a destra.
         var testa = sec.AddTable();
@@ -241,13 +241,21 @@ public static class EsportazionePdf
         tit.Format.Font.Size = 13;
         tit.Format.Font.Bold = true;
         tit.Format.Font.Color = Colore(Stile.Primario);
-        var num = rt.Cells[1].AddParagraph($"{o.Numero} del {Formato.Data(o.Data)}");
+        var num = rt.Cells[1].AddParagraph(o.Stato == Dominio.StatoOrdine.Bozza ? $"Bozza del {Formato.Data(o.Data)}" : $"{o.Numero} del {Formato.Data(o.Data)}");
         num.Format.Font.Size = 11;
         num.Format.Font.Bold = true;
         rt.Borders.Bottom.Width = Unit.FromPoint(0.75);
         rt.Borders.Bottom.Color = Colore(Stile.Primario);
         rt.BottomPadding = Unit.FromPoint(6);
 
+        if (o.Stato == Dominio.StatoOrdine.Bozza)
+        {
+            var bozza = sec.AddParagraph("BOZZA – anteprima non valida come ordine: il numero si assegna all'emissione.");
+            bozza.Format.Font.Size = 11;
+            bozza.Format.Font.Bold = true;
+            bozza.Format.Font.Color = Colore(Stile.Negativo);
+            bozza.Format.SpaceBefore = Unit.FromPoint(6);
+        }
         if (o.Stato == Dominio.StatoOrdine.Annullato)
         {
             var ann = sec.AddParagraph($"ORDINE ANNULLATO il {Formato.Data(o.AnnullatoIl)}: {o.MotivoAnnullamento}");
@@ -342,7 +350,7 @@ public static class EsportazionePdf
         var piede = sec.Footers.Primary.AddParagraph();
         piede.Format.Font.Size = 7.5;
         piede.Format.Font.Color = Colore(Stile.TestoSecondario);
-        piede.AddText($"Ordine {o.Numero} del {Formato.Data(o.Data)} – {o.Fornitore} – pagina ");
+        piede.AddText($"Ordine {o.NumeroVisibile} del {Formato.Data(o.Data)} – {o.Fornitore} – pagina ");
         piede.AddPageField();
         piede.AddText(" di ");
         piede.AddNumPagesField();

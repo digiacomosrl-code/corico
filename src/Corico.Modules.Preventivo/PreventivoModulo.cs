@@ -29,7 +29,7 @@ public sealed class PreventivoModulo : ICoricoModulo
         new("Lista della Spesa", typeof(SchedaListaSpesa), Ordine: 25),
         new("Ordini", typeof(SchedaOrdini), Ordine: 27),
         new("Riepilogo economico", typeof(SchedaRiepilogo), Ordine: 30),
-        new("Versioni", typeof(SchedaVersioni), Ordine: 40),
+        new("Budget", typeof(SchedaVersioni), Ordine: 40),
     ];
 
     public void RegistraServizi(IServiceCollection servizi, PercorsiDati percorsi)
@@ -47,6 +47,7 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<AnalisiService>();
         servizi.AddSingleton<ListaSpesaService>();
         servizi.AddSingleton<OrdiniService>();
+        servizi.AddSingleton<BudgetService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)

@@ -28,5 +28,11 @@ public sealed class Utente : EntitaBase
 
     public DateTime? UltimoAccesso { get; set; }
 
-    public IdentitaUtente Identita() => new(Id, NomeUtente, NomeCompleto, Ruolo, Attivo, CambioPasswordObbligatorio);
+    /// <summary>
+    /// Per gli operatori: abilitazione a emettere ordini di acquisto e approvare variazioni (Modulo 2).
+    /// L'amministratore è sempre abilitato.
+    /// </summary>
+    public bool PuoEmettereOrdini { get; set; }
+
+    public IdentitaUtente Identita() => new(Id, NomeUtente, NomeCompleto, Ruolo, Attivo, CambioPasswordObbligatorio, PuoEmettereOrdini);
 }

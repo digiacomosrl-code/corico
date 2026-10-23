@@ -1,7 +1,9 @@
-@* Scheda "Versioni" della commessa (rilascio 1C): pubblicazione di versioni ufficiali immutabili e confronto. *@
+@* Scheda "Budget" della commessa (rilascio 1C, Modulo 2 2A): proposta e approvazione del budget, versioni immutabili e confronto. *@
 @inject ConflittiService Conflitti
 @inject VersioniService Versioni
 @inject RiepilogoService Riepilogo
+@inject BudgetService Budget
+@inject SessioneUtente Sessione
 
 @if (!string.IsNullOrEmpty(_messaggio))
 {
@@ -11,62 +13,112 @@
     </div>
 }
 
-@if (_versioni is null || _bozza is null)
+@if (_versioni is null || _bozza is null || _stato is null)
 {
     <p class="testo-secondario">Caricamento…</p>
     return;
 }
 
 <div class="riquadro">
-    <h3>Pubblica una versione ufficiale</h3>
+    <h3>Budget della commessa</h3>
     <p class="testo-secondario">
-        La versione è una fotografia completa e immutabile della bozza attuale: voci, prezzi, pacchetti, offerte scelte,
-        spese generali e totali. La bozza resta modificabile.
+        Quando computo, pacchetti e Lista della Spesa sono completi proponi il Budget 0: Corico ne salva una fotografia immutabile
+        (ricavi, costi, pacchetti, offerte scelte, spese generali). L'amministratore lo approva oppure lo respinge con un motivo.
+        Dopo l'approvazione i prezzi contrattuali sono bloccati e ordini e variazioni si misurano come scostamento dal budget.
+        Un nuovo budget (1, 2…) nasce solo da una perizia di variante.
     </p>
-    @if (_impatto is null)
+
+    @if (_stato.Approvato is { } ap)
     {
-        <p>
-            Sarà la <strong>prima versione ufficiale</strong>: ricavo @Formato.Euro(_bozza.Totali.Ricavo),
-            costo @Formato.Euro(_bozza.Totali.Costo), risultato @Formato.Euro(_bozza.Totali.Risultato).
-        </p>
+        <div class="blocco-budget">
+            <strong>@BudgetService.Etichetta(ap)</strong> da @ap.EsitoDa il @Formato.DataOra(ap.EsitoIl ?? ap.CreatoIl)
+            (proposto da @ap.CreatoDa il @Formato.DataOra(ap.CreatoIl)): ricavo @Formato.Euro(ap.Ricavo), costo @Formato.Euro(ap.Costo),
+            risultato @Formato.Euro(ap.Risultato). I prezzi contrattuali del computo sono bloccati.
+        </div>
     }
-    else if (_impatto.NessunaDifferenza)
+
+    @if (_stato.InApprovazione is { } ia)
     {
-        <p class="testo-secondario">La bozza non presenta differenze rispetto alla @_impatto.EtichettaPrima.ToLowerInvariant().</p>
-    }
-    else
-    {
-        <p>Impatto rispetto alla @_impatto.EtichettaPrima.ToLowerInvariant():</p>
-        <TabellaTotaliConfronto Confronto="_impatto" SoloCambiati="true" />
-        <p class="testo-secondario">@_impatto.Pacchetti.Count pacchetti e @_impatto.Voci.Count voci cambiati. Il dettaglio è nel confronto qui sotto.</p>
-    }
-    <div class="griglia-form due-colonne">
-        <label class="largo">
-            Nota della versione (obbligatoria)
-            <textarea rows="2" @bind="_nota" @bind:event="oninput" placeholder="Es. Offerta di gara; revisione dopo trattativa infissi"></textarea>
-        </label>
-    </div>
-    <div class="azioni">
-        @if (!_conferma)
+        <div class="segnalazione segnalazione-attenzione">
+            <strong>@BudgetService.Etichetta(ia)</strong>: proposto da @ia.CreatoDa il @Formato.DataOra(ia.CreatoIl) –
+            ricavo @Formato.Euro(ia.Ricavo), costo @Formato.Euro(ia.Costo), MDC @Formato.Euro(ia.Mdc), risultato @Formato.Euro(ia.Risultato).
+            @if (ia.Avvisi is { } av)
+            {
+                <div>Avvisi alla proposta: @av.Replace("\n", " · ")</div>
+            }
+        </div>
+        @if (Sessione.Amministratore)
         {
-            <button class="pulsante primario" disabled="@string.IsNullOrWhiteSpace(_nota)" @onclick="() => _conferma = true">
-                Pubblica la versione n. @(_versioni.Count == 0 ? 1 : _versioni.Max(v => v.Numero) + 1)
-            </button>
+            <div class="riga-form">
+                <button class="pulsante primario" disabled="@_inCorso" @onclick="() => ApprovaAsync(ia.Id)">Approva il Budget @ia.NumeroBudget</button>
+                <input class="largo" placeholder="Motivo del rifiuto (obbligatorio per respingere)" @bind="_motivo" @bind:event="oninput" />
+                <button class="pulsante pericolo" disabled="@(_inCorso || string.IsNullOrWhiteSpace(_motivo))" @onclick="() => RespingiAsync(ia.Id)">Respingi</button>
+            </div>
+            <p class="testo-secondario">Dopo l'approvazione il budget non si modifica più. Se lo respingi, la fotografia resta nello storico e si torna a lavorare sulla bozza.</p>
         }
         else
         {
-            <span class="testo-differenza">Una volta pubblicata, la versione non potrà essere modificata né eliminata. Confermi?</span>
-            <button class="pulsante primario" disabled="@_inCorso" @onclick="PubblicaAsync">Conferma pubblicazione</button>
-            <button class="pulsante" @onclick="() => _conferma = false">Annulla</button>
+            <p class="testo-secondario">L'approvazione spetta all'amministratore.</p>
         }
-    </div>
+    }
+    else if (_stato.MotivoNonProponibile is null)
+    {
+        <h4>Controlli prima della proposta del Budget @_stato.ProssimoNumero</h4>
+        <ul class="controlli">
+            @foreach (var c in _stato.Controlli)
+            {
+                <li>
+                    <span class="@(c.Superato ? "esito-ok" : c.Bloccante ? "esito-ko" : "esito-avviso")">@(c.Superato ? "✓" : c.Bloccante ? "✕" : "!")</span>
+                    @c.Descrizione
+                    @if (!c.Superato && !c.Bloccante) { <span class="testo-secondario"> (solo avviso, riportato nella nota del budget)</span> }
+                    @if (c.Dettagli.Count > 0 && !c.Superato)
+                    {
+                        <ul>@foreach (var d in c.Dettagli) { <li>@d</li> }</ul>
+                    }
+                </li>
+            }
+        </ul>
+        <p>
+            Il Budget @_stato.ProssimoNumero conterrà: ricavo @Formato.Euro(_bozza.Totali.Ricavo), costo @Formato.Euro(_bozza.Totali.Costo),
+            MDC @Formato.Euro(_bozza.Totali.Mdc), risultato @Formato.Euro(_bozza.Totali.Risultato).
+        </p>
+        @if (!Sessione.SolaConsultazione)
+        {
+            <div class="griglia-form due-colonne">
+                <label class="largo">
+                    Nota (facoltativa)
+                    <textarea rows="2" @bind="_nota" placeholder="Es. Budget di avvio lavori dopo l'aggiudicazione"></textarea>
+                </label>
+            </div>
+            <div class="azioni">
+                @if (!_conferma)
+                {
+                    <button class="pulsante primario" disabled="@(!_stato.Proponibile)" @onclick="() => _conferma = true">Proponi il Budget @_stato.ProssimoNumero</button>
+                    @if (!_stato.Proponibile)
+                    {
+                        <span class="testo-secondario">Correggi i controlli segnati con ✕ per poter proporre il budget.</span>
+                    }
+                }
+                else
+                {
+                    <span class="testo-differenza">La fotografia del budget non potrà essere modificata. Confermi la proposta?</span>
+                    <button class="pulsante primario" disabled="@_inCorso" @onclick="ProponiAsync">Conferma proposta</button>
+                    <button class="pulsante" @onclick="() => _conferma = false">Annulla</button>
+                }
+            </div>
+        }
+    }
+    else if (_stato.Approvato is null)
+    {
+        <p class="testo-secondario">@_stato.MotivoNonProponibile</p>
+    }
 </div>
 
 <div class="riquadro">
-    <h3>Versioni ufficiali</h3>
+    <h3>Budget e versioni</h3>
     @if (_versioni.Count == 0)
     {
-        <p class="testo-secondario">Nessuna versione ufficiale pubblicata.</p>
+        <p class="testo-secondario">Nessun budget proposto.</p>
     }
     else
     {
@@ -74,7 +126,7 @@
             <table class="tabella">
                 <thead>
                     <tr>
-                        <th>N.</th><th>Data</th><th>Autore</th><th>Nota</th>
+                        <th>Budget</th><th>Stato</th><th>Proposto</th><th>Esito</th><th>Nota</th>
                         <th class="num">Ricavo</th><th class="num">Costo</th><th class="num">MDC</th>
                         <th class="num">Spese generali</th><th class="num">Risultato</th><th>Stampe</th>
                     </tr>
@@ -82,10 +134,22 @@
                 <tbody>
                     @foreach (var v in _versioni)
                     {
-                        <tr>
-                            <td class="codice">@v.Numero</td>
-                            <td>@Formato.DataOra(v.CreatoIl)</td>
-                            <td>@v.CreatoDa</td>
+                        <tr class="@(v.StatoBudget == StatoBudget.Respinto ? "testo-secondario" : "")">
+                            <td class="nowrap">@(v.EBudget ? $"Budget {v.NumeroBudget}" : $"Versione storica n. {v.Numero}")</td>
+                            <td>
+                                @if (v.StatoBudget is { } sb)
+                                {
+                                    <span class="etichetta etichetta-budget-@sb.ToString().ToLowerInvariant()">@Testi.StatoBudget(sb)</span>
+                                }
+                            </td>
+                            <td>@Formato.DataOra(v.CreatoIl)<div class="testo-secondario">@v.CreatoDa</div></td>
+                            <td>
+                                @if (v.EsitoIl is { } il)
+                                {
+                                    @Formato.DataOra(il)<div class="testo-secondario">@v.EsitoDa</div>
+                                }
+                                @if (v.MotivoRifiuto is { } m) { <div>@m</div> }
+                            </td>
                             <td>@v.Nota</td>
                             <td class="num">@Formato.Euro(v.Ricavo)</td>
                             <td class="num">@Formato.Euro(v.Costo)</td>
@@ -102,6 +166,10 @@
                 </tbody>
             </table>
         </div>
+        @if (_stato.VersioniStoriche.Count > 0)
+        {
+            <p class="testo-secondario">Le versioni storiche sono quelle pubblicate prima del Modulo 2: restano consultabili e confrontabili, ma non sono budget.</p>
+        }
     }
 </div>
 
@@ -217,10 +285,10 @@
     [Parameter] public Guid CommessaId { get; set; }
 
     private IReadOnlyList<VersionePreventivo>? _versioni;
+    private StatoBudgetCommessa? _stato;
     private Fotografia? _bozza;
-    private Confronto? _impatto;
     private Confronto? _confronto;
-    private string? _nota;
+    private string? _nota, _motivo;
     private bool _conferma;
     private bool _inCorso;
     private Guid _primaScelta;
@@ -233,20 +301,38 @@
     private async Task AggiornaAsync()
     {
         _versioni = await Versioni.ElencoAsync(CommessaId);
+        _stato = await Budget.StatoAsync(CommessaId);
         _bozza = await Riepilogo.FotografiaAsync(CommessaId);
-        _impatto = await Versioni.ImpattoAsync(CommessaId);
         _primaScelta = _versioni.FirstOrDefault()?.Id ?? Guid.Empty;
         _dopoScelta = Guid.Empty;
     }
 
-    private async Task PubblicaAsync()
+    private Task ProponiAsync() => EseguiAsync(async () =>
+    {
+        var v = await Budget.ProponiAsync(CommessaId, _nota);
+        (_nota, _conferma, _confronto) = (null, false, null);
+        return $"Budget {v.NumeroBudget} proposto per l'approvazione.";
+    });
+
+    private Task ApprovaAsync(Guid id) => EseguiAsync(async () =>
+    {
+        await Budget.ApprovaAsync(CommessaId, id);
+        return "Budget approvato: da ora i prezzi contrattuali sono bloccati e il tabellone mostra lo scostamento dal budget.";
+    });
+
+    private Task RespingiAsync(Guid id) => EseguiAsync(async () =>
+    {
+        await Budget.RespingiAsync(CommessaId, id, _motivo ?? "");
+        _motivo = null;
+        return "Budget respinto: puoi correggere la bozza e proporlo di nuovo.";
+    });
+
+    private async Task EseguiAsync(Func<Task<string>> operazione)
     {
         _inCorso = true;
         try
         {
-            var v = await Versioni.PubblicaAsync(CommessaId, _nota ?? "");
-            (_messaggio, _errore) = ($"Pubblicata la versione ufficiale n. {v.Numero}.", false);
-            (_nota, _conferma, _confronto) = (null, false, null);
+            (_messaggio, _errore) = (await operazione(), false);
             await AggiornaAsync();
         }
         catch (ConflittoModificaException c)

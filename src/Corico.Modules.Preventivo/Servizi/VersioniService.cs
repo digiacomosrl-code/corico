@@ -3,6 +3,7 @@ using Corico.Core.Calcolo;
 using Corico.Core.Dominio;
 using Corico.Modules.Preventivo.Dati;
 using Corico.Modules.Preventivo.Dominio;
+using Corico.Modules.Preventivo.Interfaccia;
 using Microsoft.EntityFrameworkCore;
 
 namespace Corico.Modules.Preventivo.Servizi;
@@ -119,7 +120,9 @@ public sealed class VersioniService(IDbContextFactory<PreventivoDbContext> fabbr
 
     private static (string, string) Chiave(VoceFotografia v) => ((v.Tariffa ?? "").Trim().ToUpperInvariant(), v.Descrizione.Trim());
 
-    public static string Etichetta(VersionePreventivo v) => $"Versione n. {v.Numero} del {Formato.DataOra(v.CreatoIl)}";
+    public static string Etichetta(VersionePreventivo v) => v.EBudget
+        ? $"Budget {v.NumeroBudget} ({Testi.StatoBudget(v.StatoBudget!.Value).ToLowerInvariant()}) del {Formato.DataOra(v.CreatoIl)}"
+        : $"Versione storica n. {v.Numero} del {Formato.DataOra(v.CreatoIl)}";
 
     internal static Fotografia Leggi(VersionePreventivo v) =>
         JsonSerializer.Deserialize<Fotografia>(v.Fotografia, OpzioniJson)

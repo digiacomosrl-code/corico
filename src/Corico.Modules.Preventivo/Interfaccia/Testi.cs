@@ -34,6 +34,22 @@ public static class Testi
         _ => s.ToString(),
     };
 
+    public static string StatoOrdine(Dominio.StatoOrdine s) => s switch
+    {
+        Dominio.StatoOrdine.Bozza => "Bozza",
+        Dominio.StatoOrdine.Emesso => "Emesso",
+        Dominio.StatoOrdine.Annullato => "Annullato",
+        _ => s.ToString(),
+    };
+
+    public static string StatoBudget(Dominio.StatoBudget s) => s switch
+    {
+        Dominio.StatoBudget.InApprovazione => "In approvazione",
+        Dominio.StatoBudget.Approvato => "Approvato",
+        Dominio.StatoBudget.Respinto => "Respinto",
+        _ => s.ToString(),
+    };
+
     public static string BaseSpesa(BaseSpesaGenerale b) => b switch
     {
         BaseSpesaGenerale.RicavoCommessa => "Ricavo di commessa",

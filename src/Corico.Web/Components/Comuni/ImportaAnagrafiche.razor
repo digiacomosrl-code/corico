@@ -1,0 +1,210 @@
+@* Importazione di clienti o fornitori da Excel/CSV del gestionale: anteprima, duplicati, conferma. *@
+@inject ImportazioneAnagraficheService Importazione
+
+<div class="riquadro">
+    <div class="riga-form">
+        <h3 class="spazio">Importa @Nome da Excel o CSV</h3>
+        <button class="pulsante" @onclick="OnChiudi">Chiudi</button>
+    </div>
+
+    <Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+    @if (_anteprima is null)
+    {
+        <p>
+            Scegli il file esportato dal gestionale (.xlsx o .csv, con le intestazioni nella prima riga).
+            Corico legge solo i dati che gestisce: ragione sociale, partita IVA, codice fiscale, indirizzo, comune, provincia,
+            e-mail e telefono@(Tipo == TipoAnagrafica.Fornitori ? ", categorie" : ""). Le altre colonne (CAP, fax, IBAN, codici del gestionale…) vengono ignorate.
+        </p>
+        <InputFile OnChange="CaricaAsync" accept=".xlsx,.xlsm,.csv,.txt,.xls" disabled="@_inCorso" />
+        @if (_inCorso)
+        {
+            <p class="testo-secondario">Lettura del file…</p>
+        }
+    }
+    else
+    {
+        var a = _anteprima;
+        <p>
+            File <strong>@a.NomeFile</strong>: @a.Righe.Count righe.
+            <strong>@a.Conta(EsitoRigaAnagrafica.Nuovo) nuovi</strong>,
+            @a.Conta(EsitoRigaAnagrafica.GiaPresente) già presenti in Corico,
+            @a.Conta(EsitoRigaAnagrafica.RipetutoNelFile) ripetuti nel file,
+            @a.Conta(EsitoRigaAnagrafica.Scartato) scartati.
+        </p>
+        <details>
+            <summary>Colonne lette e ignorate</summary>
+            <p><strong>Lette:</strong> @string.Join("; ", a.ColonneUsate)</p>
+            <p class="testo-secondario"><strong>Ignorate:</strong> @(a.ColonneIgnorate.Count == 0 ? "nessuna" : string.Join("; ", a.ColonneIgnorate))</p>
+        </details>
+
+        <div class="riga-form">
+            @if (a.Ditte.Count > 0)
+            {
+                <label>
+                    Impresa del gruppo
+                    <select @bind="_ditta">
+                        <option value="">Tutte</option>
+                        @foreach (var d in a.Ditte)
+                        {
+                            <option value="@d">@d</option>
+                        }
+                    </select>
+                </label>
+            }
+            <label>
+                Mostra
+                <select @bind="_filtro">
+                    <option value="">Tutte le righe</option>
+                    <option value="@EsitoRigaAnagrafica.Nuovo">Nuovi</option>
+                    <option value="@EsitoRigaAnagrafica.GiaPresente">Già presenti</option>
+                    <option value="@EsitoRigaAnagrafica.RipetutoNelFile">Ripetuti nel file</option>
+                    <option value="@EsitoRigaAnagrafica.Scartato">Scartati</option>
+                </select>
+            </label>
+            <label>Cerca <input @bind="_cerca" @bind:event="oninput" placeholder="ragione sociale, P.IVA, comune" /></label>
+        </div>
+
+        var visibili = Visibili().ToList();
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" title="Seleziona o deseleziona le righe mostrate" checked="@visibili.Where(r => r.Esito != EsitoRigaAnagrafica.Scartato).All(r => r.Importa)" @onchange="e => SelezionaTutte(visibili, (bool)e.Value!)" /></th>
+                        <th>Riga</th><th>Ragione sociale</th><th>Partita IVA</th><th>Codice fiscale</th><th>Indirizzo</th><th>Comune</th><th>Prov.</th><th>Esito</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in visibili.Take(MassimoMostrate))
+                    {
+                        <tr>
+                            <td><input type="checkbox" @bind="r.Importa" disabled="@(r.Esito == EsitoRigaAnagrafica.Scartato)" /></td>
+                            <td>@r.Riga</td>
+                            <td>@r.Denominazione</td>
+                            <td class="codice">@r.PartitaIva</td>
+                            <td class="codice">@r.CodiceFiscale</td>
+                            <td>@r.Indirizzo</td>
+                            <td>@r.Comune</td>
+                            <td>@r.Provincia</td>
+                            <td>
+                                <span class="etichetta @Classe(r.Esito)">@Testo(r.Esito)</span>
+                                @if (r.Motivo is not null)
+                                {
+                                    <div class="testo-secondario">@r.Motivo</div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (visibili.Count > MassimoMostrate)
+        {
+            <p class="testo-secondario">Mostrate le prime @MassimoMostrate righe di @visibili.Count: usa «Cerca» per trovarne altre. La selezione con la casella in alto vale per tutte le @visibili.Count righe filtrate.</p>
+        }
+
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@(_inCorso || Selezionate == 0)" @onclick="ConfermaAsync">Importa @Selezionate @Nome</button>
+            <button class="pulsante" @onclick="() => _anteprima = null">Scegli un altro file</button>
+            <span class="testo-secondario">Prima dell'importazione Corico esegue un backup. Le righe già presenti non vengono modificate.</span>
+        </div>
+    }
+</div>
+
+@code {
+    private const int MassimoMostrate = 300;
+
+    [Parameter, EditorRequired] public TipoAnagrafica Tipo { get; set; }
+    [Parameter] public EventCallback OnChiudi { get; set; }
+    [Parameter] public EventCallback<int> OnImportati { get; set; }
+
+    private AnteprimaAnagrafiche? _anteprima;
+    private string? _messaggio, _ditta, _filtro, _cerca;
+    private bool _errore, _inCorso;
+
+    private string Nome => Tipo == TipoAnagrafica.Clienti ? "clienti" : "fornitori";
+
+    private IEnumerable<RigaAnagrafica> Righe => _anteprima is null ? []
+        : _anteprima.Righe.Where(r => string.IsNullOrEmpty(_ditta) || r.Ditta == _ditta);
+
+    private int Selezionate => Righe.Count(r => r.Importa && r.Esito != EsitoRigaAnagrafica.Scartato);
+
+    private IEnumerable<RigaAnagrafica> Visibili()
+    {
+        var t = _cerca?.Trim();
+        return Righe
+            .Where(r => string.IsNullOrEmpty(_filtro) || r.Esito.ToString() == _filtro)
+            .Where(r => string.IsNullOrEmpty(t)
+                || r.Denominazione.Contains(t, StringComparison.CurrentCultureIgnoreCase)
+                || (r.PartitaIva?.Contains(t) ?? false)
+                || (r.Comune?.Contains(t, StringComparison.CurrentCultureIgnoreCase) ?? false));
+    }
+
+    private static void SelezionaTutte(IEnumerable<RigaAnagrafica> righe, bool valore)
+    {
+        foreach (var r in righe.Where(r => r.Esito != EsitoRigaAnagrafica.Scartato)) r.Importa = valore;
+    }
+
+    private async Task CaricaAsync(InputFileChangeEventArgs e)
+    {
+        _inCorso = true;
+        _messaggio = null;
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(30 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+            _anteprima = await Importazione.AnteprimaAsync(Tipo, ms, e.File.Name);
+            (_ditta, _filtro, _cerca) = (null, null, null);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        catch (IOException)
+        {
+            (_messaggio, _errore) = ("Il file supera i 30 MB.", true);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private async Task ConfermaAsync()
+    {
+        if (_anteprima is null) return;
+        _inCorso = true;
+        try
+        {
+            // Le righe di altre imprese del gruppo, se filtrate, non si importano.
+            foreach (var r in _anteprima.Righe.Except(Righe)) r.Importa = false;
+            var n = await Importazione.ConfermaAsync(_anteprima);
+            _anteprima = null;
+            await OnImportati.InvokeAsync(n);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private static string Testo(EsitoRigaAnagrafica e) => e switch
+    {
+        EsitoRigaAnagrafica.Nuovo => "Nuovo",
+        EsitoRigaAnagrafica.GiaPresente => "Già presente",
+        EsitoRigaAnagrafica.RipetutoNelFile => "Ripetuto nel file",
+        _ => "Scartato",
+    };
+
+    private static string Classe(EsitoRigaAnagrafica e) => e switch
+    {
+        EsitoRigaAnagrafica.Nuovo => "etichetta-attiva",
+        EsitoRigaAnagrafica.Scartato => "etichetta-disattivo",
+        _ => "etichetta-consultazione",
+    };
+}

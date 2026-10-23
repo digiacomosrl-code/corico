@@ -42,6 +42,7 @@ public sealed class RiepilogoService(IDbContextFactory<PreventivoDbContext> fabb
         var perId = vociComputo.ToDictionary(v => v.Id,
             v => new VoceDiCalcolo(v.Id, v.Tariffa, v.Descrizione, v.Unita, v.Quantita, v.Prezzo, v.PercentualeNonSoggetta));
         var posizione = vociComputo.Select((v, i) => (v.Id, i)).ToDictionary(x => x.Id, x => x.i);
+        var avanzamento = await AvanzamentoOrdini.CaricaAsync(db, commessaId, ct);
 
         // Ricavo e costo per voce secondo l'offerta scelta del suo pacchetto.
         var pacchettoDi = new Dictionary<Guid, Guid>();
@@ -68,9 +69,12 @@ public sealed class RiepilogoService(IDbContextFactory<PreventivoDbContext> fabb
             {
                 ricavo = CalcoloPacchetti.RicavoDaComputo(voci, ribasso).Netto;
             }
+            // Decisione 1 del Modulo 2: con ordini emessi il costo del pacchetto è l'importo degli ordini più il residuo pianificato.
+            var a = avanzamento.Di(p.Id);
+            var attuale = a is { HaOrdini: true } ? a.CostoAttuale : costo;
             righePacchetti.Add(new PacchettoFotografia(p.Id, p.Ordine, p.Descrizione, p.Tipo, p.StatoCosto,
                 scelta?.NomeFornitore, scelta?.Numero, scelta?.Data, Scadenza(scelta), voci.Count, offertePacchetto.Count,
-                ricavo, integrazioniPerPacchetto.GetValueOrDefault(p.Id), costo));
+                ricavo, integrazioniPerPacchetto.GetValueOrDefault(p.Id), attuale, costo, a?.ImportoOrdinato ?? 0, a?.PercentualeOrdinata ?? 0));
         }
 
         var vociFoto = vociComputo.Select(v =>

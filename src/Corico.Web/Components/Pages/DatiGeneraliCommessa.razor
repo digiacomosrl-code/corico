@@ -2,6 +2,7 @@
 @inject CommesseService Commesse
 @inject ClientiService Clienti
 @inject DocumentiService Documenti
+@using Corico.Modules.Preventivo.Interfaccia
 
 @{ var mancanti = CommesseService.DatiMancanti(_modifica); }
 @if (mancanti.Count > 0)
@@ -20,13 +21,9 @@
 
         <label>
             Cliente
-            <InputSelect @bind-Value="_modifica.ClienteId">
-                <option value="">— non indicato —</option>
-                @foreach (var c in _clienti)
-                {
-                    <option value="@c.Id">@c.Denominazione</option>
-                }
-            </InputSelect>
+            <SceltaConRicerca Voci="_vociClienti" Etichetta="Cliente" Segnaposto="— non indicato: scrivi una parola per cercare —"
+                              Valore="@_modifica.ClienteId?.ToString()"
+                              ValoreChanged="v => _modifica.ClienteId = Guid.TryParse(v, out var id) ? id : null" />
         </label>
         <div class="allinea-basso">
             <button type="button" class="pulsante" @onclick="() => _nuovoCliente = new DatiCliente()">Nuovo cliente…</button>
@@ -117,6 +114,7 @@
 
     private DatiCommessa _modifica = new();
     private IReadOnlyList<DatiCliente> _clienti = [];
+    private IReadOnlyList<VoceScelta> _vociClienti = [];
     private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
     private DatiCliente? _nuovoCliente;
     private IReadOnlyList<PossibileDuplicato> _duplicati = [];
@@ -126,6 +124,7 @@
     protected override async Task OnInitializedAsync()
     {
         _clienti = await Clienti.ElencoAsync();
+        _vociClienti = VoceScelta.Da(_clienti);
         _documenti = await Documenti.ElencoAsync(Commessa.Id);
     }
 
@@ -177,6 +176,7 @@
         {
             var c = await Clienti.SalvaAsync(_nuovoCliente);
             _clienti = await Clienti.ElencoAsync();
+            _vociClienti = VoceScelta.Da(_clienti);
             _modifica.ClienteId = c.Id;
             _nuovoCliente = null;
             _duplicati = [];

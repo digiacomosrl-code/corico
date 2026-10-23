@@ -55,13 +55,8 @@
                 }
                 else
                 {
-                    <select value="@(o.FornitoreId?.ToString() ?? "")" @onchange="CambiaFornitore">
-                        <option value="">— scegli dall'anagrafica —</option>
-                        @foreach (var f in _fornitori)
-                        {
-                            <option value="@f.Id">@f.Denominazione</option>
-                        }
-                    </select>
+                    <SceltaConRicerca Voci="_vociFornitori" Etichetta="Fornitore" Segnaposto="— scegli dall'anagrafica: scrivi una parola per cercare —"
+                                      Valore="@o.FornitoreId?.ToString()" ValoreChanged="CambiaFornitore" />
                 }
             </label>
             <label>Data <input type="date" @bind="o.Data" /></label>
@@ -245,6 +240,7 @@
     private OrdineAcquisto? _ordine;
     private VerificaBozza? _verifica;
     private IReadOnlyList<DatiFornitore> _fornitori = [];
+    private IReadOnlyList<VoceScelta> _vociFornitori = [];
     private IReadOnlyList<(Guid Id, int Ordine, string Descrizione)> _pacchetti = [];
     private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
     private DateOnly? _inviatoIl, _confermatoIl;
@@ -255,6 +251,7 @@
     protected override async Task OnParametersSetAsync()
     {
         _fornitori = await Fornitori.ElencoAsync();
+        _vociFornitori = VoceScelta.Da(_fornitori);
         _pacchetti = (await Pacchetti.AssegnazioniAsync(CommessaId)).Pacchetti;
         _documenti = await Documenti.ElencoAsync(CommessaId);
         await CaricaAsync();
@@ -271,10 +268,10 @@
 
     private void Ricalcola() { }
 
-    private void CambiaFornitore(ChangeEventArgs e)
+    private void CambiaFornitore(string? valore)
     {
         if (_ordine is null) return;
-        _ordine.FornitoreId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        _ordine.FornitoreId = Guid.TryParse(valore, out var id) ? id : null;
         _ordine.Fornitore = _fornitori.FirstOrDefault(f => f.Id == _ordine.FornitoreId)?.Denominazione ?? "";
     }
 

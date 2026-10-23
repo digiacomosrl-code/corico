@@ -17,6 +17,7 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
     public DbSet<Impostazione> Impostazioni => Set<Impostazione>();
     public DbSet<RegistroBackup> RegistroBackup => Set<RegistroBackup>();
     public DbSet<Utente> Utenti => Set<Utente>();
+    public DbSet<RichiestaAiRegistrata> RichiesteAi => Set<RichiestaAiRegistrata>();
 
     protected override bool PossiedeTabelleCore => true;
 
@@ -95,6 +96,18 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
         {
             e.ToTable("CORE_RegistroBackup");
             e.HasIndex(x => x.DataOra);
+        });
+
+        modelBuilder.Entity<RichiestaAiRegistrata>(e =>
+        {
+            e.ToTable("CORE_RichiesteAi");
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasIndex(x => x.DataOra);
+            e.HasIndex(x => x.CommessaId);
+            e.Property(x => x.Utente).HasMaxLength(100);
+            e.Property(x => x.Funzione).HasMaxLength(50);
+            e.Property(x => x.Modello).HasMaxLength(50);
+            e.Property(x => x.Esito).HasConversion<string>().HasMaxLength(20);
         });
 
         base.OnModelCreating(modelBuilder);

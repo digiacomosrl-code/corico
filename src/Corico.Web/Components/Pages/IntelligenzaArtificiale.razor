@@ -1,0 +1,205 @@
+@page "/amministrazione/ai"
+@attribute [Authorize(Roles = nameof(RuoloUtente.Amministratore))]
+@using Corico.Core.Ai
+@inject ServizioAi Ai
+@inject CommesseService Commesse
+
+<PageTitle>Intelligenza artificiale — Corico</PageTitle>
+
+<h1>Intelligenza artificiale</h1>
+<p class="testo-secondario">
+    L'AI esterna legge solo i dati della singola richiesta, che l'utente vede in anteprima prima dell'invio;
+    le proposte diventano dati di Corico solo dopo la conferma. OCR, testo dei documenti e ricerca restano sempre su questo PC.
+</p>
+
+<Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+<div class="riquadro">
+    <h3>Stato</h3>
+    <p>
+        Intelligenza artificiale <strong>@(_conf.Attiva ? "attiva" : "spenta")</strong> ·
+        chiave d'accesso <strong>@(Ai.ChiavePresente ? "presente" : "mancante")</strong> ·
+        spesa del mese <strong>@Formato.Euro(_spesa)</strong> su un tetto di <strong>@Formato.Euro(_conf.TettoMensile)</strong>
+    </p>
+</div>
+
+<div class="riquadro">
+    <h3>Impostazioni</h3>
+    <div class="griglia-form">
+        <label class="largo">
+            <span><input type="checkbox" @bind="_conf.Attiva" /> Attiva l'intelligenza artificiale</span>
+        </label>
+        <label>Modello
+            <select @bind="_conf.Modello">
+                @foreach (var m in ModelloAi.Elenco)
+                {
+                    <option value="@m.Codice">@m.Nome</option>
+                }
+            </select>
+        </label>
+        <label>Tetto di spesa mensile (€) <input type="number" min="0" step="1" @bind="_conf.TettoMensile" /></label>
+        <label>Cambio dollaro → euro <input type="number" min="0.01" step="0.01" @bind="_conf.CambioUsdEur" /></label>
+    </div>
+    <p class="testo-secondario">
+        Prezzi del fornitore per milione di token (ingresso / uscita, in dollari):
+        @string.Join(" · ", ModelloAi.Elenco.Select(m => $"{m.Nome}: {m.PrezzoIngresso.ToString("0.##", Formato.Italiano)} / {m.PrezzoUscita.ToString("0.##", Formato.Italiano)}")).
+        Raggiunto il tetto, le richieste si fermano fino al mese successivo.
+    </p>
+    <div class="azioni">
+        <button class="pulsante primario" @onclick="SalvaAsync">Salva impostazioni</button>
+    </div>
+</div>
+
+<div class="riquadro">
+    <h3>Chiave d'accesso</h3>
+    <p>
+        La chiave del servizio AI (Anthropic, console.anthropic.com) è conservata cifrata con la protezione di Windows
+        e funziona solo su questo PC. Prima di attivarla verifica le condizioni del fornitore sull'uso dei dati.
+    </p>
+    <div class="riga-form">
+        <input type="password" autocomplete="off" placeholder="Incolla qui la chiave" @bind="_chiave" />
+        <button class="pulsante primario" @onclick="SalvaChiave">Salva chiave</button>
+        @if (Ai.ChiavePresente)
+        {
+            <button class="pulsante pericolo" @onclick="RimuoviChiave">Rimuovi chiave</button>
+            <button class="pulsante" disabled="@_occupato" @onclick="ProvaAsync">Prova il collegamento</button>
+        }
+    </div>
+</div>
+
+<div class="riquadro">
+    <h3>Registro delle richieste</h3>
+    <div class="riga-form">
+        <select @bind="_filtroUtente" @bind:after="AggiornaAsync">
+            <option value="">Tutti gli utenti</option>
+            @foreach (var u in _utenti)
+            {
+                <option value="@u">@u</option>
+            }
+        </select>
+    </div>
+    @if (_registro.Count == 0)
+    {
+        <p class="testo-secondario">Nessuna richiesta inviata.</p>
+    }
+    else
+    {
+        <table class="tabella">
+            <thead>
+                <tr><th>Data e ora</th><th>Utente</th><th>Funzione</th><th>Commessa</th><th>Modello</th><th>Esito</th>
+                    <th class="num">Token inviati / ricevuti</th><th class="num">Costo</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _registro)
+                {
+                    <tr>
+                        <td class="nowrap">@Formato.DataOra(r.DataOra)</td>
+                        <td>@r.Utente</td>
+                        <td>@r.Funzione</td>
+                        <td>@(r.CommessaId is { } c && _commesse.TryGetValue(c, out var codice) ? codice : "")</td>
+                        <td>@r.Modello</td>
+                        <td>@r.Esito@(r.Messaggio is null ? "" : $": {r.Messaggio}")</td>
+                        <td class="num">@r.TokenIngresso.ToString("N0") / @r.TokenUscita.ToString("N0")</td>
+                        <td class="num">@r.Costo.ToString("#,##0.0000 €", Formato.Italiano)</td>
+                        <td class="num"><button class="pulsante piccolo" @onclick="() => _aperta = _aperta == r ? null : r">Cosa è stato inviato</button></td>
+                    </tr>
+                    @if (_aperta == r)
+                    {
+                        <tr><td colspan="9"><pre class="testo-inviato">@r.Contenuto</pre></td></tr>
+                    }
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private ConfigurazioneAi _conf = new();
+    private decimal _spesa;
+    private IReadOnlyList<RichiestaAiRegistrata> _registro = [];
+    private IReadOnlyList<string> _utenti = [];
+    private Dictionary<Guid, string> _commesse = [];
+    private RichiestaAiRegistrata? _aperta;
+    private string? _messaggio, _chiave, _filtroUtente;
+    private bool _errore, _occupato;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _conf = await Ai.LeggiConfigurazioneAsync();
+        _commesse = (await Commesse.ElencoAsync(includiArchiviate: true)).ToDictionary(c => c.Id, c => c.Codice);
+        await AggiornaAsync();
+    }
+
+    private async Task AggiornaAsync()
+    {
+        _spesa = await Ai.SpesaMeseAsync();
+        _registro = await Ai.RegistroAsync(200, string.IsNullOrEmpty(_filtroUtente) ? null : _filtroUtente);
+        if (string.IsNullOrEmpty(_filtroUtente)) _utenti = _registro.Select(r => r.Utente).Distinct().Order().ToList();
+    }
+
+    private async Task SalvaAsync()
+    {
+        try
+        {
+            await Ai.SalvaConfigurazioneAsync(_conf);
+            Mostra(_conf.Attiva && !Ai.ChiavePresente
+                ? "Impostazioni salvate. Inserisci anche la chiave d'accesso, altrimenti l'AI non può essere usata."
+                : "Impostazioni salvate.", false);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            Mostra(ex.Message, true);
+        }
+    }
+
+    private void SalvaChiave()
+    {
+        try
+        {
+            Ai.SalvaChiave(_chiave ?? "");
+            _chiave = null;
+            Mostra("Chiave salvata in forma cifrata.", false);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            Mostra(ex.Message, true);
+        }
+    }
+
+    private void RimuoviChiave()
+    {
+        Ai.RimuoviChiave();
+        Mostra("Chiave rimossa: l'AI non invierà più richieste finché non ne inserisci una nuova.", false);
+    }
+
+    /// <summary>Richiesta minima (pochi centesimi di euro al massimo) per verificare chiave e collegamento.</summary>
+    private async Task ProvaAsync()
+    {
+        _occupato = true;
+        try
+        {
+            var anteprima = await Ai.PreparaAsync(new RichiestaAi("Prova", null,
+                "Rispondi solo con la parola OK.", "Prova di collegamento da Corico.", MaxTokenRisposta: 1000));
+            if (!anteprima.Consentita)
+            {
+                Mostra(anteprima.Motivo!, true);
+                return;
+            }
+            var risposta = await Ai.InviaAsync(anteprima);
+            Mostra(risposta.Riuscita
+                ? $"Collegamento riuscito con {anteprima.Modello} (costo {Formato.Euro(risposta.Costo)})."
+                : risposta.Errore!, !risposta.Riuscita);
+            await AggiornaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            Mostra(ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private void Mostra(string testo, bool errore) => (_messaggio, _errore) = (testo, errore);
+}

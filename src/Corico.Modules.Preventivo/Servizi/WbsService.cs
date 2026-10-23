@@ -1,3 +1,4 @@
+using Corico.Core.Ai;
 using Corico.Core.Dominio;
 using Corico.Modules.Preventivo.Dati;
 using Corico.Modules.Preventivo.Dominio;
@@ -18,7 +19,7 @@ public sealed record AnteprimaWbs(IReadOnlyList<ElementoWbsDati> Elementi, IRead
 /// caricamento da Excel, da un'altra commessa o dal computo PriMus, proposta automatica con conferma.
 /// La WBS non è un prezzo contrattuale: si modifica anche dopo l'approvazione del budget.
 /// </summary>
-public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, IPropostaWbs proposta)
+public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, IPropostaWbs proposta, IServizioAi ai)
 {
     public string NomeProposta => proposta.Nome;
 
@@ -219,6 +220,26 @@ public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, 
     public async Task<PropostaWbs> ProponiAsync(Guid commessaId, CancellationToken ct = default) =>
         await proposta.ProponiAsync(await ContestoAsync(commessaId, ct), ct);
 
+    /// <summary>
+    /// Proposta con l'AI, primo passo: prepara l'anteprima (testo inviato, modello, costo massimo) senza chiamate esterne.
+    /// L'invio avviene con <see cref="InviaPropostaAiAsync"/> solo dopo la conferma dell'utente.
+    /// </summary>
+    public async Task<(AnteprimaAi Anteprima, ContestoPropostaWbs Contesto)> PreparaPropostaAiAsync(Guid commessaId, CancellationToken ct = default)
+    {
+        var contesto = await ContestoAsync(commessaId, ct);
+        return (await ai.PreparaAsync(WbsAi.Richiesta(contesto), ct), contesto);
+    }
+
+    /// <summary>Proposta con l'AI, secondo passo: invia la richiesta confermata e controlla la risposta. Nulla viene salvato.</summary>
+    public async Task<(PropostaWbs Proposta, RispostaAi Risposta)> InviaPropostaAiAsync(AnteprimaAi anteprima, ContestoPropostaWbs contesto,
+        CancellationToken ct = default)
+    {
+        var risposta = await ai.InviaAsync(anteprima, ct);
+        if (!risposta.Riuscita)
+            throw new OperazioneNonValidaException($"Il servizio AI non ha risposto: {risposta.Errore}. Puoi riprovare o usare la proposta senza AI.");
+        return (WbsAi.Interpreta(risposta.Testo, contesto), risposta);
+    }
+
     /// <summary>WBS già presente e voci del computo attivo, nell'ordine del computo: la base di ogni proposta.</summary>
     public async Task<ContestoPropostaWbs> ContestoAsync(Guid commessaId, CancellationToken ct = default)
     {
@@ -230,7 +251,7 @@ public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, 
             .Select(v => new VocePerWbs(v.Id, v.Ordine, v.Tariffa, v.Descrizione,
                 v.SuperCategoriaId is { } sc ? categorie.GetValueOrDefault(sc) : null,
                 v.CategoriaId is { } c ? categorie.GetValueOrDefault(c) : null,
-                v.CodiceWbs, v.Quantita * v.Prezzo))
+                v.CodiceWbs, v.Quantita * v.Prezzo, v.Unita))
             .ToList();
         if (voci.Count == 0) throw new OperazioneNonValidaException("Non c'è un computo con voci: importa prima il computo.");
         return new ContestoPropostaWbs(commessaId, wbs, voci);

@@ -16,12 +16,12 @@ public enum FontePropostaWbs
     Ai,
 }
 
-/// <summary>Elemento di WBS (codice e descrizione) letto da un file o proposto.</summary>
-public sealed record ElementoWbsDati(string Codice, string Descrizione);
+/// <summary>Elemento di WBS (codice e descrizione) letto da un file o proposto; nella proposta AI, il motivo della sua posizione.</summary>
+public sealed record ElementoWbsDati(string Codice, string Descrizione, string? Motivo = null);
 
 /// <summary>Voce del computo come la vede chi propone la WBS.</summary>
 public sealed record VocePerWbs(Guid Id, int Ordine, string? Tariffa, string Descrizione, string? SuperCategoria, string? Categoria,
-    string? CodiceWbs, decimal RicavoLordo);
+    string? CodiceWbs, decimal RicavoLordo, string? Unita = null);
 
 /// <summary>Dati su cui si basa una proposta: la WBS già presente nella commessa e le voci del computo attivo.</summary>
 public sealed record ContestoPropostaWbs(Guid CommessaId, IReadOnlyList<ElementoWbsDati> Wbs, IReadOnlyList<VocePerWbs> Voci);
@@ -37,7 +37,7 @@ public sealed record PropostaWbs(IReadOnlyList<ElementoWbsDati> NuoviElementi, I
 
 /// <summary>
 /// Chi propone la WBS di una commessa. Restituisce solo una proposta, senza scrivere sul database.
-/// Oggi c'è la proposta a regole; il Modulo 3 aggiungerà quella con il servizio AI, con la stessa anteprima e conferma.
+/// Qui c'è la proposta a regole; quella con il servizio AI esterno è in <see cref="WbsAi"/>, perché richiede l'anteprima dell'invio.
 /// </summary>
 public interface IPropostaWbs
 {

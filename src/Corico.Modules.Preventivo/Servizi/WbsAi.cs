@@ -1,6 +1,6 @@
-using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Corico.Core.Ai;
 using Corico.Modules.Preventivo.Dominio;
 
 namespace Corico.Modules.Preventivo.Servizi;
@@ -69,24 +69,29 @@ public static class WbsAi
         }
         """;
 
+    /// <summary>Richiesta per il servizio AI: la risposta cresce con il numero di voci, fino al massimo ammesso.</summary>
+    public static RichiestaAi Richiesta(ContestoPropostaWbs contesto) =>
+        new(Funzione, contesto.CommessaId, Istruzioni, Contenuto(contesto), SchemaJson,
+            Math.Clamp(4000 + 30 * contesto.Voci.Count, 16000, 64000));
+
     /// <summary>
-    /// Testo inviato all'AI: una riga per voce con numero progressivo, tariffa, categorie, descrizione accorciata e importo.
-    /// I numeri progressivi (non gli identificativi interni) servono a ricollegare la risposta alle voci.
+    /// Testo inviato all'AI: una riga per voce con numero progressivo, tariffa, unità di misura, categorie e descrizione
+    /// accorciata. Mai prezzi né importi (Modulo 3, §7.1). I numeri progressivi (non gli identificativi interni) servono
+    /// a ricollegare la risposta alle voci.
     /// </summary>
     public static string Contenuto(ContestoPropostaWbs contesto)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Voci del computo: {contesto.Voci.Count}. Importi in euro, al lordo del ribasso.");
-        sb.AppendLine("N. | Tariffa | Categoria | Descrizione | Importo");
+        sb.AppendLine($"Voci del computo: {contesto.Voci.Count}.");
+        sb.AppendLine("N. | Tariffa | U.M. | Categoria | Descrizione");
         var n = 0;
         foreach (var v in Ordinate(contesto))
         {
             n++;
             var categoria = string.Join(" > ", new[] { v.SuperCategoria, v.Categoria }
                 .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!.Trim()).Distinct(StringComparer.OrdinalIgnoreCase));
-            sb.Append(n).Append(" | ").Append(Pulisci(v.Tariffa)).Append(" | ").Append(Pulisci(categoria)).Append(" | ")
-              .Append(Accorcia(v.Descrizione)).Append(" | ")
-              .AppendLine(v.RicavoLordo.ToString("0.00", CultureInfo.InvariantCulture));
+            sb.Append(n).Append(" | ").Append(Pulisci(v.Tariffa)).Append(" | ").Append(Pulisci(v.Unita)).Append(" | ")
+              .Append(Pulisci(categoria)).Append(" | ").AppendLine(Accorcia(v.Descrizione));
         }
         return sb.ToString();
     }
@@ -135,8 +140,8 @@ public static class WbsAi
                 continue;
             }
             var descrizione = string.IsNullOrWhiteSpace(e.Descrizione) ? $"WBS {codice}" : e.Descrizione.Trim();
-            elementi.Add(new(codice, descrizione.Length > 300 ? descrizione[..300] : descrizione));
             motivi[codice] = string.IsNullOrWhiteSpace(e.Motivo) ? descrizione : e.Motivo.Trim();
+            elementi.Add(new(codice, descrizione.Length > 300 ? descrizione[..300] : descrizione, motivi[codice]));
             foreach (var n in e.Voci ?? [])
             {
                 if (n < 1 || n > voci.Count) inesistenti.Add(n);
@@ -157,8 +162,8 @@ public static class WbsAi
             for (var p = CodiciWbs.Padre(e.Codice); p is not null; p = CodiciWbs.Padre(p))
             {
                 if (!codici.Add(p)) continue;
-                elementi.Add(new(p, $"WBS {p} (da descrivere)"));
                 motivi[p] = "Livello superiore aggiunto perché mancante nella risposta";
+                elementi.Add(new(p, $"WBS {p} (da descrivere)", motivi[p]));
                 note.Add($"Aggiunto il livello superiore {p}, da descrivere.");
             }
         }

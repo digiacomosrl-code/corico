@@ -18,4 +18,11 @@ public sealed class StoricoService(IDbContextFactory<CoreDbContext> fabbrica)
         await using var db = await fabbrica.CreateDbContextAsync(ct);
         return await db.Storico.AsNoTracking().OrderByDescending(s => s.Id).Take(massimo).ToListAsync(ct);
     }
+
+    /// <summary>Ultima operazione registrata sulla commessa (dati generali, preventivo, pacchetti, ordini…).</summary>
+    public async Task<VoceStorico?> UltimaAsync(Guid commessaId, CancellationToken ct = default)
+    {
+        await using var db = await fabbrica.CreateDbContextAsync(ct);
+        return await db.Storico.AsNoTracking().Where(v => v.CommessaId == commessaId).OrderByDescending(v => v.Id).FirstOrDefaultAsync(ct);
+    }
 }

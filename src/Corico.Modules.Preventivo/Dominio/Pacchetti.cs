@@ -33,7 +33,7 @@ public enum TipoOfferta
 }
 
 /// <summary>Gruppo di voci del computo affidato a uno stesso fornitore, subappaltatore o all'impresa (fogli «CR»).</summary>
-public sealed class Pacchetto : EntitaBase
+public sealed class Pacchetto : EntitaBase, ICancellazioneRiservata
 {
     public Guid CommessaId { get; set; }
     public int Ordine { get; set; }
@@ -76,7 +76,7 @@ public sealed class NotaPacchetto : EntitaBase
 }
 
 /// <summary>Offerta di un fornitore (o stima interna) per un pacchetto. Più offerte alternative per pacchetto.</summary>
-public sealed class Offerta : EntitaBase
+public sealed class Offerta : EntitaBase, ICancellazioneRiservata
 {
     public Guid PacchettoId { get; set; }
     public Guid CommessaId { get; set; }

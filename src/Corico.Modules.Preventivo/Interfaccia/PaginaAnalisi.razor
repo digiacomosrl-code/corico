@@ -1,5 +1,6 @@
 @page "/analisi"
 @* Analisi prezzi aziendali (sez. 15): elenco, modifica, conferma e archiviazione. *@
+@inject ConflittiService Conflitti
 @inject AnalisiService Analisi
 
 <PageTitle>Analisi prezzi — Corico</PageTitle>
@@ -21,6 +22,10 @@
 {
     <div class="riquadro">
         <h3>@(_modifica.Id == Guid.Empty ? "Nuova analisi" : $"Analisi {_modifica.Codice} – {Testi.StatoAnalisi(_modifica.Stato)}")</h3>
+        @if (_modifica.Id != Guid.Empty)
+        {
+            <p class="ultima-modifica">@Formato.UltimaModifica(_modifica)</p>
+        }
         <div class="griglia-form">
             <label>Codice <input @bind="_modifica.Codice" placeholder="es. AN.INT.01" /></label>
             <label class="largo">Lavorazione <input @bind="_modifica.Descrizione" /></label>
@@ -110,6 +115,11 @@
             _modifica = await Analisi.OttieniAsync(id);
             await AggiornaAsync();
             return true;
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, SalvaInternoAsync, async () => { if (_modifica is { Id: var id } && id != Guid.Empty) _modifica = await Analisi.OttieniAsync(id); await AggiornaAsync(); });
+            return false;
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

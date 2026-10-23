@@ -1,4 +1,5 @@
 @* Scheda "Versioni" della commessa (rilascio 1C): pubblicazione di versioni ufficiali immutabili e confronto. *@
+@inject ConflittiService Conflitti
 @inject VersioniService Versioni
 @inject RiepilogoService Riepilogo
 
@@ -247,6 +248,10 @@
             (_messaggio, _errore) = ($"Pubblicata la versione ufficiale n. {v.Numero}.", false);
             (_nota, _conferma, _confronto) = (null, false, null);
             await AggiornaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, AggiornaAsync);
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

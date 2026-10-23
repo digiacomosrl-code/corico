@@ -12,7 +12,7 @@ public enum StatoOrdine
 /// Ordine di acquisto al fornitore, emesso da un pacchetto con l'offerta scelta. Numero progressivo per anno
 /// (es. «ODA 2026/001»). Dopo l'emissione è immutabile: si può solo annullare, con un motivo, ed emetterne uno nuovo.
 /// </summary>
-public sealed class OrdineAcquisto : EntitaBase, IImmutabile
+public sealed class OrdineAcquisto : EntitaBase, IImmutabile, ICancellazioneRiservata
 {
     public Guid CommessaId { get; set; }
     public Guid PacchettoId { get; set; }

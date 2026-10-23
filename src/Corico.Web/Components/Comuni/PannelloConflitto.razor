@@ -1,0 +1,55 @@
+@* Conflitto di salvataggio (sez. 9.1): i tuoi valori accanto a quelli salvati dall'altro utente, con la scelta. *@
+@implements IDisposable
+@inject ConflittiService Conflitti
+
+@if (Conflitti.Corrente is { } c)
+{
+    <div class="sfondo-dialogo">
+        <div class="dialogo" role="alertdialog" aria-labelledby="titolo-conflitto">
+            <h3 id="titolo-conflitto">Modifica contemporanea</h3>
+            <p>@c.Message</p>
+            @if (c.Differenze.Count > 0)
+            {
+                <div class="scorrevole">
+                    <table class="tabella">
+                        <thead>
+                            <tr><th>Campo</th><th>Il tuo valore (non salvato)</th><th>Valore salvato@(c.SalvatoDa is null ? "" : $" da {c.SalvatoDa}")</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in c.Differenze)
+                            {
+                                <tr><td>@d.Campo</td><td>@d.TuoValore</td><td>@d.ValoreSalvato</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (Conflitti.Errore is { } errore)
+            {
+                <div class="messaggio messaggio-errore" role="alert">@errore</div>
+            }
+            <div class="azioni">
+                <button class="pulsante primario" @onclick="Conflitti.RicaricaAsync">Ricarica i dati salvati</button>
+                @if (Conflitti.PuoRiapplicare)
+                {
+                    <button class="pulsante" @onclick="Conflitti.RiapplicaAsync">Riapplica le mie modifiche</button>
+                }
+            </div>
+            <p class="testo-secondario">
+                «Ricarica» scarta le tue modifiche e mostra i dati salvati.
+                @if (Conflitti.PuoRiapplicare)
+                {
+                    <span>«Riapplica» salva di nuovo le tue modifiche sopra quelle dell'altro utente; resta tutto nello storico.</span>
+                }
+            </p>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => Conflitti.Cambiato += Aggiorna;
+
+    private void Aggiorna() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Conflitti.Cambiato -= Aggiorna;
+}

@@ -21,4 +21,15 @@ public static class Formato
 
     public static string DataOra(DateTime? utc) =>
         utc is null ? "" : DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM/yyyy HH:mm", Italiano);
+
+    /// <summary>«Ultima modifica di Mario Rossi il 23/10/2026 alle 09:12» (sez. 4.1).</summary>
+    public static string UltimaModifica(string? da, DateTime? ilUtc)
+    {
+        if (string.IsNullOrWhiteSpace(da) || ilUtc is null) return "";
+        var locale = DateTime.SpecifyKind(ilUtc.Value, DateTimeKind.Utc).ToLocalTime();
+        return $"Ultima modifica di {da} il {locale.ToString("dd/MM/yyyy", Italiano)} alle {locale:HH:mm}";
+    }
+
+    public static string UltimaModifica(Dominio.EntitaBase e) =>
+        e.ModificatoIl is { } il ? UltimaModifica(e.ModificatoDa, il) : UltimaModifica(e.CreatoDa, e.CreatoIl == default ? null : e.CreatoIl);
 }

@@ -1,3 +1,4 @@
+using Corico.Core.Calcolo;
 using System.Text.Json;
 using Corico.Core.Configurazione;
 using Corico.Core.Dati;
@@ -34,6 +35,9 @@ public sealed class DatiCommessa
     public DateOnly? ContrattoData { get; set; }
     public string? Note { get; set; }
 
+    /// <summary>Solo lettura: chi ha modificato la scheda per ultimo e quando.</summary>
+    public string UltimaModifica { get; set; } = "";
+
     public DatiCommessa Clona() => (DatiCommessa)MemberwiseClone();
 
     internal static DatiCommessa Da(Commessa c) => new()
@@ -44,6 +48,7 @@ public sealed class DatiCommessa
         Responsabile = c.Responsabile, DataInizioPrevista = c.DataInizioPrevista, DataFinePrevista = c.DataFinePrevista,
         ValoreContrattuale = c.ValoreContrattuale, ContrattoDocumentoId = c.ContrattoDocumentoId,
         ContrattoNumero = c.ContrattoNumero, ContrattoData = c.ContrattoData, Note = c.Note,
+        UltimaModifica = Formato.UltimaModifica(c),
     };
 }
 

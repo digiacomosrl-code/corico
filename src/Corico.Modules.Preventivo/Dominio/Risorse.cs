@@ -72,7 +72,7 @@ public enum StatoAnalisi
 /// Analisi prezzi aziendale riutilizzabile (sez. 15): lavorazione con le risorse per unità.
 /// Applicarla a una voce ne copia le risorse: le modifiche successive non toccano i preventivi già fatti.
 /// </summary>
-public sealed class AnalisiAziendale : EntitaBase
+public sealed class AnalisiAziendale : EntitaBase, ICancellazioneRiservata
 {
     public string? Codice { get; set; }
     public string Descrizione { get; set; } = "";

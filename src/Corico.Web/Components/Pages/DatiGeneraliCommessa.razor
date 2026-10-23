@@ -1,3 +1,4 @@
+@inject ConflittiService Conflitti
 @inject CommesseService Commesse
 @inject ClientiService Clienti
 @inject DocumentiService Documenti
@@ -11,6 +12,7 @@
 <Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
 
 <EditForm Model="_modifica" OnValidSubmit="SalvaAsync" class="riquadro">
+    <p class="ultima-modifica">Dati generali: @(string.IsNullOrEmpty(_modifica.UltimaModifica) ? "nessuna modifica" : _modifica.UltimaModifica.Replace("Ultima modifica", "ultima modifica"))</p>
     <div class="griglia-form">
         <label>Codice <input value="@_modifica.Codice" disabled /></label>
         <label>Codice esterno (cliente/gestionale) <InputText @bind-Value="_modifica.CodiceEsterno" /></label>
@@ -140,6 +142,11 @@
         EseguiAsync(() => Commesse.ImpostaArchiviazioneAsync(Commessa.Id, Commessa.Versione, !Commessa.Archiviata),
             Commessa.Archiviata ? "Commessa riattivata." : "Commessa archiviata.");
 
+    private async Task RicaricaAsync()
+    {
+        if (await Commesse.OttieniAsync(Commessa.Id) is { } c) await CommessaChanged.InvokeAsync(c);
+    }
+
     private async Task EseguiAsync(Func<Task<DatiCommessa>> operazione, string esito)
     {
         try
@@ -147,6 +154,10 @@
             var aggiornata = await operazione();
             await CommessaChanged.InvokeAsync(aggiornata);
             (_messaggio, _errore) = (esito, false);
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, () => EseguiAsync(operazione, esito), RicaricaAsync);
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

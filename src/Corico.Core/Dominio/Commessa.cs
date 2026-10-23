@@ -7,7 +7,7 @@ public enum StatoCommessa
     Conclusa = 2,
 }
 
-public sealed class Commessa : EntitaBase
+public sealed class Commessa : EntitaBase, ICancellazioneRiservata
 {
     /// <summary>Codice visibile, progressivo e mai riutilizzato (es. 2026-001).</summary>
     public string Codice { get; set; } = "";

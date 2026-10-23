@@ -4,7 +4,7 @@ namespace Corico.Core.Dominio;
 /// Metadati di un documento dell'archivio. Il file è salvato con un nome interno
 /// nella cartella Documenti; il nome originale è conservato qui.
 /// </summary>
-public sealed class Documento : EntitaBase
+public sealed class Documento : EntitaBase, ICancellazioneRiservata
 {
     public string NomeOriginale { get; set; } = "";
     public string Estensione { get; set; } = "";

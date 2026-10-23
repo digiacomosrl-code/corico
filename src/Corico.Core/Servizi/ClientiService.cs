@@ -1,3 +1,4 @@
+using Corico.Core.Calcolo;
 using Corico.Core.Dati;
 using Corico.Core.Dominio;
 using Microsoft.EntityFrameworkCore;
@@ -19,11 +20,15 @@ public sealed class DatiCliente
     public string? Note { get; set; }
     public bool Archiviato { get; set; }
 
+    /// <summary>Solo lettura: chi ha modificato la scheda per ultimo e quando.</summary>
+    public string UltimaModifica { get; set; } = "";
+
     internal static DatiCliente Da(Cliente c) => new()
     {
         Id = c.Id, Versione = c.Versione, Denominazione = c.Denominazione, PartitaIva = c.PartitaIva,
         CodiceFiscale = c.CodiceFiscale, Indirizzo = c.Indirizzo, Comune = c.Comune, Provincia = c.Provincia,
         Email = c.Email, Telefono = c.Telefono, Note = c.Note, Archiviato = c.Archiviato,
+        UltimaModifica = Formato.UltimaModifica(c),
     };
 }
 

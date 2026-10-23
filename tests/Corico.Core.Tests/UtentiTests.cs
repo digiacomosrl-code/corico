@@ -130,4 +130,76 @@ public class UtentiTests
         var voce = await db.Storico.SingleAsync(v => v.Entita == "Cliente");
         Assert.Equal("Oreste Operatore", voce.Utente);
     }
+
+    [Fact]
+    public async Task Conflitto_mostra_differenze_e_si_puo_riapplicare()
+    {
+        await using var amb = await AmbienteDiProva.CreaAsync();
+        var clienti = amb.Get<ClientiService>();
+        var mario = new IdentitaUtente(Guid.NewGuid(), "mario", "Mario Rossi", RuoloUtente.Operatore);
+        var lucia = new IdentitaUtente(Guid.NewGuid(), "lucia", "Lucia Bianchi", RuoloUtente.Operatore);
+        var salvato = await clienti.SalvaAsync(new DatiCliente { Denominazione = "Comune di Caltagirone", Comune = "Caltagirone" });
+
+        // Entrambi aprono la scheda; Mario salva per primo.
+        var diMario = (await clienti.ElencoAsync()).Single();
+        var diLucia = (await clienti.ElencoAsync()).Single();
+        diMario.Telefono = "0933 111111";
+        using (UtenteCorrente.Imposta(mario)) await clienti.SalvaAsync(diMario);
+        Assert.StartsWith("Ultima modifica di Mario Rossi il ", (await clienti.ElencoAsync()).Single().UltimaModifica);
+
+        diLucia.Telefono = "0933 222222";
+        ConflittoModificaException conflitto;
+        using (UtenteCorrente.Imposta(lucia))
+            conflitto = await Assert.ThrowsAsync<ConflittoModificaException>(() => clienti.SalvaAsync(diLucia));
+        Assert.Equal("Mario Rossi", conflitto.SalvatoDa);
+        var d = Assert.Single(conflitto.Differenze);
+        Assert.Equal(("Telefono", "0933 222222", "0933 111111"), (d.Campo, d.TuoValore, d.ValoreSalvato));
+        Assert.True(conflitto.Riapplicabile);
+
+        // Lucia sceglie «Riapplica»: il suo valore sostituisce quello di Mario.
+        using (UtenteCorrente.Imposta(lucia))
+        using (ConflittoModificaException.Accetta(conflitto))
+            await clienti.SalvaAsync(diLucia);
+        Assert.Equal("0933 222222", (await clienti.ElencoAsync()).Single().Telefono);
+    }
+
+    [Fact]
+    public async Task Riapplica_dal_servizio_conflitti_chiude_il_pannello()
+    {
+        await using var amb = await AmbienteDiProva.CreaAsync();
+        var clienti = amb.Get<ClientiService>();
+        await clienti.SalvaAsync(new DatiCliente { Denominazione = "Ente" });
+        var a = (await clienti.ElencoAsync()).Single();
+        var b = (await clienti.ElencoAsync()).Single();
+        a.Note = "prima"; await clienti.SalvaAsync(a);
+        b.Note = "seconda";
+        var conflitti = new ConflittiService();
+        var ricaricato = false;
+        try { await clienti.SalvaAsync(b); }
+        catch (ConflittoModificaException c) { conflitti.Mostra(c, () => clienti.SalvaAsync(b), () => { ricaricato = true; return Task.CompletedTask; }); }
+        Assert.True(conflitti.PuoRiapplicare);
+        await conflitti.RiapplicaAsync();
+        Assert.Null(conflitti.Corrente);
+        Assert.True(ricaricato);
+        Assert.Equal("seconda", (await clienti.ElencoAsync()).Single().Note);
+    }
+
+    [Fact]
+    public void Presenza_per_commessa_e_pacchetto()
+    {
+        var presenza = new PresenzaService(TimeProvider.System);
+        var mario = new IdentitaUtente(Guid.NewGuid(), "mario", "Mario Rossi", RuoloUtente.Operatore);
+        var lucia = new IdentitaUtente(Guid.NewGuid(), "lucia", "Lucia Bianchi", RuoloUtente.Operatore);
+        Guid s1 = Guid.NewGuid(), s2 = Guid.NewGuid(), commessa = Guid.NewGuid(), pacchetto = Guid.NewGuid();
+        presenza.Collega(s1, mario); presenza.Collega(s2, lucia);
+        presenza.ApriCommessa(s1, commessa); presenza.ApriCommessa(s2, commessa);
+        presenza.ApriPacchetto(s1, pacchetto);
+        Assert.Equal(["Lucia Bianchi"], presenza.AltriSullaCommessa(commessa, mario.Id));
+        Assert.Empty(presenza.AltriSulPacchetto(pacchetto, mario.Id));
+        Assert.Equal(["Mario Rossi"], presenza.AltriSulPacchetto(pacchetto, lucia.Id));
+        presenza.ChiudiPacchetto(s1, Guid.NewGuid()); // un altro pacchetto: non cambia nulla
+        Assert.Single(presenza.AltriSulPacchetto(pacchetto, lucia.Id));
+        presenza.Scollega(s1);
+        Assert.Empty(presenza.AltriSulPacchetto(pacchetto, lucia.Id));
+    }
 }

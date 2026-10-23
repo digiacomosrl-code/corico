@@ -236,3 +236,7 @@ tr.dettaglio-annullamento .tabella { width: auto; min-width: 32rem; margin-botto
 .etichetta-disattivo { color: var(--testo-secondario); background: var(--grigio-sfondo); }
 .presenza { background: var(--blu-chiaro); color: var(--blu); border-radius: var(--raggio); padding: .45rem .75rem; margin-bottom: .75rem; }
 .password-provvisoria { font-family: Consolas, monospace; font-size: 1.15rem; letter-spacing: .08em; background: #fff; border: 1px dashed var(--blu-medio); padding: .2rem .6rem; border-radius: var(--raggio); }
+.sfondo-dialogo { position: fixed; inset: 0; background: rgba(29,36,48,.45); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 1rem 1rem; z-index: 50; }
+.dialogo { background: #fff; border-radius: var(--raggio); padding: 1.25rem 1.5rem; width: 100%; max-width: 760px; max-height: 84vh; overflow: auto; box-shadow: 0 10px 32px rgba(0,0,0,.25); }
+.dialogo .tabella { margin: .5rem 0 1rem; }
+.ultima-modifica { font-size: .82rem; color: var(--testo-secondario); }

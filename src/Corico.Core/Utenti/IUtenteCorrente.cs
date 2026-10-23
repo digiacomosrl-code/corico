@@ -26,6 +26,9 @@ public sealed class UtenteCorrente : IUtenteCorrente
 
     public IdentitaUtente? Identita => Corrente.Value;
 
+    /// <summary>Vero per l'amministratore e per le operazioni di sistema (nessun utente collegato).</summary>
+    public static bool PuoAmministrare => Corrente.Value is null || Corrente.Value.Ruolo == RuoloUtente.Amministratore;
+
     /// <summary>Imposta l'utente per l'operazione in corso; il valore precedente torna al termine (Dispose).</summary>
     public static IDisposable Imposta(IdentitaUtente? identita)
     {

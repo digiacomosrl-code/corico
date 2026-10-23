@@ -1,4 +1,5 @@
 @* Scheda "Pacchetti" della commessa (rilascio 1B): tabellone costi/ricavi come il foglio HOME, dettaglio e offerte. *@
+@inject ConflittiService Conflitti
 @inject PacchettiService Pacchetti
 @inject ImportazionePianificazioneService ImportazionePianificazione
 
@@ -261,6 +262,10 @@
             _esito = await ImportazionePianificazione.ConfermaAsync(CommessaId, _contenuto!, _nomeFile!, _anteprima!);
             AnnullaImportazione();
             await AggiornaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, AggiornaAsync);
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

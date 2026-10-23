@@ -5,20 +5,6 @@ using Microsoft.AspNetCore.Components.Server.Circuits;
 
 namespace Corico.Web.Infrastruttura;
 
-/// <summary>Sessione di lavoro (circuito Blazor) dell'utente collegato: identità aggiornata e ultima attività.</summary>
-public sealed class SessioneUtente
-{
-    public Guid Id { get; } = Guid.NewGuid();
-    public IdentitaUtente? Identita { get; set; }
-    public DateTimeOffset UltimaAttivita { get; set; } = DateTimeOffset.UtcNow;
-
-    public bool Amministratore => Identita?.Ruolo == RuoloUtente.Amministratore;
-    public bool SolaConsultazione => Identita?.Ruolo == RuoloUtente.Consultazione;
-
-    public static Guid? IdDa(ClaimsPrincipal utente) =>
-        Guid.TryParse(utente.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
-}
-
 /// <summary>
 /// Per ogni interazione del circuito imposta l'utente corrente (permessi e storico), aggiorna l'ultima attività
 /// (scadenza per inattività) e la presenza degli utenti collegati.

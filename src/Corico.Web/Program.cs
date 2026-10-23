@@ -76,7 +76,6 @@ var moduliAttivi = moduliDisponibili.Where(m => !opzioni.Moduli.TryGetValue(m.Co
 
 builder.Services.AggiungiCorico(percorsi, moduliAttivi);
 builder.Services.AddScoped<CircuitHandler, RegistraAttivitaCircuitHandler>();
-builder.Services.AddScoped<SessioneUtente>();
 builder.Services.AddScoped<CircuitHandler, UtenteCircuitHandler>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -111,6 +110,7 @@ app.Use(async (contesto, prossimo) =>
     var identita = SessioneUtente.IdDa(contesto.User) is { } id
         ? await contesto.RequestServices.GetRequiredService<UtentiService>().IdentitaAsync(id)
         : null;
+    contesto.RequestServices.GetRequiredService<SessioneUtente>().Identita = identita;
     using (UtenteCorrente.Imposta(identita))
         await prossimo(contesto);
 });

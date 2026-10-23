@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Corico.Core.Calcolo;
 using Corico.Core.Dominio;
 using Corico.Core.Utenti;
 using Microsoft.EntityFrameworkCore;
@@ -107,25 +108,72 @@ public abstract class CoricoDbContextBase : DbContext
         catch (DbUpdateConcurrencyException ex) { throw Conflitto(ex); }
     }
 
-    /// <summary>Avviso di modifica contemporanea: dice, se possibile, chi ha salvato per primo e quando.</summary>
+    /// <summary>Avviso di modifica contemporanea: chi ha salvato per primo, quando e con quali valori diversi dai tuoi.</summary>
     private static ConflittoModificaException Conflitto(DbUpdateConcurrencyException ex)
     {
-        string? chi = null;
         try
         {
-            var attuali = ex.Entries.FirstOrDefault()?.GetDatabaseValues();
-            if (attuali is null)
-                return new("I dati sono stati eliminati da un altro utente dopo che li avevi aperti. Ricarica la pagina.", ex);
-            if (attuali.Properties.Any(p => p.Name == nameof(EntitaBase.ModificatoDa))
-                && attuali[nameof(EntitaBase.ModificatoDa)] is string da && attuali[nameof(EntitaBase.ModificatoIl)] is DateTime il)
-                chi = $"{da} alle {DateTime.SpecifyKind(il, DateTimeKind.Utc).ToLocalTime():HH:mm} del {DateTime.SpecifyKind(il, DateTimeKind.Utc).ToLocalTime():dd/MM}";
+            var versioni = new Dictionary<Guid, int>();
+            EntityEntry? primo = null;
+            PropertyValues? salvati = null;
+            foreach (var entry in ex.Entries)
+            {
+                var attuali = entry.GetDatabaseValues();
+                if (attuali is null)
+                    return new("I dati sono stati eliminati da un altro utente dopo che li avevi aperti: le tue modifiche non sono state salvate.", ex);
+                if (entry.Entity is EntitaBase e) versioni[e.Id] = (int)attuali[nameof(EntitaBase.Versione)]!;
+                if (primo is null) (primo, salvati) = (entry, attuali);
+            }
+            if (primo is null || salvati is null) return Generico(ex);
+
+            string? da = null;
+            DateTime? il = null;
+            if (salvati.Properties.Any(p => p.Name == nameof(EntitaBase.ModificatoDa)))
+            {
+                da = salvati[nameof(EntitaBase.ModificatoDa)] as string;
+                il = salvati[nameof(EntitaBase.ModificatoIl)] as DateTime?;
+            }
+            var differenze = primo.Properties
+                .Where(p => !CampiTecnici.Contains(p.Metadata.Name) && !p.Metadata.IsPrimaryKey())
+                .Where(p => !Equals(p.CurrentValue, salvati[p.Metadata.Name]))
+                .Select(p => new DifferenzaConflitto(NomeCampo(p.Metadata.Name), Valore(p.CurrentValue), Valore(salvati[p.Metadata.Name])))
+                .ToList();
+            var quando = il is { } d ? $" alle {DateTime.SpecifyKind(d, DateTimeKind.Utc).ToLocalTime():HH:mm} del {DateTime.SpecifyKind(d, DateTimeKind.Utc).ToLocalTime():dd/MM}" : "";
+            return new($"{(da is null ? "Un altro utente" : da)} ha salvato questi dati{quando}, dopo che li avevi aperti: le tue modifiche non sono ancora state salvate.", ex)
+            {
+                Entita = primo.Metadata.ClrType.Name,
+                SalvatoDa = da,
+                SalvatoIlUtc = il,
+                Differenze = differenze,
+                VersioniSalvate = versioni,
+            };
         }
-        catch (Exception) { /* l'avviso resta generico */ }
-        return new((chi is null
-                ? "I dati sono stati modificati da un altro utente o in un'altra finestra dopo che li avevi aperti. "
-                : $"I dati sono stati modificati da {chi}, dopo che li avevi aperti. ") +
-            "Ricarica la pagina per vedere la versione aggiornata prima di salvare di nuovo: le tue modifiche non sono state salvate.", ex);
+        catch (Exception) { return Generico(ex); }
     }
+
+    private static ConflittoModificaException Generico(Exception ex) =>
+        new("I dati sono stati modificati da un altro utente o in un'altra finestra dopo che li avevi aperti. " +
+            "Ricarica la pagina per vedere la versione aggiornata prima di salvare di nuovo: le tue modifiche non sono state salvate.", ex);
+
+    /// <summary>«PartitaIva» → «Partita iva».</summary>
+    private static string NomeCampo(string nome)
+    {
+        var parole = System.Text.RegularExpressions.Regex.Replace(nome, "(?<=[a-zà-ù0-9])(?=[A-Z])", " ").ToLowerInvariant();
+        return char.ToUpperInvariant(parole[0]) + parole[1..];
+    }
+
+    private static string Valore(object? v) => v switch
+    {
+        null => "—",
+        bool b => b ? "sì" : "no",
+        decimal d => d.ToString("#,##0.####", Formato.Italiano),
+        double d => d.ToString("#,##0.####", Formato.Italiano),
+        DateTime d => d.TimeOfDay == TimeSpan.Zero ? d.ToString("dd/MM/yyyy") : DateTime.SpecifyKind(d, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM/yyyy HH:mm"),
+        DateOnly d => d.ToString("dd/MM/yyyy"),
+        Guid => "(collegamento)",
+        string s when s.Length > 120 => s[..117] + "…",
+        _ => v.ToString() ?? "—",
+    };
 
     private void PreparaSalvataggio()
     {
@@ -149,8 +197,10 @@ public abstract class CoricoDbContextBase : DbContext
                         entita.Versione = 1;
                         break;
                     case EntityState.Modified:
-                        // Il valore originale (quello letto) resta come condizione di aggiornamento.
+                        // Il valore originale (quello letto) resta come condizione di aggiornamento;
+                        // dopo un conflitto l'utente può scegliere di riapplicare le proprie modifiche sulla versione salvata.
                         var versione = entry.Property(nameof(EntitaBase.Versione));
+                        if (ConflittoModificaException.VersioneAccettata(entita.Id) is { } accettata) versione.OriginalValue = accettata;
                         versione.CurrentValue = (int)versione.OriginalValue! + 1;
                         entita.ModificatoIl = adesso;
                         entita.ModificatoDa = utente;
@@ -188,6 +238,8 @@ public abstract class CoricoDbContextBase : DbContext
 
         if (chi.Ruolo != RuoloUtente.Amministratore && modifiche.Any(e => e.Entity is IRiservatoAmministratore && e.State == EntityState.Added))
             throw new OperazioneNonValidaException("Questa operazione è riservata all'amministratore.");
+        if (chi.Ruolo != RuoloUtente.Amministratore && modifiche.Any(e => e.Entity is ICancellazioneRiservata && e.State == EntityState.Deleted))
+            throw new OperazioneNonValidaException("L'eliminazione definitiva è riservata all'amministratore: puoi archiviare, oppure chiedere all'amministratore di eliminare.");
 
         if (chi.Ruolo != RuoloUtente.Amministratore)
         {

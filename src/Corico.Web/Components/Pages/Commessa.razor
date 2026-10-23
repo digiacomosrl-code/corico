@@ -2,6 +2,7 @@
 @inject CommesseService Commesse
 @inject RegistroModuli Moduli
 @inject PresenzaService Presenza
+@inject StoricoService Storico
 @inject SessioneUtente Sessione
 @implements IDisposable
 
@@ -17,6 +18,10 @@ else
         <div>
             <div class="testo-secondario"><a href="">Commesse</a> › @_commessa.Codice</div>
             <h1>@_commessa.Codice — @_commessa.Descrizione</h1>
+            @if (_ultima is { } u)
+            {
+                <div class="ultima-modifica">@Formato.UltimaModifica(u.Utente, u.DataOra)</div>
+            }
         </div>
         <div><EtichettaStato Stato="_commessa.Stato" Archiviata="_commessa.Archiviata" /></div>
     </div>
@@ -25,14 +30,14 @@ else
     {
         <div class="presenza" role="status">
             Anche @string.Join(", ", _altri) @(_altri.Count == 1 ? "sta" : "stanno") lavorando su questa commessa.
-            Se modificate gli stessi dati, Corico salva la prima modifica e avvisa l'altro prima di sovrascrivere.
+            Se modificate gli stessi dati, Corico salva la prima modifica e mostra all'altro le differenze prima di sovrascrivere.
         </div>
     }
 
     <div class="schede" role="tablist">
         @foreach (var titolo in Schede())
         {
-            <button role="tab" class="scheda @(titolo == _schedaAttiva ? "attiva" : "")" @onclick="() => _schedaAttiva = titolo">@titolo</button>
+            <button role="tab" class="scheda @(titolo == _schedaAttiva ? "attiva" : "")" @onclick="() => CambiaSchedaAsync(titolo)">@titolo</button>
         }
     </div>
 
@@ -65,15 +70,23 @@ else
     private string _schedaAttiva = "Dati generali";
 
     private IReadOnlyList<string> _altri = [];
+    private VoceStorico? _ultima;
     private bool _inAscolto;
 
     protected override async Task OnParametersSetAsync()
     {
         _commessa = await Commesse.OttieniAsync(Id);
+        _ultima = await Storico.UltimaAsync(Id);
         _caricata = true;
         Presenza.ApriCommessa(Sessione.Id, Id);
         if (!_inAscolto) { Presenza.Cambiato += AggiornaPresenze; _inAscolto = true; }
         _altri = AltriUtenti();
+    }
+
+    private async Task CambiaSchedaAsync(string titolo)
+    {
+        _schedaAttiva = titolo;
+        _ultima = await Storico.UltimaAsync(Id);
     }
 
     private IReadOnlyList<string> AltriUtenti() =>

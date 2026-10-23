@@ -1,4 +1,5 @@
 @* Scheda "Riepilogo economico" della commessa (rilascio 1C): ricavi, costi, MDC, spese generali, risultato, obiettivo e avvisi. *@
+@inject ConflittiService Conflitti
 @inject RiepilogoService Riepilogo
 
 @if (!string.IsNullOrEmpty(_messaggio))
@@ -268,6 +269,10 @@
             await azione();
             (_messaggio, _errore) = (esito, false);
             await AggiornaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, () => Esegui(azione, esito), AggiornaAsync);
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

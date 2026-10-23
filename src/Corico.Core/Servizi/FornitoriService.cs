@@ -1,3 +1,4 @@
+using Corico.Core.Calcolo;
 using Corico.Core.Dati;
 using Corico.Core.Dominio;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,9 @@ public sealed class DatiFornitore
     public string? Note { get; set; }
     public bool Archiviato { get; set; }
 
+    /// <summary>Solo lettura: chi ha modificato la scheda per ultimo e quando.</summary>
+    public string UltimaModifica { get; set; } = "";
+
     public DatiFornitore Clona() => (DatiFornitore)MemberwiseClone();
 
     internal static DatiFornitore Da(Fornitore f) => new()
@@ -27,6 +31,7 @@ public sealed class DatiFornitore
         Id = f.Id, Versione = f.Versione, Denominazione = f.Denominazione, PartitaIva = f.PartitaIva,
         CodiceFiscale = f.CodiceFiscale, Indirizzo = f.Indirizzo, Comune = f.Comune, Provincia = f.Provincia,
         Email = f.Email, Telefono = f.Telefono, Categorie = f.Categorie, Note = f.Note, Archiviato = f.Archiviato,
+        UltimaModifica = Formato.UltimaModifica(f),
     };
 }
 

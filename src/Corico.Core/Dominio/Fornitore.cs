@@ -4,7 +4,7 @@ namespace Corico.Core.Dominio;
 /// Fornitore, subappaltatore o noleggiatore. Anagrafica comune a tutti i moduli
 /// (preventivo, preventivi fornitori, consuntivo).
 /// </summary>
-public sealed class Fornitore : EntitaBase
+public sealed class Fornitore : EntitaBase, ICancellazioneRiservata
 {
     public string Denominazione { get; set; } = "";
     public string? PartitaIva { get; set; }

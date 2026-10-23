@@ -231,4 +231,23 @@ public class RiepilogoEVersioniTests
                 new DatiVoce { Id = voce.Id, Versione = voce.Versione, Tariffa = voce.Tariffa, Descrizione = "Cambiata", Unita = voce.Unita, Quantita = 1, Prezzo = 1 }));
         }
     }
+
+    [Fact]
+    public async Task Eliminazione_offerta_riservata_all_amministratore_con_backup()
+    {
+        var (amb, id, _, offertaId) = await PreparaAsync();
+        await using var _ = amb;
+        var pacchetti = amb.Get<PacchettiService>();
+        var operatore = new IdentitaUtente(Guid.NewGuid(), "operatore", "Oreste Operatore", RuoloUtente.Operatore);
+        var admin = new IdentitaUtente(Guid.NewGuid(), "admin", "Amministratore", RuoloUtente.Amministratore);
+
+        using (UtenteCorrente.Imposta(operatore))
+            await Assert.ThrowsAsync<OperazioneNonValidaException>(() => pacchetti.EliminaOffertaAsync(id, offertaId));
+        using (UtenteCorrente.Imposta(admin))
+            await pacchetti.EliminaOffertaAsync(id, offertaId);
+
+        await using var db = await amb.Get<IDbContextFactory<PreventivoDbContext>>().CreateDbContextAsync();
+        Assert.False(await db.Offerte.AnyAsync(o => o.Id == offertaId));
+        Assert.Contains(Directory.GetFiles(amb.Percorsi.Radice, "*PrimaDiCancellazione*", SearchOption.AllDirectories), f => f.EndsWith(".db"));
+    }
 }

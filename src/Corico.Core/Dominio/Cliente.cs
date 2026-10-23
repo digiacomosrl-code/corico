@@ -1,6 +1,6 @@
 namespace Corico.Core.Dominio;
 
-public sealed class Cliente : EntitaBase
+public sealed class Cliente : EntitaBase, ICancellazioneRiservata
 {
     public string Denominazione { get; set; } = "";
     public string? PartitaIva { get; set; }

@@ -21,6 +21,8 @@ public static class RegistrazioneServizi
         servizi.AddSingleton<IUtenteCorrente, UtenteCorrente>();
         servizi.AddSingleton<UtentiService>();
         servizi.AddSingleton<PresenzaService>();
+        servizi.AddScoped<SessioneUtente>();
+        servizi.AddScoped<ConflittiService>();
         servizi.AddSingleton(new RegistroModuli(attivi));
         servizi.AddSingleton<MonitorAttivita>();
 

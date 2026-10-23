@@ -1,3 +1,5 @@
+using Corico.Core.Utenti;
+using Corico.Core.Backup;
 using Corico.Core.Calcolo;
 using Corico.Core.Dominio;
 using Corico.Modules.Preventivo.Dati;
@@ -37,7 +39,7 @@ public sealed record DettaglioPacchetto(Pacchetto Pacchetto, IReadOnlyList<VoceD
 }
 
 /// <summary>Pacchetti di affidamento, offerte alternative, scelta, stato del costo e note (sez. 14.1).</summary>
-public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabbrica)
+public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabbrica, BackupService backup)
 {
     public async Task<Tabellone> TabelloneAsync(Guid commessaId, CancellationToken ct = default)
     {
@@ -366,6 +368,10 @@ public sealed class PacchettiService(IDbContextFactory<PreventivoDbContext> fabb
         await using var db = await fabbrica.CreateDbContextAsync(ct);
         var o = await db.Offerte.FirstOrDefaultAsync(x => x.Id == offertaId && x.CommessaId == commessaId, ct);
         if (o is null) return;
+        if (!UtenteCorrente.PuoAmministrare)
+            throw new OperazioneNonValidaException("L'eliminazione definitiva di un'offerta è riservata all'amministratore.");
+        // Cancellazione fisica (sez. 22): sempre preceduta da un backup.
+        await backup.EseguiBackupLocaleAsync(MotivoBackup.PrimaDiCancellazione, ct);
         var p = await db.Pacchetti.FirstAsync(x => x.Id == o.PacchettoId, ct);
         if (p.OffertaSceltaId == o.Id) p.OffertaSceltaId = null;
         db.Offerte.Remove(o);

@@ -1,4 +1,5 @@
 @page "/clienti"
+@inject ConflittiService Conflitti
 @inject ClientiService Clienti
 
 <PageTitle>Clienti — Corico</PageTitle>
@@ -14,6 +15,7 @@
 {
     <EditForm Model="_modifica" OnValidSubmit="SalvaAsync" class="riquadro">
         <h3>@(_modifica.Id == Guid.Empty ? "Nuovo cliente" : "Modifica cliente")</h3>
+        <p class="ultima-modifica">@_modifica.UltimaModifica</p>
         <div class="griglia-form">
             <label class="largo">Denominazione <InputText @bind-Value="_modifica.Denominazione" /></label>
             <label>Partita IVA <InputText @bind-Value="_modifica.PartitaIva" /></label>
@@ -104,10 +106,20 @@
             (_messaggio, _errore, _modifica) = ("Cliente salvato.", false, null);
             await CaricaAsync();
         }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, SalvaAsync, RicaricaAsync);
+        }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {
             (_messaggio, _errore) = (ex.Message, true);
         }
+    }
+
+    private async Task RicaricaAsync()
+    {
+        _modifica = null;
+        await CaricaAsync();
     }
 
     private async Task ArchiviaAsync()
@@ -118,6 +130,10 @@
             await Clienti.ImpostaArchiviazioneAsync(_modifica.Id, _modifica.Versione, !_modifica.Archiviato);
             (_messaggio, _errore, _modifica) = ("Operazione eseguita.", false, null);
             await CaricaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, ArchiviaAsync, RicaricaAsync);
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

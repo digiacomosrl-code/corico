@@ -1,4 +1,5 @@
 @using System.Text.Json
+@inject ConflittiService Conflitti
 @inject StoricoService Storico
 @inject AnnullamentoService Annullamento
 
@@ -23,12 +24,24 @@ else
         Le modifiche di dati si possono annullare singolarmente con «Annulla…»: prima di ripristinare, Corico mostra i valori attuali
         e quelli da ripristinare. L'annullamento viene registrato a sua volta qui sotto.
     </p>
+    <div class="riga-form">
+        <label>
+            Utente
+            <select @bind="_utente">
+                <option value="">Tutti</option>
+                @foreach (var u in _voci.Select(v => v.Utente).Distinct().Order(StringComparer.CurrentCultureIgnoreCase))
+                {
+                    <option value="@u">@u</option>
+                }
+            </select>
+        </label>
+    </div>
     <table class="tabella">
         <thead>
             <tr><th>Data e ora</th><th>Utente</th><th>Operazione</th><th>Elemento</th><th>Dati modificati</th><th>Nota</th><th></th></tr>
         </thead>
         <tbody>
-            @foreach (var v in _voci)
+            @foreach (var v in _voci.Where(v => string.IsNullOrEmpty(_utente) || v.Utente == _utente))
             {
                 <tr>
                     <td class="nowrap">@Formato.DataOra(v.DataOra)</td>
@@ -97,6 +110,8 @@ else
 }
 
 @code {
+    private string? _utente;
+
     [Parameter] public Guid CommessaId { get; set; }
     [Parameter] public EventCallback OnAnnullato { get; set; }
     private IReadOnlyList<VoceStorico>? _voci;
@@ -118,6 +133,10 @@ else
             _anteprima = null;
             _voci = await Storico.PerCommessaAsync(CommessaId);
             await OnAnnullato.InvokeAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, async () => { _anteprima = null; _voci = await Storico.PerCommessaAsync(CommessaId); });
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

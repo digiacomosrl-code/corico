@@ -1,5 +1,9 @@
 @* Dettaglio di un pacchetto: dati, voci assegnate, confronto delle offerte, note datate. *@
+@inject ConflittiService Conflitti
 @inject PacchettiService Pacchetti
+@inject PresenzaService Presenza
+@inject SessioneUtente Sessione
+@implements IDisposable
 
 @if (!string.IsNullOrEmpty(_messaggio))
 {
@@ -33,8 +37,17 @@
     }
 </div>
 
+@if (_altri.Count > 0)
+{
+    <div class="presenza" role="status">
+        Anche @string.Join(", ", _altri) @(_altri.Count == 1 ? "ha" : "hanno") aperto questo pacchetto.
+        Se modificate gli stessi dati, Corico salva la prima modifica e mostra all'altro le differenze prima di sovrascrivere.
+    </div>
+}
+
 <div class="riquadro">
     <h3>Dati del pacchetto</h3>
+    <p class="ultima-modifica">@Formato.UltimaModifica(_dettaglio.Pacchetto)</p>
     <div class="griglia-form">
         <label>Codice pacchetto (facoltativo) <input @bind="_modifica.Codice" placeholder="es. 26.01.04.002" title="Codice libero per ordinare e riconoscere il pacchetto, come la colonna «Gruppo» del foglio HOME" /></label>
         <label>Riferimento ODA <input @bind="_modifica.RiferimentoOda" /></label>
@@ -291,6 +304,24 @@
 </div>
 
 @code {
+    private IReadOnlyList<string> _altri = [];
+    private bool _inAscolto;
+
+    private IReadOnlyList<string> AltriUtenti() =>
+        Sessione.Identita is { } u ? Presenza.AltriSulPacchetto(PacchettoId, u.Id) : [];
+
+    private void AggiornaPresenze() => _ = InvokeAsync(() =>
+    {
+        _altri = AltriUtenti();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        Presenza.Cambiato -= AggiornaPresenze;
+        Presenza.ChiudiPacchetto(Sessione.Id, PacchettoId);
+    }
+
     [Parameter, EditorRequired] public Guid CommessaId { get; set; }
     [Parameter, EditorRequired] public Guid PacchettoId { get; set; }
     [Parameter] public EventCallback OnChiudi { get; set; }
@@ -316,6 +347,9 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        Presenza.ApriPacchetto(Sessione.Id, PacchettoId);
+        if (!_inAscolto) { Presenza.Cambiato += AggiornaPresenze; _inAscolto = true; }
+        _altri = AltriUtenti();
         await AggiornaAsync();
         _libere = await Pacchetti.VociLibereAsync(CommessaId);
     }
@@ -457,6 +491,11 @@
             (_messaggio, _errore) = (esito, false);
             await AggiornaAsync();
             return true;
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, () => EseguiAsync(operazione, esito), AggiornaAsync);
+            return false;
         }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {

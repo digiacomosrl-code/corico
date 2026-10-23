@@ -1,4 +1,6 @@
 @* Scheda dell'offerta (sez. 14.1): testata, costi per voce, righe del fornitore assegnabili alle voci, voci a corpo, esclusioni. *@
+@inject SessioneUtente Sessione
+@inject ConflittiService Conflitti
 @inject PacchettiService Pacchetti
 @inject FornitoriService Fornitori
 @inject DocumentiService Documenti
@@ -23,6 +25,10 @@
 
 <div class="riquadro">
     <h3>Testata</h3>
+    @if (Offerta.Id != Guid.Empty)
+    {
+        <p class="ultima-modifica">@Formato.UltimaModifica(Offerta)</p>
+    }
     <div class="griglia-form">
         <label>
             Fornitore in anagrafica
@@ -257,11 +263,15 @@
     <button class="pulsante primario" @onclick="SalvaAsync">Salva offerta</button>
     <button class="pulsante" @onclick="OnChiudi">Annulla</button>
     <span class="spazio"></span>
-    @if (Offerta.Id != Guid.Empty)
+    @if (Offerta.Id != Guid.Empty && !Sessione.Amministratore)
+    {
+        <span class="testo-secondario" title="La cancellazione definitiva è riservata all'amministratore (sez. 22)">Eliminazione: solo amministratore</span>
+    }
+    else if (Offerta.Id != Guid.Empty)
     {
         @if (_confermaElimina)
         {
-            <span class="conferma">Eliminare l'offerta? <button class="pulsante piccolo" @onclick="EliminaAsync">Sì, elimina</button>
+            <span class="conferma">Eliminare definitivamente l'offerta? Prima viene fatto un backup. <button class="pulsante piccolo" @onclick="EliminaAsync">Sì, elimina</button>
                 <button class="pulsante piccolo" @onclick="() => _confermaElimina = false">No</button></span>
         }
         else
@@ -374,6 +384,10 @@
             await Pacchetti.SalvaOffertaAsync(CommessaId, Offerta);
             await OnChiudi.InvokeAsync();
         }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, SalvaAsync, () => OnChiudi.InvokeAsync());
+        }
         catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
         {
             (_messaggio, _errore) = (ex.Message, true);
@@ -382,8 +396,15 @@
 
     private async Task EliminaAsync()
     {
-        await Pacchetti.EliminaOffertaAsync(CommessaId, Offerta.Id);
-        await OnChiudi.InvokeAsync();
+        try
+        {
+            await Pacchetti.EliminaOffertaAsync(CommessaId, Offerta.Id);
+            await OnChiudi.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore, _confermaElimina) = (ex.Message, true, false);
+        }
     }
 
     private static string Accorcia(string testo, int max = 90) => testo.Length <= max ? testo : testo[..(max - 3)] + "…";

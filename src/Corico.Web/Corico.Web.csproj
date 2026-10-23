@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Corico.Core\Corico.Core.csproj" />
     <ProjectReference Include="..\Corico.Modules.Preventivo\Corico.Modules.Preventivo.csproj" />
+    <ProjectReference Include="..\Corico.Modules.Documenti\Corico.Modules.Documenti.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,11 +1,13 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Corico.Core/Corico.Core.csproj" />
+    <Project Path="src/Corico.Modules.Documenti/Corico.Modules.Documenti.csproj" />
     <Project Path="src/Corico.Modules.Preventivo/Corico.Modules.Preventivo.csproj" />
     <Project Path="src/Corico.Web/Corico.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Corico.Core.Tests/Corico.Core.Tests.csproj" />
+    <Project Path="tests/Corico.Modules.Documenti.Tests/Corico.Modules.Documenti.Tests.csproj" />
     <Project Path="tests/Corico.Modules.Preventivo.Tests/Corico.Modules.Preventivo.Tests.csproj" />
   </Folder>
 </Solution>

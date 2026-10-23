@@ -50,7 +50,11 @@ public sealed record TotaliFotografia(
 public sealed record VoceFotografia(
     Guid Id, int Ordine, string? Tariffa, string Descrizione, string? Unita,
     decimal Quantita, decimal Prezzo, decimal PercentualeNonSoggetta, decimal RicavoNetto,
-    Guid? PacchettoId, decimal? QuantitaPianificazione, decimal? Costo);
+    Guid? PacchettoId, decimal? QuantitaPianificazione, decimal? Costo)
+{
+    /// <summary>Codice WBS della voce (assente nelle versioni salvate prima della 1.2.1).</summary>
+    public string? Wbs { get; init; }
+}
 
 public sealed record PacchettoFotografia(
     Guid Id, int Ordine, string Descrizione, TipoAffidamento Tipo, StatoCosto Stato,

@@ -83,7 +83,7 @@ public sealed class RiepilogoService(IDbContextFactory<PreventivoDbContext> fabb
             var netto = d?.Ricavo.Netto ?? CalcoloRicavi.Voce(v.Quantita, v.Prezzo, ribasso, v.PercentualeNonSoggetta).Netto;
             return new VoceFotografia(v.Id, v.Ordine, v.Tariffa, v.Descrizione, v.Unita, v.Quantita, v.Prezzo,
                 v.PercentualeNonSoggetta, netto, pacchettoDi.TryGetValue(v.Id, out var pid) ? pid : null,
-                d is { QuantitaModificata: true } ? d.Quantita : null, d?.Costo);
+                d is { QuantitaModificata: true } ? d.Quantita : null, d?.Costo) { Wbs = v.CodiceWbs };
         }).ToList();
 
         var libere = vociFoto.Where(v => v.PacchettoId is null).ToList();

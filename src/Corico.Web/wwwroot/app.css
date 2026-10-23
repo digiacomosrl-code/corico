@@ -293,3 +293,8 @@ tr.riga-memoria td { color: var(--testo-secondario); font-style: italic; }
 .spazio-sopra { margin-top: .75rem; }
 details > summary { cursor: pointer; font-weight: 600; padding: .25rem 0; }
 textarea.descrizione-riga { width: 100%; min-width: 28rem; }
+
+/* WBS (1.2.1) */
+.altezza-limitata { max-height: 24rem; overflow-y: auto; }
+.tabella tr.gruppo-wbs td { font-weight: 600; }
+.filtro-wbs { min-width: 16rem; }

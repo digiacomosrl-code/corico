@@ -7,6 +7,9 @@ namespace Corico.Modules.Preventivo.Importazione;
 
 // Modello in memoria del computo letto, mostrato in anteprima prima del salvataggio.
 
+/// <summary>Elemento della WBS di PriMus (PweDGWBS): codice e titolo.</summary>
+public sealed record WbsLetta(string Codice, string Descrizione);
+
 public sealed record CategoriaLetta(string Livello, string Id, string? Codice, string Descrizione);
 
 public sealed record RigaAnalisiLetta(int Tipo, string? IdElencoRiferito, string? Descrizione, string? Unita, decimal Quantita, decimal Prezzo);
@@ -37,6 +40,7 @@ public sealed class ComputoLetto
     public string? Committente { get; init; }
     public string? Impresa { get; init; }
     public List<CategoriaLetta> Categorie { get; } = [];
+    public List<WbsLetta> Wbs { get; } = [];
     public List<VoceElencoLetta> ElencoPrezzi { get; } = [];
     public List<VoceComputoLetta> Voci { get; } = [];
     public List<Segnalazione> Segnalazioni { get; } = [];
@@ -86,6 +90,7 @@ public static partial class LettoreXpwe
         };
 
         LeggiCategorie(radice, letto);
+        LeggiWbs(radice, letto);
         LeggiElencoPrezzi(radice, letto);
         LeggiVoci(radice, letto);
         Verifica(letto);
@@ -107,6 +112,16 @@ public static partial class LettoreXpwe
                 letto.Categorie.Add(new CategoriaLetta(livello, id, Testo(e, "Codice"),
                     Testo(e, "DesSintetica") ?? Testo(e, "DesEstesa") ?? $"{livello} {id}"));
             }
+        }
+    }
+
+    /// <summary>Struttura WBS di PriMus: solo gli elementi con codice (la radice «WBS» e «&lt;NON assegnata&gt;» non ne hanno).</summary>
+    private static void LeggiWbs(XElement radice, ComputoLetto letto)
+    {
+        foreach (var e in radice.Descendants("DGWBSItem"))
+        {
+            if (Testo(e, "CODICE") is { } codice && Testo(e, "TITOLO") is { } titolo)
+                letto.Wbs.Add(new WbsLetta(codice, titolo));
         }
     }
 
@@ -151,7 +166,7 @@ public static partial class LettoreXpwe
                 ++ordine, (string?)v.Attribute("ID") ?? ordine.ToString(Inv),
                 Numero(v, "IDEP") is > 0 ? Testo(v, "IDEP") : null,
                 Numero(v, "Quantita") ?? 0,
-                Id(v, "IDSpCat"), Id(v, "IDCat"), Id(v, "IDSbCat"), Testo(v, "CodiceWbs"), misure));
+                Id(v, "IDSpCat"), Id(v, "IDCat"), Id(v, "IDSbCat"), Testo(v, "CodiceWBS") ?? Testo(v, "CodiceWbs"), misure));
         }
     }
 

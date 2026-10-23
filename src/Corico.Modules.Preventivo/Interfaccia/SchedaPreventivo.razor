@@ -4,6 +4,7 @@
 @inject ImportazioneComputoService Importazione
 @inject CommesseService Commesse
 @inject PacchettiService Pacchetti
+@inject WbsService Wbs
 
 @if (!string.IsNullOrEmpty(_messaggio))
 {
@@ -193,6 +194,11 @@
         <div class="griglia-form">
             <label>Tariffa <input @bind="_voceInModifica.Tariffa" /></label>
             <label>Unità di misura <input @bind="_voceInModifica.Unita" /></label>
+            <label>
+                WBS
+                <SceltaConRicerca Voci="SceltaWbs" Etichetta="WBS della voce" Segnaposto="Senza WBS"
+                                  Valore="@_voceInModifica.CodiceWbs" ValoreChanged="v => _voceInModifica.CodiceWbs = v" />
+            </label>
             <label class="largo">Descrizione <textarea rows="2" @bind="_voceInModifica.Descrizione"></textarea></label>
             <label>Quantità <input type="number" step="any" @bind="_voceInModifica.Quantita" /></label>
             <label>Prezzo unitario (€) <input type="number" step="any" @bind="_voceInModifica.Prezzo" /></label>
@@ -235,6 +241,11 @@
     </div>
 }
 
+@if (_stato.Computo is not null)
+{
+    <PannelloWbs CommessaId="CommessaId" Voci="_voci" OnCambiato="AggiornaAsync" />
+}
+
 @if (_voci.Count > 0)
 {
     <div class="riquadro">
@@ -249,6 +260,8 @@
                 }
             </select>
             <label class="spunta"><input type="checkbox" @bind="_soloDaCompletare" /> Solo voci senza prezzo</label>
+            <SceltaConRicerca Voci="SceltaFiltroWbs" Etichetta="Filtro per WBS" Classe="filtro-wbs"
+                              Segnaposto="Tutte le WBS: scegli o scrivi il codice…" Valore="@_filtroWbs" ValoreChanged="v => _filtroWbs = v ?? string.Empty" />
         </div>
 
         @{ var visibili = VociVisibili().ToList(); }
@@ -279,12 +292,25 @@
             <span class="spazio"></span>
             <label class="spunta"><input type="checkbox" @bind="_soloNonAssegnate" /> Solo voci non assegnate a pacchetti</label>
         </div>
+        <div class="riga-form">
+            <span>Assegna alle selezionate la WBS</span>
+            <SceltaConRicerca Voci="SceltaWbs" Etichetta="WBS da assegnare" Classe="filtro-wbs"
+                              Segnaposto="@(SceltaWbs.Count == 0 ? "Prima crea la struttura WBS" : "Scegli o scrivi il codice…")"
+                              Valore="@_wbsDestinazione" ValoreChanged="v => _wbsDestinazione = v ?? string.Empty" />
+            <button class="pulsante piccolo primario" @onclick="() => AssegnaWbsAsync(_wbsDestinazione)"
+                    disabled="@(_selezionate.Count == 0 || string.IsNullOrEmpty(_wbsDestinazione))">Assegna</button>
+            <button class="pulsante piccolo" @onclick="() => AssegnaWbsAsync(null)" disabled="@(_selezionate.Count == 0)">Togli la WBS</button>
+            @if (_voci.Count(v => v.CodiceWbs is null) is > 0 and var senza)
+            {
+                <span class="testo-secondario">@senza voci senza WBS</span>
+            }
+        </div>
 
         <div class="scorrevole">
             <table class="tabella">
                 <thead>
                     <tr>
-                        <th></th><th class="num">N.</th><th>Tariffa</th><th>Pacchetto</th><th>Descrizione</th><th>U.M.</th>
+                        <th></th><th class="num">N.</th><th>WBS</th><th>Tariffa</th><th>Pacchetto</th><th>Descrizione</th><th>U.M.</th>
                         <th class="num">Quantità</th><th class="num">Prezzo</th><th class="num">Non sogg.</th>
                         <th class="num">Importo lordo</th><th class="num">Prezzo ribassato</th><th class="num">Importo netto</th>
                     </tr>
@@ -297,6 +323,7 @@
                                 <input type="checkbox" checked="@_selezionate.Contains(v.Id)" @onchange="e => Seleziona(v.Id, (bool)e.Value!)" />
                             </td>
                             <td class="num">@v.Ordine</td>
+                            <td class="codice" title="@(v.CodiceWbs is { } w ? _descrizioniWbs.GetValueOrDefault(w) : "Senza WBS")">@v.CodiceWbs</td>
                             <td class="codice">@v.Tariffa</td>
                             <td class="colonna-pacchetto">
                                 @if (_perVoce.TryGetValue(v.Id, out var pid) && _nomiPacchetti.TryGetValue(pid, out var nome))
@@ -325,7 +352,7 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="9">Totale voci visualizzate</td>
+                        <td colspan="10">Totale voci visualizzate</td>
                         <td class="num">@Formato.Numero(visibili.Sum(v => v.Ricavo.Lordo))</td>
                         <td></td>
                         <td class="num">@Formato.Numero(visibili.Sum(v => v.Ricavo.Netto))</td>
@@ -351,6 +378,14 @@
 
     private string _cerca = "";
     private string _categoria = "";
+
+    // WBS: filtro (codice con i sottolivelli, oppure le voci senza WBS) e assegnazione alle voci selezionate.
+    private const string SenzaWbs = "-";
+    private string _filtroWbs = "";
+    private string _wbsDestinazione = "";
+    private IReadOnlyDictionary<string, string> _descrizioniWbs = new Dictionary<string, string>();
+    private IReadOnlyList<VoceScelta> SceltaWbs = [];
+    private IReadOnlyList<VoceScelta> SceltaFiltroWbs = [];
     private bool _soloDaCompletare;
     private readonly HashSet<Guid> _selezionate = [];
 
@@ -392,6 +427,10 @@
         _totaleDichiarato = _stato.Computo?.TotaleDichiarato;
         _selezionate.IntersectWith(_voci.Select(v => v.Id));
         (_pacchetti, _perVoce) = await Pacchetti.AssegnazioniAsync(CommessaId);
+        _descrizioniWbs = await Wbs.DescrizioniAsync(CommessaId);
+        SceltaWbs = _descrizioniWbs.OrderBy(d => d.Key, CodiciWbs.Ordine)
+            .Select(d => new VoceScelta(d.Key, $"{d.Key} {d.Value}")).ToList();
+        SceltaFiltroWbs = [new VoceScelta(SenzaWbs, "Voci senza WBS"), .. SceltaWbs];
         _nomiPacchetti = _pacchetti.ToDictionary(p => p.Id, p => $"{p.Ordine}. {p.Descrizione}");
     }
 
@@ -435,7 +474,19 @@
                            || (v.Tariffa?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false))
             && (_categoria.Length == 0 || v.SuperCategoria == _categoria)
             && (!_soloDaCompletare || v.Prezzo == 0)
-            && (!_soloNonAssegnate || !_perVoce.ContainsKey(v.Id)));
+            && (!_soloNonAssegnate || !_perVoce.ContainsKey(v.Id))
+            && (_filtroWbs.Length == 0 || (_filtroWbs == SenzaWbs ? v.CodiceWbs is null : CodiciWbs.Rientra(v.CodiceWbs, _filtroWbs))));
+    }
+
+    private async Task AssegnaWbsAsync(string? codice)
+    {
+        var n = _selezionate.Count;
+        if (await EseguiAsync(() => Wbs.AssegnaAsync(CommessaId, _selezionate.ToList(), codice),
+                codice is null ? $"WBS tolta da {n} voci." : $"WBS {codice} assegnata a {n} voci."))
+        {
+            _selezionate.Clear();
+            _wbsDestinazione = "";
+        }
     }
 
     private void Seleziona(Guid id, bool si)
@@ -472,6 +523,7 @@
         {
             Id = v.Id, Versione = v.Versione, Tariffa = v.Tariffa, Descrizione = v.Descrizione, Unita = v.Unita,
             Quantita = v.Quantita, Prezzo = v.Prezzo, PercentualeNonSoggetta = v.PercentualeNonSoggetta, Note = v.Note,
+            CodiceWbs = v.CodiceWbs,
         };
         _misure = v.RigheMisura > 0 ? await Preventivo.RigheMisuraAsync(v.Id) : [];
     }
@@ -541,6 +593,8 @@
                 await Commesse.AggiornaAsync(commessa);
             }
             (_messaggio, _errore) = ($"Computo importato: {esito.Voci} voci, totale {Formato.Euro(esito.TotaleCalcolato)}. " +
+                                     (esito.VociConWbsDalFile > 0 ? $"WBS letta dal file per {esito.VociConWbsDalFile} voci. " : "") +
+                                     (esito.VociConWbsRiportata > 0 ? $"WBS riportata dal computo precedente per {esito.VociConWbsRiportata} voci. " : "") +
                                      "Backup eseguito prima dell'importazione; file originale archiviato nei documenti.", false);
             AnnullaImportazione();
             await AggiornaAsync();

@@ -1,0 +1,324 @@
+@* Struttura WBS della commessa (versione 1.2.1): elenco con voci e ricavo, modifica, caricamento da Excel o da un'altra
+   commessa, proposta automatica delle assegnazioni con anteprima e conferma. *@
+@inject WbsService Wbs
+@inject CommesseService Commesse
+@inject SessioneUtente Sessione
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Struttura WBS</h3>
+        <div class="azioni-in-linea">
+            <button class="pulsante piccolo" @onclick="() => _aperto = !_aperto">@(_aperto ? "Chiudi" : $"Apri ({_elenco.Count} elementi)")</button>
+        </div>
+    </div>
+    <p class="testo-secondario">
+        La WBS divide il lavoro per lavorazioni (es. 2 Opere edili, 2.3 Pavimenti): ogni voce del computo ha un codice WBS,
+        che si vede anche nei pacchetti e negli ordini. È diversa dalle categorie del computo e dal codice del pacchetto.
+        Si può cambiare anche dopo l'approvazione del budget, perché non tocca i prezzi.
+    </p>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (_aperto)
+    {
+        @if (Modificabile)
+        {
+            <div class="riga-form">
+                <button class="pulsante primario" @onclick="ProponiAsync" disabled="@_occupato" title="@Wbs.NomeProposta">Proponi la WBS delle voci…</button>
+                <label class="pulsante">
+                    Carica da Excel…
+                    <InputFile OnChange="LeggiExcelAsync" accept=".xlsx,.XLSX" style="display:none" />
+                </label>
+                @if (_altreCommesse.Count > 0)
+                {
+                    <SceltaConRicerca Voci="_altreCommesse" Etichetta="Copia da un'altra commessa" Segnaposto="Copia da un'altra commessa…"
+                                      Valore="@_commessaOrigine" ValoreChanged="v => _commessaOrigine = v" />
+                    <button class="pulsante" disabled="@(string.IsNullOrEmpty(_commessaOrigine) || _occupato)" @onclick="CopiaAsync">Copia</button>
+                }
+                <span class="spazio"></span>
+                <button class="pulsante" @onclick="() => _modifica = new Modifica()">Nuovo elemento</button>
+            </div>
+        }
+
+        @if (_modifica is { } m)
+        {
+            <div class="sotto-riquadro">
+                <div class="riga-form">
+                    <label>Codice <input class="stretto" @bind="m.Codice" placeholder="es. 2.3" /></label>
+                    <label class="largo">Descrizione <input @bind="m.Descrizione" placeholder="es. Pavimenti" /></label>
+                    <button class="pulsante primario" @onclick="SalvaAsync">Salva</button>
+                    <button class="pulsante" @onclick="() => _modifica = null">Annulla</button>
+                    @if (m.Id != Guid.Empty)
+                    {
+                        <button class="pulsante" @onclick="EliminaAsync">Elimina</button>
+                    }
+                </div>
+                @if (m.Id != Guid.Empty)
+                {
+                    <p class="testo-secondario">Cambiando il codice cambiano allo stesso modo i sottolivelli e le voci assegnate; gli ordini già emessi conservano il codice di allora.</p>
+                }
+            </div>
+        }
+
+        @if (_excel is { } x)
+        {
+            <div class="sotto-riquadro">
+                <strong>Anteprima WBS da «@_nomeFile»</strong>
+                @foreach (var s in x.Segnalazioni)
+                {
+                    <div class="segnalazione segnalazione-informazione">@s</div>
+                }
+                <div class="scorrevole altezza-limitata">
+                    <table class="tabella">
+                        <thead><tr><th>Codice</th><th>Descrizione</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var e in x.Elementi)
+                            {
+                                var presente = _elenco.Any(r => string.Equals(r.Codice, e.Codice, StringComparison.OrdinalIgnoreCase));
+                                <tr class="@(presente ? "testo-secondario" : "")">
+                                    <td class="codice" style="padding-left:@((CodiciWbs.Livello(e.Codice) - 1) * 1.2)rem">@e.Codice</td>
+                                    <td>@e.Descrizione</td>
+                                    <td>@(presente ? "già presente, resta com'è" : "nuovo")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="azioni">
+                    <button class="pulsante primario" @onclick="ConfermaExcelAsync" disabled="@_occupato">Carica nella commessa</button>
+                    <button class="pulsante" @onclick="() => _excel = null">Annulla</button>
+                </div>
+            </div>
+        }
+
+        @if (_proposta is { } p)
+        {
+            <div class="sotto-riquadro">
+                <strong>Proposta WBS — nulla è ancora salvato</strong>
+                @foreach (var n in p.Note)
+                {
+                    <div class="segnalazione segnalazione-informazione">@n</div>
+                }
+                @if (p.NuoviElementi.Count > 0)
+                {
+                    <p>Elementi WBS da aggiungere (@p.NuoviElementi.Count):
+                        <span class="testo-secondario">@string.Join(" · ", p.NuoviElementi.Select(e => $"{e.Codice} {e.Descrizione}"))</span>
+                    </p>
+                }
+                @if (p.Assegnazioni.Count > 0)
+                {
+                    <div class="riga-form">
+                        <span>@_accettate.Count assegnazioni scelte su @p.Assegnazioni.Count.</span>
+                        <button class="pulsante piccolo" @onclick="() => _accettate.UnionWith(p.Assegnazioni.Select(a => a.VoceId))">Seleziona tutte</button>
+                        <button class="pulsante piccolo" @onclick="() => _accettate.Clear()">Deseleziona</button>
+                    </div>
+                    <div class="scorrevole altezza-limitata">
+                        <table class="tabella">
+                            <thead><tr><th></th><th class="num">N.</th><th>Voce</th><th>WBS proposta</th><th>Perché</th></tr></thead>
+                            <tbody>
+                                @foreach (var a in p.Assegnazioni)
+                                {
+                                    var voce = Voci.FirstOrDefault(v => v.Id == a.VoceId);
+                                    <tr>
+                                        <td><input type="checkbox" checked="@_accettate.Contains(a.VoceId)" @onchange="e => Accetta(a.VoceId, (bool)e.Value!)" /></td>
+                                        <td class="num">@voce?.Ordine</td>
+                                        <td class="descrizione-breve" title="@voce?.Descrizione">@voce?.Tariffa @voce?.Descrizione</td>
+                                        <td class="nowrap"><span class="codice">@a.Codice</span> @DescrizioneProposta(p, a.Codice)</td>
+                                        <td class="testo-secondario">@a.Motivo</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="azioni">
+                    <button class="pulsante primario" @onclick="ConfermaPropostaAsync" disabled="@(_occupato || (_accettate.Count == 0 && p.NuoviElementi.Count == 0))">Conferma la proposta</button>
+                    <button class="pulsante" @onclick="() => _proposta = null">Annulla</button>
+                </div>
+            </div>
+        }
+
+        @if (_elenco.Count == 0)
+        {
+            <p class="testo-secondario">
+                La commessa non ha ancora una WBS. Caricala da Excel (foglio «WBS» con codice e descrizione, come nei file di consuntivo),
+                copiala da un'altra commessa, aggiungila a mano oppure chiedi la proposta: senza WBS la ricavo dalle categorie del computo.
+            </p>
+        }
+        else
+        {
+            <div class="scorrevole altezza-limitata">
+                <table class="tabella">
+                    <thead><tr><th>Codice</th><th>Descrizione</th><th class="num" title="Voci assegnate, compresi i sottolivelli">Voci</th><th class="num">Ricavo netto</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in _elenco)
+                        {
+                            <tr class="@(Modificabile ? "cliccabile" : "") @(r.Livello == 1 ? "gruppo-wbs" : "")" @onclick="() => Apri(r)">
+                                <td class="codice" style="padding-left:@((r.Livello - 1) * 1.2)rem">@r.Codice</td>
+                                <td>@r.Descrizione</td>
+                                <td class="num">@(r.Voci == 0 ? "" : r.Voci)</td>
+                                <td class="num">@(r.Voci == 0 ? "" : Formato.Euro(r.RicavoNetto))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+
+    /// <summary>Voci del computo attivo, per mostrare la proposta.</summary>
+    [Parameter] public IReadOnlyList<RigaVoce> Voci { get; set; } = [];
+
+    /// <summary>Avvisa la scheda che struttura o assegnazioni sono cambiate.</summary>
+    [Parameter] public EventCallback OnCambiato { get; set; }
+
+    private sealed class Modifica
+    {
+        public Guid Id { get; init; }
+        public int Versione { get; init; }
+        public string? Codice { get; set; }
+        public string? Descrizione { get; set; }
+    }
+
+    private IReadOnlyList<RigaWbs> _elenco = [];
+    private IReadOnlyList<VoceScelta> _altreCommesse = [];
+    private string? _commessaOrigine;
+    private bool _aperto, _occupato, _errore;
+    private string? _messaggio;
+    private Modifica? _modifica;
+    private AnteprimaWbs? _excel;
+    private string? _nomeFile;
+    private PropostaWbs? _proposta;
+    private readonly HashSet<Guid> _accettate = [];
+
+    private bool Modificabile => !Sessione.SolaConsultazione;
+
+    protected override async Task OnParametersSetAsync() => await CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _elenco = await Wbs.ElencoAsync(CommessaId);
+        var conWbs = (await Wbs.CommesseConWbsAsync()).Where(id => id != CommessaId).ToHashSet();
+        _altreCommesse = conWbs.Count == 0 ? [] : (await Commesse.ElencoAsync(includiArchiviate: true))
+            .Where(c => conWbs.Contains(c.Id)).Select(c => new VoceScelta(c.Id.ToString(), $"{c.Codice} {c.Descrizione}")).ToList();
+    }
+
+    private void Apri(RigaWbs r)
+    {
+        if (Modificabile) _modifica = new Modifica { Id = r.Id, Versione = r.Versione, Codice = r.Codice, Descrizione = r.Descrizione };
+    }
+
+    private void Accetta(Guid voce, bool si)
+    {
+        if (si) _accettate.Add(voce); else _accettate.Remove(voce);
+    }
+
+    private string DescrizioneProposta(PropostaWbs p, string codice) =>
+        p.NuoviElementi.FirstOrDefault(e => e.Codice == codice)?.Descrizione
+        ?? _elenco.FirstOrDefault(e => e.Codice == codice)?.Descrizione ?? "";
+
+    private Task SalvaAsync() => EseguiAsync(async () =>
+    {
+        await Wbs.SalvaAsync(CommessaId, _modifica!.Id, _modifica.Versione, _modifica.Codice, _modifica.Descrizione);
+        _modifica = null;
+        return "WBS salvata.";
+    });
+
+    private Task EliminaAsync() => EseguiAsync(async () =>
+    {
+        await Wbs.EliminaAsync(CommessaId, _modifica!.Id);
+        _modifica = null;
+        return "WBS eliminata.";
+    });
+
+    private async Task LeggiExcelAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            await using var flusso = e.File.OpenReadStream(20L * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await flusso.CopyToAsync(ms);
+            ms.Position = 0;
+            _excel = WbsService.AnteprimaExcel(ms);
+            _nomeFile = e.File.Name;
+            _proposta = null;
+        }
+        catch (Exception ex) when (ex is FormatException or IOException or InvalidDataException)
+        {
+            (_messaggio, _errore) = ($"Impossibile leggere «{e.File.Name}»: {ex.Message}", true);
+        }
+    }
+
+    private Task ConfermaExcelAsync() => EseguiAsync(async () =>
+    {
+        var (aggiunti, presenti) = await Wbs.CaricaAsync(CommessaId, _excel!.Elementi, $"file {_nomeFile}");
+        _excel = null;
+        return $"WBS caricata: {aggiunti} elementi aggiunti" + (presenti > 0 ? $", {presenti} erano già presenti e restano come sono." : ".");
+    });
+
+    private Task CopiaAsync() => EseguiAsync(async () =>
+    {
+        var nome = _altreCommesse.FirstOrDefault(c => c.Valore == _commessaOrigine)?.Testo ?? "";
+        var (aggiunti, presenti) = await Wbs.CopiaDaCommessaAsync(CommessaId, Guid.Parse(_commessaOrigine!), nome);
+        _commessaOrigine = null;
+        return $"WBS copiata: {aggiunti} elementi aggiunti" + (presenti > 0 ? $", {presenti} erano già presenti." : ".");
+    });
+
+    private async Task ProponiAsync()
+    {
+        _occupato = true;
+        try
+        {
+            _proposta = await Wbs.ProponiAsync(CommessaId);
+            _accettate.Clear();
+            _accettate.UnionWith(_proposta.Assegnazioni.Select(a => a.VoceId));
+            (_excel, _messaggio) = (null, null);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private Task ConfermaPropostaAsync() => EseguiAsync(async () =>
+    {
+        var p = _proposta!;
+        var n = await Wbs.ApplicaPropostaAsync(CommessaId, p.NuoviElementi, p.Assegnazioni.Where(a => _accettate.Contains(a.VoceId)).ToList());
+        _proposta = null;
+        return $"Proposta confermata: {p.NuoviElementi.Count} elementi WBS aggiunti, {n} voci assegnate.";
+    });
+
+    private async Task EseguiAsync(Func<Task<string>> operazione)
+    {
+        _occupato = true;
+        try
+        {
+            (_messaggio, _errore) = (await operazione(), false);
+            await CaricaAsync();
+            await OnCambiato.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            (_messaggio, _errore) = (ex is ConflittoModificaException ? "Un altro utente ha modificato questa WBS: riapri l'elemento e riprova." : ex.Message, true);
+            await CaricaAsync();
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+}

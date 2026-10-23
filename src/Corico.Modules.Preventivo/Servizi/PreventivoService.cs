@@ -32,6 +32,9 @@ public sealed class DatiVoce
     public decimal Prezzo { get; set; }
     public decimal PercentualeNonSoggetta { get; set; }
     public string? Note { get; set; }
+
+    /// <summary>Codice WBS della voce; deve esistere nella struttura WBS della commessa.</summary>
+    public string? CodiceWbs { get; set; }
 }
 
 /// <summary>Preventivo in bozza: ribasso, computo attivo, voci e quadro economico dei ricavi.</summary>
@@ -149,6 +152,14 @@ public sealed class PreventivoService(IDbContextFactory<PreventivoDbContext> fab
         v.Prezzo = dati.Prezzo;
         v.PercentualeNonSoggetta = dati.PercentualeNonSoggetta;
         v.Note = string.IsNullOrWhiteSpace(dati.Note) ? null : dati.Note.Trim();
+        var wbs = CodiciWbs.Normalizza(dati.CodiceWbs);
+        if (wbs is not null)
+        {
+            var codici = await db.ElementiWbs.Where(e => e.CommessaId == commessaId).Select(e => e.Codice).ToListAsync(ct);
+            wbs = codici.FirstOrDefault(c => string.Equals(c, wbs, StringComparison.OrdinalIgnoreCase))
+                  ?? throw new OperazioneNonValidaException($"La WBS {dati.CodiceWbs} non è nella struttura della commessa: aggiungila prima.");
+        }
+        v.CodiceWbs = wbs;
         await db.SaveChangesAsync(ct);
     }
 

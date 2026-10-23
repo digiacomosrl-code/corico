@@ -16,7 +16,12 @@ public sealed record AnteprimaComputo(ComputoLetto Letto, decimal TotaleCalcolat
     public decimal? Differenza => TotaleDocumento is null ? null : TotaleCalcolato - TotaleDocumento;
 }
 
-public sealed record EsitoImportazione(Guid ComputoId, int Voci, decimal TotaleCalcolato, Guid DocumentoId, string? Backup);
+public sealed record EsitoImportazione(Guid ComputoId, int Voci, decimal TotaleCalcolato, Guid DocumentoId, string? Backup)
+{
+    /// <summary>Voci con la WBS scritta nel file e voci a cui è stata riportata quella del computo precedente.</summary>
+    public int VociConWbsDalFile { get; init; }
+    public int VociConWbsRiportata { get; init; }
+}
 
 /// <summary>
 /// Importazione del computo (sez. 12): anteprima con segnalazioni, poi conferma esplicita.
@@ -55,6 +60,10 @@ public sealed class ImportazioneComputoService(
     {
         decimal totale = 0, sicurezza = 0;
         var senzaElenco = 0;
+        var conWbs = letto.Voci.Count(v => CodiciWbs.Normalizza(v.CodiceWbs) is not null);
+        if (conWbs > 0 && !letto.Segnalazioni.Any(x => x.Testo.StartsWith("WBS:")))
+            letto.Segnalazioni.Add(new(GravitaSegnalazione.Informazione,
+                $"WBS: {conWbs} voci su {letto.Voci.Count} hanno un codice WBS nel file; i codici mancanti vengono aggiunti alla WBS della commessa."));
         foreach (var v in letto.Voci)
         {
             var ep = letto.Elenco(v.IdElenco);
@@ -91,8 +100,10 @@ public sealed class ImportazioneComputoService(
         await using var transazione = await db.Database.BeginTransactionAsync(ct);
         var preventivo = await PreventivoService.OttieniOCreaAsync(db, commessaId, ct);
 
-        foreach (var precedente in await db.Computi.Where(c => c.CommessaId == commessaId && c.Attivo).ToListAsync(ct))
+        var precedenti = await db.Computi.Where(c => c.CommessaId == commessaId && c.Attivo).ToListAsync(ct);
+        foreach (var precedente in precedenti)
             precedente.Attivo = false;
+        var wbsPrecedente = await WbsDelComputoPrecedenteAsync(db, precedenti.Select(c => c.Id).ToList(), ct);
 
         var computo = new Computo
         {
@@ -115,6 +126,7 @@ public sealed class ImportazioneComputoService(
             categorie[(c.Livello, c.Id)] = cat.Id;
         }
 
+        var nuoveVoci = new List<VoceComputo>();
         var elenco = new Dictionary<string, VoceElencoPrezzi>();
         foreach (var e in letto.ElencoPrezzi)
         {
@@ -159,7 +171,7 @@ public sealed class ImportazioneComputoService(
                 SuperCategoriaId = v.IdSuperCategoria is null ? null : categorie.GetValueOrDefault(("SuperCategoria", v.IdSuperCategoria)),
                 CategoriaId = v.IdCategoria is null ? null : categorie.GetValueOrDefault(("Categoria", v.IdCategoria)),
                 SubCategoriaId = v.IdSubCategoria is null ? null : categorie.GetValueOrDefault(("SubCategoria", v.IdSubCategoria)),
-                CodiceWbs = v.CodiceWbs,
+                CodiceWbs = CodiciWbs.Normalizza(v.CodiceWbs),
                 Note = ep is null ? "Voce senza elenco prezzi nel file originale: completare prezzo e descrizione." : null,
             };
             var ordine = 0;
@@ -173,7 +185,21 @@ public sealed class ImportazioneComputoService(
                 });
             }
             db.VociComputo.Add(voce);
+            nuoveVoci.Add(voce);
         }
+
+        // WBS: quella scritta nel file; per le voci senza, quella che la stessa voce aveva nel computo precedente.
+        var dalFile = nuoveVoci.Count(v => v.CodiceWbs is not null);
+        var riportate = 0;
+        foreach (var v in nuoveVoci.Where(v => v.CodiceWbs is null))
+        {
+            if (wbsPrecedente.TryGetValue(ChiaveWbs(v.Tariffa, v.Descrizione), out var codice)) { v.CodiceWbs = codice; riportate++; }
+        }
+        var titoli = letto.Wbs.ToDictionary(w => CodiciWbs.Normalizza(w.Codice) ?? "", w => w.Descrizione);
+        await WbsService.AggiungiMancantiAsync(db, commessaId,
+            letto.Wbs.Select(w => new ElementoWbsDati(w.Codice, w.Descrizione))
+                .Concat(nuoveVoci.Where(v => v.CodiceWbs is not null).Select(v => v.CodiceWbs!).SelectMany(ConLivelliSuperiori).Distinct()
+                    .Select(c => new ElementoWbsDati(c, titoli.GetValueOrDefault(c) ?? $"WBS {c} (dal computo, da descrivere)"))), ct);
 
         db.NotaStorico = $"Importazione computo {Path.GetFileName(nomeFile)}";
         await db.SaveChangesAsync(ct);
@@ -183,7 +209,35 @@ public sealed class ImportazioneComputoService(
         await db.SaveChangesAsync(ct);
         await transazione.CommitAsync(ct);
 
-        return new EsitoImportazione(computo.Id, letto.Voci.Count, anteprima.TotaleCalcolato, doc.Documento.Id, esitoBackup.Percorso);
+        return new EsitoImportazione(computo.Id, letto.Voci.Count, anteprima.TotaleCalcolato, doc.Documento.Id, esitoBackup.Percorso)
+        {
+            VociConWbsDalFile = dalFile, VociConWbsRiportata = riportate,
+        };
+    }
+
+    /// <summary>Il codice e i suoi livelli superiori («1.4.3» → 1, 1.4, 1.4.3), perché la struttura resti completa e filtrabile.</summary>
+    private static IEnumerable<string> ConLivelliSuperiori(string codice)
+    {
+        var livelli = new List<string>();
+        for (string? c = codice; c is not null; c = CodiciWbs.Padre(c)) livelli.Insert(0, c);
+        return livelli;
+    }
+
+    private static string ChiaveWbs(string? tariffa, string descrizione) =>
+        (tariffa ?? "").Trim().ToLowerInvariant() + "|" + descrizione.Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// WBS delle voci del computo che viene sostituito, per tariffa e descrizione: si riporta solo se tutte le voci
+    /// uguali avevano la stessa WBS (una tariffa usata in lavorazioni diverse resta da assegnare).
+    /// </summary>
+    private static async Task<Dictionary<string, string>> WbsDelComputoPrecedenteAsync(PreventivoDbContext db, List<Guid> computi, CancellationToken ct)
+    {
+        if (computi.Count == 0) return [];
+        var voci = await db.VociComputo.AsNoTracking().Where(v => computi.Contains(v.ComputoId) && !v.Archiviata)
+            .Select(v => new { v.Tariffa, v.Descrizione, v.CodiceWbs }).ToListAsync(ct);
+        return voci.GroupBy(v => ChiaveWbs(v.Tariffa, v.Descrizione))
+            .Where(g => g.All(v => v.CodiceWbs is not null) && g.Select(v => v.CodiceWbs).Distinct().Count() == 1)
+            .ToDictionary(g => g.Key, g => g.First().CodiceWbs!);
     }
 
     /// <summary>Quota non soggetta a ribasso proposta dall'incidenza di sicurezza del prezzo (0–100%).</summary>

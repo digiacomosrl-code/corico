@@ -43,6 +43,7 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
     public DbSet<StimaEsclusione> StimeEsclusioni => Set<StimaEsclusione>();
     public DbSet<AggiornamentoPrezzi> AggiornamentiPrezzi => Set<AggiornamentoPrezzi>();
     public DbSet<RigaAggiornamento> RigheAggiornamento => Set<RigaAggiornamento>();
+    public DbSet<ElementoWbs> ElementiWbs => Set<ElementoWbs>();
 
     protected override bool PossiedeTabelleCore => false;
 
@@ -221,6 +222,7 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.HasIndex(x => new { x.ComputoId, x.Ordine });
             e.Property(x => x.Tariffa).HasMaxLength(100);
             e.Property(x => x.Unita).HasMaxLength(30);
+            e.Property(x => x.CodiceWbs).HasMaxLength(CodiciWbs.LunghezzaMassima);
             e.HasOne<Computo>().WithMany().HasForeignKey(x => x.ComputoId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.VoceElencoPrezzi).WithMany().HasForeignKey(x => x.VoceElencoPrezziId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.RigheMisura).WithOne().HasForeignKey(x => x.VoceComputoId).OnDelete(DeleteBehavior.Cascade);
@@ -370,6 +372,7 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.HasIndex(x => new { x.OrdineId, x.Ordine });
             e.Property(x => x.Descrizione).HasMaxLength(2000).IsRequired();
             e.Property(x => x.Codice).HasMaxLength(60);
+            e.Property(x => x.Wbs).HasMaxLength(200);
             e.Property(x => x.Unita).HasMaxLength(30);
             e.HasMany(x => x.Origini).WithOne().HasForeignKey(o => o.RigaOrdineId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -389,6 +392,14 @@ public sealed class PreventivoDbContext(DbContextOptions<PreventivoDbContext> op
             e.HasIndex(x => new { x.CommessaId, x.Codice }).IsUnique();
             e.Property(x => x.Chiave).HasMaxLength(600).IsRequired();
             e.Property(x => x.Codice).HasMaxLength(20).IsRequired();
+        });
+
+        modelBuilder.Entity<ElementoWbs>(e =>
+        {
+            e.ToTable("PRV_Wbs");
+            e.HasIndex(x => new { x.CommessaId, x.Codice }).IsUnique();
+            e.Property(x => x.Codice).HasMaxLength(CodiciWbs.LunghezzaMassima).IsRequired();
+            e.Property(x => x.Descrizione).HasMaxLength(300).IsRequired();
         });
 
         modelBuilder.Entity<RigaOfferta>(e =>

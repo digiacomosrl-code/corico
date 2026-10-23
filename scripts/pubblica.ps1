@@ -1,8 +1,10 @@
-# Crea il pacchetto di installazione di Corico per Windows (64 bit), autonomo:
+﻿# Crea il pacchetto di installazione di Corico per Windows (64 bit), autonomo:
 # sul PC di destinazione non serve installare .NET.
 # Uso (dalla cartella del repository):  powershell -ExecutionPolicy Bypass -File scripts\pubblica.ps1
 param(
-    [string]$Destinazione = "publish\Corico"
+    [string]$Destinazione = "publish\Corico",
+    # Tesseract per Windows (tesseract.exe, sue DLL e tessdata\ita.traineddata), fuori dal repository.
+    [string]$CartellaOcr = "strumenti\ocr"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +16,13 @@ if ($LASTEXITCODE -ne 0) { throw "Test non superati: pubblicazione annullata." }
 Write-Host "Pubblicazione in $Destinazione ..."
 dotnet publish src\Corico.Web\Corico.Web.csproj --configuration Release --runtime win-x64 --self-contained true --output $Destinazione
 if ($LASTEXITCODE -ne 0) { throw "Pubblicazione non riuscita." }
+
+# Lettura delle scansioni (OCR) del modulo Documenti: Tesseract va nella cartella "ocr" accanto a Corico.
+if (Test-Path (Join-Path $CartellaOcr "tesseract.exe")) {
+    Copy-Item -Path $CartellaOcr -Destination (Join-Path $Destinazione "ocr") -Recurse -Force
+} else {
+    Write-Warning "Tesseract non trovato in $CartellaOcr`: il pacchetto non leggera' le scansioni (OCR)."
+}
 
 # Scheda del rilascio, richiesta dall'aggiornamento guidato (scripts\aggiorna.ps1).
 $versione = (Select-Xml -Path "Directory.Build.props" -XPath "//Version").Node.InnerText

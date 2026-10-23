@@ -25,3 +25,5 @@ Esempi/
 *.xls
 *.pdf
 publish/
+# Strumenti esterni inclusi nel pacchetto (es. Tesseract per l OCR), non nel repository
+strumenti/

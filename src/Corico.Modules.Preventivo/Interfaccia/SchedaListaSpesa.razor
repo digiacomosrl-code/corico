@@ -42,13 +42,8 @@
         }
     </p>
     <div class="riga-form">
-        <select @bind="_fornitore" aria-label="Filtro per fornitore">
-            <option value="">Tutti i fornitori</option>
-            @foreach (var f in _tutta.Fornitori)
-            {
-                <option value="@f">@f</option>
-            }
-        </select>
+        <SceltaConRicerca Voci="@(_tutta.Fornitori.Select(f => new VoceScelta(f, f)).ToList())" Etichetta="Filtro per fornitore"
+                          Segnaposto="Tutti i fornitori: scrivi per filtrare…" Valore="@_fornitore" ValoreChanged="v => _fornitore = v ?? string.Empty" />
         <input type="search" class="largo" placeholder="Cerca per codice o descrizione…" @bind="_cerca" @bind:event="oninput" />
         @if (filtrata)
         {

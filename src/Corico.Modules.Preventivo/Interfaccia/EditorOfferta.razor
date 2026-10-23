@@ -32,13 +32,8 @@
     <div class="griglia-form">
         <label>
             Fornitore in anagrafica
-            <select value="@Offerta.FornitoreId" @onchange="ScegliFornitore">
-                <option value="">— non collegato —</option>
-                @foreach (var f in _fornitori)
-                {
-                    <option value="@f.Id">@f.Denominazione</option>
-                }
-            </select>
+            <SceltaConRicerca Voci="_vociFornitori" Etichetta="Fornitore in anagrafica" Segnaposto="— non collegato: scrivi una parola per cercare —"
+                              Valore="@Offerta.FornitoreId?.ToString()" ValoreChanged="ScegliFornitore" />
         </label>
         <label>Nome del fornitore sull'offerta <input @bind="Offerta.NomeFornitore" /></label>
         <label>
@@ -291,6 +286,7 @@
     [Parameter] public Guid? ApriRisorseVoce { get; set; }
 
     private IReadOnlyList<DatiFornitore> _fornitori = [];
+    private IReadOnlyList<VoceScelta> _vociFornitori = [];
     private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
     private decimal _scontoPredefinito;
     private readonly HashSet<Guid> _risorseAperte = [];
@@ -303,6 +299,7 @@
     protected override async Task OnInitializedAsync()
     {
         _fornitori = await Fornitori.ElencoAsync();
+        _vociFornitori = VoceScelta.Da(_fornitori);
         _documenti = await Documenti.ElencoAsync(CommessaId);
         _analisi = await Analisi.ElencoAsync(soloConfermate: true);
         _scontoPredefinito = Offerta.Righe.LastOrDefault()?.ScontoPercentuale ?? 0;
@@ -352,9 +349,9 @@
         }
     }
 
-    private void ScegliFornitore(ChangeEventArgs e)
+    private void ScegliFornitore(string? valore)
     {
-        Offerta.FornitoreId = Guid.TryParse(e.Value as string, out var g) ? g : null;
+        Offerta.FornitoreId = Guid.TryParse(valore, out var g) ? g : null;
         if (_fornitori.FirstOrDefault(f => f.Id == g) is { } f) Offerta.NomeFornitore = f.Denominazione;
     }
 

@@ -1,0 +1,105 @@
+@* Campo di scelta con ricerca: si scrive anche una sola parola e l'elenco si filtra (sostituisce le tendine lunghe).
+   Invio sceglie la voce evidenziata e non invia il modulo che contiene il campo. *@
+
+<div class="scelta-ricerca @Classe">
+    <input type="text" autocomplete="off" disabled="@Disabilitato" aria-label="@Etichetta" role="combobox" aria-expanded="@_aperta"
+           placeholder="@(Selezionata?.Testo ?? Segnaposto)"
+           @bind:get="Mostrato" @bind:set="Scrivi" @bind:event="oninput" @onfocus="Apri" onclick="this.select()" onkeypress="if (event.key === 'Enter') event.preventDefault()" @onblur="ChiudiAsync" @onkeydown="TastoAsync" />
+    @if (Selezionata is not null && PermettiVuoto && !Disabilitato)
+    {
+        <button type="button" class="togli" title="Togli la scelta" aria-label="Togli la scelta" @onclick="() => ScegliAsync(null)">✕</button>
+    }
+    @if (_aperta)
+    {
+        var risultati = Risultati();
+        <ul class="tendina" role="listbox">
+            @for (var i = 0; i < risultati.Count && i < Massimo; i++)
+            {
+                var v = risultati[i];
+                var indice = i;
+                <li role="option" aria-selected="@(indice == _evidenziata)" class="@(indice == _evidenziata ? "evidenziata" : null)"
+                    @onmousedown="() => ScegliAsync(v.Valore)" @onmousedown:preventDefault>
+                    <span>@v.Testo</span>
+                    @if (!string.IsNullOrEmpty(v.Dettaglio))
+                    {
+                        <span class="testo-secondario">@v.Dettaglio</span>
+                    }
+                </li>
+            }
+            @if (risultati.Count == 0)
+            {
+                <li class="testo-secondario">Nessun risultato per «@_testo».</li>
+            }
+            else if (risultati.Count > Massimo)
+            {
+                <li class="testo-secondario">Altri @(risultati.Count - Massimo) risultati: scrivi qualche lettera in più per restringere l'elenco.</li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private const int Massimo = 50;
+
+    /// <summary>Le scelte possibili: valore, testo mostrato e un dettaglio facoltativo (es. P.IVA e comune) su cui si cerca.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<VoceScelta> Voci { get; set; } = [];
+    [Parameter] public string? Valore { get; set; }
+    [Parameter] public EventCallback<string?> ValoreChanged { get; set; }
+    [Parameter] public string Segnaposto { get; set; } = "Scrivi per cercare…";
+    [Parameter] public string? Etichetta { get; set; }
+    [Parameter] public bool PermettiVuoto { get; set; } = true;
+    [Parameter] public bool Disabilitato { get; set; }
+    [Parameter] public string? Classe { get; set; }
+
+    private string _testo = "";
+    private bool _aperta, _digitato;
+    private int _evidenziata;
+
+    private VoceScelta? Selezionata => string.IsNullOrEmpty(Valore) ? null : Voci.FirstOrDefault(v => v.Valore == Valore);
+
+    private List<VoceScelta> Risultati()
+    {
+        var parole = RicercaTesto.Parole(_testo);
+        return Voci.Where(v => RicercaTesto.Corrisponde(v.Testo + " " + v.Dettaglio, parole)).ToList();
+    }
+
+    private void Apri() => (_aperta, _digitato, _testo, _evidenziata) = (true, false, "", 0);
+
+    // Finché non si scrive, il campo continua a mostrare la scelta attuale (anche a tendina aperta).
+    private string Mostrato => _digitato ? _testo : Selezionata?.Testo ?? "";
+
+    private void Scrivi(string? testo)
+    {
+        testo ??= "";
+        // Il campo mostra la scelta: se si continua a scrivere dopo di essa, si cerca solo il nuovo testo.
+        if (!_digitato && Selezionata is { } s && testo.Length > s.Testo.Length && testo.StartsWith(s.Testo, StringComparison.Ordinal))
+            testo = testo[s.Testo.Length..];
+        (_aperta, _digitato, _testo, _evidenziata) = (true, true, testo, 0);
+    }
+
+    private async Task ChiudiAsync()
+    {
+        // Uscendo dal campo con una sola corrispondenza, la si sceglie; altrimenti resta la scelta precedente.
+        if (_aperta && _testo.Trim().Length > 0 && Risultati() is [var unica]) await ScegliAsync(unica.Valore);
+        (_aperta, _digitato, _testo) = (false, false, "");
+    }
+
+    private async Task ScegliAsync(string? valore)
+    {
+        (_aperta, _digitato, _testo) = (false, false, "");
+        if (valore != Valore) await ValoreChanged.InvokeAsync(valore);
+    }
+
+    private async Task TastoAsync(KeyboardEventArgs e)
+    {
+        if (!_aperta) { if (e.Key is "ArrowDown" or "Enter") Apri(); return; }
+        var n = Math.Min(Risultati().Count, Massimo);
+        switch (e.Key)
+        {
+            case "ArrowDown": _evidenziata = n == 0 ? 0 : (_evidenziata + 1) % n; break;
+            case "ArrowUp": _evidenziata = n == 0 ? 0 : (_evidenziata - 1 + n) % n; break;
+            case "Enter" when n > 0: await ScegliAsync(Risultati()[Math.Min(_evidenziata, n - 1)].Valore); break;
+            case "Escape": (_aperta, _digitato, _testo) = (false, false, ""); break;
+        }
+    }
+}

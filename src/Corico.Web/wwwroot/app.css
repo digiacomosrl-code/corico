@@ -218,6 +218,18 @@ tr.dettaglio-annullamento .tabella { width: auto; min-width: 32rem; margin-botto
 .cerca-voce .tendina li:hover { background: var(--blu-chiaro); }
 .cerca-voce .tendina li.testo-secondario { display: block; cursor: default; }
 
+/* Campo di scelta con ricerca (clienti, fornitori) */
+.scelta-ricerca { position: relative; min-width: 16rem; }
+.scelta-ricerca input { width: 100%; padding-right: 1.8rem; }
+.scelta-ricerca input::placeholder { color: var(--testo-secondario); }
+.scelta-ricerca .togli { position: absolute; right: .3rem; top: 50%; transform: translateY(-50%); border: 0; background: none; cursor: pointer; color: var(--testo-secondario); }
+.scelta-ricerca .tendina { position: absolute; z-index: 20; left: 0; min-width: 100%; width: max-content; max-width: min(42rem, 90vw); margin: 2px 0 0; padding: 0; list-style: none; font-weight: normal;
+    background: #fff; border: 1px solid var(--grigio-bordo); border-radius: var(--raggio); box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 20rem; overflow-y: auto; }
+.scelta-ricerca .tendina li { display: flex; justify-content: space-between; gap: .75rem; padding: .4rem .6rem; cursor: pointer; border-bottom: 1px solid var(--grigio-sfondo); }
+.scelta-ricerca .tendina li:hover, .scelta-ricerca .tendina li.evidenziata { background: var(--blu-chiaro); }
+.scelta-ricerca .tendina li.testo-secondario { display: block; cursor: default; white-space: normal; }
+.scelta-ricerca .tendina li > .testo-secondario { white-space: nowrap; }
+
 /* Accesso, cambio password e utente collegato (1.0) */
 .pagina-accesso { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--blu); padding: 1rem; }
 .scheda-accesso { width: 100%; max-width: 400px; background: #fff; border-radius: var(--raggio); padding: 1.5rem 1.75rem; box-shadow: 0 6px 24px rgba(0,0,0,.18); }

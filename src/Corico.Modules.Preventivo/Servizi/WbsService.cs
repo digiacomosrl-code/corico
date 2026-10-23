@@ -1,3 +1,4 @@
+using Corico.Core.Ai;
 using Corico.Core.Dominio;
 using Corico.Modules.Preventivo.Dati;
 using Corico.Modules.Preventivo.Dominio;
@@ -18,7 +19,7 @@ public sealed record AnteprimaWbs(IReadOnlyList<ElementoWbsDati> Elementi, IRead
 /// caricamento da Excel, da un'altra commessa o dal computo PriMus, proposta automatica con conferma.
 /// La WBS non è un prezzo contrattuale: si modifica anche dopo l'approvazione del budget.
 /// </summary>
-public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, IPropostaWbs proposta)
+public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, IPropostaWbs proposta, IServizioAi ai)
 {
     public string NomeProposta => proposta.Nome;
 
@@ -216,7 +217,31 @@ public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, 
 
     // ---- Proposta automatica ----
 
-    public async Task<PropostaWbs> ProponiAsync(Guid commessaId, CancellationToken ct = default)
+    public async Task<PropostaWbs> ProponiAsync(Guid commessaId, CancellationToken ct = default) =>
+        await proposta.ProponiAsync(await ContestoAsync(commessaId, ct), ct);
+
+    /// <summary>
+    /// Proposta con l'AI, primo passo: prepara l'anteprima (testo inviato, modello, costo massimo) senza chiamate esterne.
+    /// L'invio avviene con <see cref="InviaPropostaAiAsync"/> solo dopo la conferma dell'utente.
+    /// </summary>
+    public async Task<(AnteprimaAi Anteprima, ContestoPropostaWbs Contesto)> PreparaPropostaAiAsync(Guid commessaId, CancellationToken ct = default)
+    {
+        var contesto = await ContestoAsync(commessaId, ct);
+        return (await ai.PreparaAsync(WbsAi.Richiesta(contesto), ct), contesto);
+    }
+
+    /// <summary>Proposta con l'AI, secondo passo: invia la richiesta confermata e controlla la risposta. Nulla viene salvato.</summary>
+    public async Task<(PropostaWbs Proposta, RispostaAi Risposta)> InviaPropostaAiAsync(AnteprimaAi anteprima, ContestoPropostaWbs contesto,
+        CancellationToken ct = default)
+    {
+        var risposta = await ai.InviaAsync(anteprima, ct);
+        if (!risposta.Riuscita)
+            throw new OperazioneNonValidaException($"Il servizio AI non ha risposto: {risposta.Errore}. Puoi riprovare o usare la proposta senza AI.");
+        return (WbsAi.Interpreta(risposta.Testo, contesto), risposta);
+    }
+
+    /// <summary>WBS già presente e voci del computo attivo, nell'ordine del computo: la base di ogni proposta.</summary>
+    public async Task<ContestoPropostaWbs> ContestoAsync(Guid commessaId, CancellationToken ct = default)
     {
         await using var db = await fabbrica.CreateDbContextAsync(ct);
         var wbs = await db.ElementiWbs.AsNoTracking().Where(e => e.CommessaId == commessaId)
@@ -226,17 +251,36 @@ public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, 
             .Select(v => new VocePerWbs(v.Id, v.Ordine, v.Tariffa, v.Descrizione,
                 v.SuperCategoriaId is { } sc ? categorie.GetValueOrDefault(sc) : null,
                 v.CategoriaId is { } c ? categorie.GetValueOrDefault(c) : null,
-                v.CodiceWbs, v.Quantita * v.Prezzo))
+                v.CodiceWbs, v.Quantita * v.Prezzo, v.Unita))
             .ToList();
         if (voci.Count == 0) throw new OperazioneNonValidaException("Non c'è un computo con voci: importa prima il computo.");
-        return await proposta.ProponiAsync(new ContestoPropostaWbs(commessaId, wbs, voci), ct);
+        return new ContestoPropostaWbs(commessaId, wbs, voci);
     }
 
-    /// <summary>Applica la parte confermata della proposta: nuovi elementi e assegnazioni (solo alle voci ancora senza WBS).</summary>
+    /// <summary>
+    /// Applica la parte confermata della proposta. Normalmente aggiunge i nuovi elementi e assegna solo le voci ancora
+    /// senza WBS. Con <paramref name="sostituisci"/> (proposta AI, che riordina l'intera struttura) la WBS attuale della
+    /// commessa viene eliminata, le voci del computo attivo perdono la WBS e si applica la struttura proposta.
+    /// Gli ordini già emessi conservano i codici WBS riportati sulle righe.
+    /// </summary>
     public async Task<int> ApplicaPropostaAsync(Guid commessaId, IReadOnlyList<ElementoWbsDati> nuovi,
-        IReadOnlyList<AssegnazioneWbsProposta> assegnazioni, CancellationToken ct = default)
+        IReadOnlyList<AssegnazioneWbsProposta> assegnazioni, bool sostituisci = false, CancellationToken ct = default)
     {
         await using var db = await fabbrica.CreateDbContextAsync(ct);
+        await using var transazione = await db.Database.BeginTransactionAsync(ct);
+        var eliminati = 0;
+        if (sostituisci)
+        {
+            if (nuovi.Count == 0) throw new OperazioneNonValidaException("La proposta non contiene una struttura WBS da applicare.");
+            var vecchi = await db.ElementiWbs.Where(e => e.CommessaId == commessaId).ToListAsync(ct);
+            db.ElementiWbs.RemoveRange(vecchi);
+            eliminati = vecchi.Count;
+            var computo = await db.Computi.Where(c => c.CommessaId == commessaId && c.Attivo).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
+            foreach (var v in await db.VociComputo.Where(v => v.ComputoId == computo && v.CodiceWbs != null).ToListAsync(ct))
+                v.CodiceWbs = null;
+            // Gli elementi eliminati vanno scritti prima di reinserire gli stessi codici (indice unico commessa + codice).
+            await db.SaveChangesAsync(ct);
+        }
         var aggiunti = await AggiungiMancantiAsync(db, commessaId, nuovi, ct);
         var codici = db.ElementiWbs.Local.Where(e => e.CommessaId == commessaId).Select(e => e.Codice)
             .Concat(await db.ElementiWbs.Where(e => e.CommessaId == commessaId).Select(e => e.Codice).ToListAsync(ct))
@@ -246,9 +290,11 @@ public sealed class WbsService(IDbContextFactory<PreventivoDbContext> fabbrica, 
         var voci = await db.VociComputo.Where(v => v.CommessaId == commessaId && ids.Contains(v.Id) && v.CodiceWbs == null).ToListAsync(ct);
         foreach (var v in voci) v.CodiceWbs = perVoce[v.Id];
         db.InserimentiSoloInRiepilogo = true;
-        db.RegistraOperazione("Proposta WBS", nameof(ElementoWbs), null, commessaId,
-            $"Proposta WBS confermata: {aggiunti} elementi aggiunti, {voci.Count} voci assegnate");
+        db.RegistraOperazione("Proposta WBS", nameof(ElementoWbs), null, commessaId, sostituisci
+            ? $"Proposta WBS confermata in sostituzione della precedente ({eliminati} elementi): {aggiunti} elementi, {voci.Count} voci assegnate"
+            : $"Proposta WBS confermata: {aggiunti} elementi aggiunti, {voci.Count} voci assegnate");
         await db.SaveChangesAsync(ct);
+        await transazione.CommitAsync(ct);
         return voci.Count;
     }
 

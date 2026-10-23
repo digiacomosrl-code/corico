@@ -1,5 +1,6 @@
-@* Struttura WBS della commessa (versione 1.2.1): elenco con voci e ricavo, modifica, caricamento da Excel o da un'altra
-   commessa, proposta automatica delle assegnazioni con anteprima e conferma. *@
+@* Struttura WBS della commessa: elenco con voci e ricavo, modifica, caricamento da Excel o da un'altra commessa,
+   proposta con l'AI (1.2.3: anteprima dell'invio e costo, poi proposta da approvare) o senza AI, sempre con conferma. *@
+@using Corico.Core.Ai
 @inject WbsService Wbs
 @inject CommesseService Commesse
 @inject SessioneUtente Sessione
@@ -30,7 +31,9 @@
         @if (Modificabile)
         {
             <div class="riga-form">
-                <button class="pulsante primario" @onclick="ProponiAsync" disabled="@_occupato" title="@Wbs.NomeProposta">Proponi la WBS delle voci…</button>
+                <button class="pulsante primario" @onclick="PreparaAiAsync" disabled="@_occupato"
+                        title="L'AI legge le voci, riconosce la tipologia dei lavori e propone la WBS in ordine cronologico di realizzazione">Proponi la WBS con l'AI…</button>
+                <button class="pulsante" @onclick="ProponiAsync" disabled="@_occupato" title="@Wbs.NomeProposta">Proposta senza AI</button>
                 <label class="pulsante">
                     Carica da Excel…
                     <InputFile OnChange="LeggiExcelAsync" accept=".xlsx,.XLSX" style="display:none" />
@@ -97,15 +100,78 @@
             </div>
         }
 
+        @if (_anteprima is { } ap)
+        {
+            <div class="sotto-riquadro">
+                <strong>Proposta WBS con l'AI: controlla prima di inviare</strong>
+                @if (ap.Consentita)
+                {
+                    <p>
+                        Verranno inviate al servizio AI esterno le @_contesto!.Voci.Count voci del computo (tariffa, unità di misura,
+                        categoria e descrizione, senza prezzi né importi). Modello: <strong>@ap.Modello</strong>.
+                        Costo massimo stimato: <strong>@Formato.Euro(ap.CostoMassimoStimato)</strong>
+                        <span class="testo-secondario">(speso nel mese @Formato.Euro(ap.SpesaMese) su un tetto di @Formato.Euro(ap.TettoMese))</span>.
+                    </p>
+                    @if (_elenco.Count > 0)
+                    {
+                        <div class="segnalazione segnalazione-attenzione">
+                            La commessa ha già una WBS di @_elenco.Count elementi: se approverai la proposta dell'AI, sarà sostituita per intero.
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="segnalazione segnalazione-attenzione">Invio non possibile: @ap.Motivo</div>
+                }
+                <details>
+                    <summary>Testo che verrà inviato</summary>
+                    <pre class="testo-inviato">@ap.Richiesta.Contenuto</pre>
+                </details>
+                <div class="azioni">
+                    <button class="pulsante primario" @onclick="InviaAiAsync" disabled="@(_occupato || !ap.Consentita)">@(_occupato ? "Attendo la risposta dell'AI…" : "Invia")</button>
+                    <button class="pulsante" @onclick="() => _anteprima = null" disabled="@_occupato">Annulla</button>
+                </div>
+            </div>
+        }
+
         @if (_proposta is { } p)
         {
             <div class="sotto-riquadro">
-                <strong>Proposta WBS — nulla è ancora salvato</strong>
+                <strong>@(_propostaAi ? "Proposta WBS dell'AI" : "Proposta WBS") — nulla è ancora salvato</strong>
+                @if (_costo is { } costo)
+                {
+                    <span class="testo-secondario"> (costo della richiesta @Formato.Euro(costo))</span>
+                }
                 @foreach (var n in p.Note)
                 {
                     <div class="segnalazione segnalazione-informazione">@n</div>
                 }
-                @if (p.NuoviElementi.Count > 0)
+                @if (_propostaAi && p.NuoviElementi.Count > 0)
+                {
+                    @if (_elenco.Count > 0)
+                    {
+                        <div class="segnalazione segnalazione-attenzione">Confermando, la WBS attuale (@_elenco.Count elementi) viene sostituita da questa; le voci non selezionate restano senza WBS.</div>
+                    }
+                    <p>Struttura proposta in ordine cronologico di realizzazione (@p.NuoviElementi.Count elementi):</p>
+                    <div class="scorrevole altezza-limitata">
+                        <table class="tabella">
+                            <thead><tr><th>Codice</th><th>Descrizione</th><th class="num">Voci</th><th>Perché in questa posizione</th></tr></thead>
+                            <tbody>
+                                @foreach (var e in p.NuoviElementi)
+                                {
+                                    var livello = CodiciWbs.Livello(e.Codice);
+                                    <tr class="@(livello == 1 ? "gruppo-wbs" : "")">
+                                        <td class="codice" style="padding-left:@((livello - 1) * 1.2)rem">@e.Codice</td>
+                                        <td>@e.Descrizione</td>
+                                        <td class="num">@p.Assegnazioni.Count(a => CodiciWbs.Rientra(a.Codice, e.Codice))</td>
+                                        <td class="testo-secondario">@e.Motivo</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else if (p.NuoviElementi.Count > 0)
                 {
                     <p>Elementi WBS da aggiungere (@p.NuoviElementi.Count):
                         <span class="testo-secondario">@string.Join(" · ", p.NuoviElementi.Select(e => $"{e.Codice} {e.Descrizione}"))</span>
@@ -138,7 +204,7 @@
                     </div>
                 }
                 <div class="azioni">
-                    <button class="pulsante primario" @onclick="ConfermaPropostaAsync" disabled="@(_occupato || (_accettate.Count == 0 && p.NuoviElementi.Count == 0))">Conferma la proposta</button>
+                    <button class="pulsante primario" @onclick="ConfermaPropostaAsync" disabled="@(_occupato || p.NuoviElementi.Count == 0 && (_propostaAi || _accettate.Count == 0))">Conferma la proposta</button>
                     <button class="pulsante" @onclick="() => _proposta = null">Annulla</button>
                 </div>
             </div>
@@ -148,7 +214,8 @@
         {
             <p class="testo-secondario">
                 La commessa non ha ancora una WBS. Caricala da Excel (foglio «WBS» con codice e descrizione, come nei file di consuntivo),
-                copiala da un'altra commessa, aggiungila a mano oppure chiedi la proposta: senza WBS la ricavo dalle categorie del computo.
+                copiala da un'altra commessa, aggiungila a mano oppure chiedi la proposta: con l'AI, in ordine cronologico di realizzazione,
+                o senza AI, ricavata dalle categorie del computo.
             </p>
         }
         else
@@ -199,6 +266,10 @@
     private AnteprimaWbs? _excel;
     private string? _nomeFile;
     private PropostaWbs? _proposta;
+    private bool _propostaAi;
+    private decimal? _costo;
+    private AnteprimaAi? _anteprima;
+    private ContestoPropostaWbs? _contesto;
     private readonly HashSet<Guid> _accettate = [];
 
     private bool Modificabile => !Sessione.SolaConsultazione;
@@ -274,19 +345,39 @@
         return $"WBS copiata: {aggiunti} elementi aggiunti" + (presenti > 0 ? $", {presenti} erano già presenti." : ".");
     });
 
-    private async Task ProponiAsync()
+    private Task ProponiAsync() => PropostaAsync(async () => (await Wbs.ProponiAsync(CommessaId), false, null));
+
+    /// <summary>Primo passo con l'AI: solo l'anteprima, nessun invio.</summary>
+    private Task PreparaAiAsync() => PropostaAsync(async () =>
+    {
+        (_anteprima, _contesto) = await Wbs.PreparaPropostaAiAsync(CommessaId);
+        return null;
+    });
+
+    /// <summary>Secondo passo, dopo «Invia»: la risposta diventa una proposta da approvare.</summary>
+    private Task InviaAiAsync() => PropostaAsync(async () =>
+    {
+        var (proposta, risposta) = await Wbs.InviaPropostaAiAsync(_anteprima!, _contesto!);
+        _anteprima = null;
+        return (proposta, true, risposta.Costo);
+    });
+
+    private async Task PropostaAsync(Func<Task<(PropostaWbs Proposta, bool Ai, decimal? Costo)?>> operazione)
     {
         _occupato = true;
+        (_excel, _messaggio, _proposta, _costo) = (null, null, null, null);
         try
         {
-            _proposta = await Wbs.ProponiAsync(CommessaId);
-            _accettate.Clear();
-            _accettate.UnionWith(_proposta.Assegnazioni.Select(a => a.VoceId));
-            (_excel, _messaggio) = (null, null);
+            if (await operazione() is { } r)
+            {
+                (_proposta, _propostaAi, _costo, _anteprima) = (r.Proposta, r.Ai, r.Costo, null);
+                _accettate.Clear();
+                _accettate.UnionWith(r.Proposta.Assegnazioni.Select(a => a.VoceId));
+            }
         }
         catch (OperazioneNonValidaException ex)
         {
-            (_messaggio, _errore) = (ex.Message, true);
+            (_messaggio, _errore, _anteprima) = (ex.Message, true, null);
         }
         finally
         {
@@ -297,9 +388,12 @@
     private Task ConfermaPropostaAsync() => EseguiAsync(async () =>
     {
         var p = _proposta!;
-        var n = await Wbs.ApplicaPropostaAsync(CommessaId, p.NuoviElementi, p.Assegnazioni.Where(a => _accettate.Contains(a.VoceId)).ToList());
+        var n = await Wbs.ApplicaPropostaAsync(CommessaId, p.NuoviElementi, p.Assegnazioni.Where(a => _accettate.Contains(a.VoceId)).ToList(),
+            sostituisci: _propostaAi);
         _proposta = null;
-        return $"Proposta confermata: {p.NuoviElementi.Count} elementi WBS aggiunti, {n} voci assegnate.";
+        return _propostaAi
+            ? $"WBS dell'AI confermata: {p.NuoviElementi.Count} elementi, {n} voci assegnate."
+            : $"Proposta confermata: {p.NuoviElementi.Count} elementi WBS aggiunti, {n} voci assegnate.";
     });
 
     private async Task EseguiAsync(Func<Task<string>> operazione)

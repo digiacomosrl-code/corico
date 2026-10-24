@@ -53,6 +53,8 @@ scripts/pubblica.sh --ocr-da Corico-<precedente>-aggiorna.exe   # da Linux (test
 ```
 
 Su Windows `scripts\pubblica.ps1` crea lo stesso file se NSIS (`makensis`) è installato.
+Da Linux si ottiene anche `Corico-<versione>-aggiorna.zip`, che contiene solo l'eseguibile: è il file da consegnare,
+perché l'app di Claude non lascia scaricare i `.exe`. Si apre lo zip e si fa doppio clic sull'eseguibile.
 
 Sul PC basta un doppio clic sul file: estrae il pacchetto in una cartella temporanea (controllandone
 l'integrità), esegue la procedura guidata `aggiorna.ps1` descritta sotto con tutte le sue garanzie e alla

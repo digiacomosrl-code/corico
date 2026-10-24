@@ -1,7 +1,7 @@
 ; File unico di aggiornamento di Corico: Corico-<versione>-aggiorna.exe.
 ; Con un doppio clic estrae il pacchetto in una cartella temporanea ed esegue la procedura guidata
 ; di sempre (aggiorna.cmd -> aggiorna.ps1: controllo dei test, copia di sicurezza verificata,
-; conferma, installazione, controlli, ritorno automatico alla versione precedente in caso di errore).
+; installazione senza domanda di conferma, controlli, ritorno automatico alla versione precedente in caso di errore).
 ; Se Corico non è installato sul PC propone l'installazione (installa.cmd).
 ; Alla chiusura la cartella temporanea viene eliminata.
 ;
@@ -62,17 +62,20 @@ Section "Corico"
   File /r "${ORIGINE}\*"
 
   ${If} ${FileExists} "$LOCALAPPDATA\Programs\Corico\appsettings.json"
+    ; Il doppio clic sul file vale come conferma: nessuna domanda durante la procedura.
     StrCpy $0 "aggiorna.cmd"
+    StrCpy $2 " -SenzaConferma"
   ${Else}
     MessageBox MB_YESNO|MB_ICONQUESTION "Corico non risulta installato su questo PC.$\r$\n$\r$\nVuoi installare Corico ${VERSIONE}?" IDYES +3
       SetOutPath "$TEMP"
       Quit
     StrCpy $0 "installa.cmd"
+    StrCpy $2 ""
   ${EndIf}
 
   DetailPrint "Procedura guidata in corso nella finestra nera: segui le indicazioni."
   HideWindow
-  ExecWait '"$SYSDIR\cmd.exe" /c ""$PLUGINSDIR\pacchetto\$0""' $1
+  ExecWait '"$SYSDIR\cmd.exe" /c ""$PLUGINSDIR\pacchetto\$0"$2"' $1
   ; Uscita dalla cartella temporanea, che NSIS elimina alla chiusura.
   SetOutPath "$TEMP"
   SetErrorLevel $1

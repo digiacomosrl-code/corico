@@ -29,6 +29,7 @@ public sealed class PreventivoModulo : ICoricoModulo
         new("Richieste d'offerta", typeof(SchedaRichieste), Ordine: 22),
         new("Lista della Spesa", typeof(SchedaListaSpesa), Ordine: 25),
         new("Ordini", typeof(SchedaOrdini), Ordine: 27),
+        new("Qualifiche fornitori", typeof(SchedaQualifiche), Ordine: 29),
         new("Aggiorna prezzi", typeof(SchedaAggiornaPrezzi), Ordine: 28),
         new("Riepilogo economico", typeof(SchedaRiepilogo), Ordine: 30),
         new("Budget", typeof(SchedaVersioni), Ordine: 40),
@@ -55,6 +56,7 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<AggiornamentoPrezziService>();
         servizi.AddSingleton<IPropostaWbs, PropostaWbsARegole>();
         servizi.AddSingleton<WbsService>();
+        servizi.AddSingleton<QualificheService>();
     }
 
     public async Task ApplicaMigrazioniAsync(IServiceProvider servizi, CancellationToken ct)
@@ -118,6 +120,8 @@ public sealed class PreventivoModulo : ICoricoModulo
             Rispondi(e.RichiestaAsync(commessaId, richiestaId, destinatario, excel: false, ct)));
         gruppo.MapGet("/richieste/{richiestaId:guid}.xlsx", (Guid commessaId, Guid richiestaId, Guid? destinatario, EsportazioniService e, CancellationToken ct) =>
             Rispondi(e.RichiestaAsync(commessaId, richiestaId, destinatario, excel: true, ct)));
+        gruppo.MapGet("/qualifiche/comunicazioni/{comunicazioneId:guid}.pdf", (Guid commessaId, Guid comunicazioneId, EsportazioniService e, CancellationToken ct) =>
+            Rispondi(e.ComunicazioneQualificaAsync(commessaId, comunicazioneId, ct)));
     }
 
     /// <summary>Richieste d'offerta senza risposta oltre la scadenza e offerte scelte scadute o in scadenza, per commessa.</summary>

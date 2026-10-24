@@ -1,0 +1,172 @@
+@* Scheda "Qualifiche fornitori" della commessa: qualificazione interna dei fornitori e comunicazione dell'esito a DL, RUP e CSE. *@
+@inject QualificheService Qualifiche
+@inject FornitoriService Fornitori
+@inject SessioneUtente Sessione
+
+@if (_aperta is { } aperta)
+{
+    <EditorQualifica CommessaId="CommessaId" QualificaId="aperta" ComunicazioneIniziale="_comunicazione" OnChiuso="ChiudiAsync" />
+    return;
+}
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Qualificazione dei fornitori</h3>
+        @if (!Sessione.SolaConsultazione && !_nuova)
+        {
+            <button class="pulsante primario" @onclick="() => _nuova = true">Nuova qualificazione…</button>
+        }
+    </div>
+    <p class="testo-secondario">
+        Per ogni fornitore, subappaltatore o sub-affidatario della commessa si registrano i documenti verificati e l'esito approvato dal
+        Direttore di cantiere. Con l'esito positivo Corico prepara la bozza della comunicazione a DL, RUP e CSE.
+        L'autorizzazione al subappalto resta un adempimento distinto, con il suo stato.
+    </p>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (_nuova)
+    {
+        <div class="griglia-form">
+            <label class="largo">
+                Fornitore (dall'anagrafica)
+                <SceltaConRicerca Voci="_vociFornitori" Etichetta="Fornitore" Segnaposto="— scrivi una parola per cercare —"
+                                  Valore="@_fornitoreId?.ToString()" ValoreChanged="v => _fornitoreId = Guid.TryParse(v, out var id) ? id : null" />
+            </label>
+            <label>
+                Pacchetto di riferimento (facoltativo)
+                <select value="@_pacchettoId" @onchange="CambiaPacchetto">
+                    <option value="">—</option>
+                    @foreach (var p in _pacchetti)
+                    {
+                        <option value="@p.Id">@p.Descrizione</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Tipologia di operatore
+                <select @bind="_tipo">
+                    @foreach (var t in Enum.GetValues<TipoOperatore>())
+                    {
+                        <option value="@t">@Testi.TipoOperatore(t)</option>
+                    }
+                </select>
+            </label>
+        </div>
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@(_fornitoreId is null)" @onclick="CreaAsync">Apri la qualificazione</button>
+            <button class="pulsante" @onclick="() => _nuova = false">Annulla</button>
+        </div>
+    }
+
+    @if (_elenco is null)
+    {
+        <p class="testo-secondario">Caricamento…</p>
+    }
+    else if (_elenco.Count == 0)
+    {
+        <p class="testo-secondario">Nessuna qualificazione per questa commessa.</p>
+    }
+    else
+    {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr><th>Fornitore</th><th>Tipologia</th><th>Prestazioni</th><th>Esito</th><th>Documenti</th><th>Autorizzazione</th><th>Comunicazione</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var q in _elenco)
+                    {
+                        <tr>
+                            <td><strong>@q.Fornitore</strong></td>
+                            <td>@Testi.TipoOperatore(q.Tipo)</td>
+                            <td class="descrizione-breve" title="@q.OggettoPrestazioni">@q.OggettoPrestazioni</td>
+                            <td>
+                                <span class="etichetta etichetta-qualifica-@q.Stato.ToString().ToLowerInvariant()">@Testi.StatoQualifica(q.Stato)</span>
+                                @if (q.DataConclusione is { } d)
+                                {
+                                    <div class="testo-secondario">il @Formato.Data(d)@(q.DirettoreCantiere is null ? "" : $", {q.DirettoreCantiere}")</div>
+                                }
+                            </td>
+                            <td class="nowrap">@q.Verificati / @q.Documenti verificati</td>
+                            <td>@(q.Autorizzazione == StatoAutorizzazione.NonNecessaria ? "—" : Testi.Autorizzazione(q.Autorizzazione))</td>
+                            <td>
+                                @if (q.StatoComunicazione is { } sc)
+                                {
+                                    <span class="etichetta etichetta-comunicazione-@sc.ToString().ToLowerInvariant()">@q.NumeroComunicazione – @Testi.StatoComunicazione(sc)</span>
+                                }
+                                else
+                                {
+                                    <span class="testo-secondario">—</span>
+                                }
+                            </td>
+                            <td class="nowrap">
+                                <button class="pulsante piccolo" @onclick="() => Apri(q.Id, null)">Apri</button>
+                                @if (q.ComunicazioneId is { } cid)
+                                {
+                                    <button class="pulsante piccolo" @onclick="() => Apri(q.Id, cid)">Comunicazione</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid CommessaId { get; set; }
+
+    private IReadOnlyList<RigaElencoQualifiche>? _elenco;
+    private IReadOnlyList<VoceScelta> _vociFornitori = [];
+    private IReadOnlyList<(Guid Id, string Descrizione, TipoAffidamento Tipo)> _pacchetti = [];
+    private Guid? _aperta, _comunicazione, _fornitoreId, _pacchettoId;
+    private TipoOperatore _tipo = TipoOperatore.Subappaltatore;
+    private string? _messaggio;
+    private bool _errore, _nuova;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _vociFornitori = VoceScelta.Da(await Fornitori.ElencoAsync());
+        _pacchetti = await Qualifiche.PacchettiAsync(CommessaId);
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync() => _elenco = await Qualifiche.ElencoAsync(CommessaId);
+
+    private void CambiaPacchetto(ChangeEventArgs e)
+    {
+        _pacchettoId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        if (_pacchetti.FirstOrDefault(p => p.Id == _pacchettoId) is { Id: var trovato } p && trovato != Guid.Empty) _tipo = QualificheService.TipoDa(p.Tipo);
+    }
+
+    private async Task CreaAsync()
+    {
+        if (_fornitoreId is not { } f) return;
+        try
+        {
+            var id = await Qualifiche.CreaAsync(CommessaId, f, _tipo, _pacchettoId);
+            (_nuova, _fornitoreId, _pacchettoId) = (false, null, null);
+            Apri(id, null);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private void Apri(Guid qualifica, Guid? comunicazione) => (_aperta, _comunicazione) = (qualifica, comunicazione);
+
+    private async Task ChiudiAsync()
+    {
+        (_aperta, _comunicazione) = (null, null);
+        await CaricaAsync();
+    }
+}

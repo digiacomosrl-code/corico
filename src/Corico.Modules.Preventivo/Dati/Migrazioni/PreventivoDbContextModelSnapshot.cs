@@ -127,6 +127,55 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.ToTable("PRV_AggiornamentiPrezzi", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.AllegatoComunicazione", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ComunicazioneId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descrizione")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("DocumentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordine")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComunicazioneId", "Ordine");
+
+                    b.ToTable("PRV_AllegatiComunicazione", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.AnalisiAziendale", b =>
                 {
                     b.Property<Guid>("Id")
@@ -362,6 +411,135 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.ToTable("PRV_Computi", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.ComunicazioneQualifica", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("AllegaAttestato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AllegaElencoDocumenti")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Anno")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("AnnullataIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ApprovataDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ApprovataIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("DataEmissione")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DestinatariEffettivi")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DocumentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GenerataDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("GenerataIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("InviataIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InvioRegistratoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Modalita")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MotivoAnnullamento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Numero")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Oggetto")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Prescrizioni")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Progressivo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("QualificaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("RicevutaDocumentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("RicevutaIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RiferimentoInvio")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RiferimentoRicevuta")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Stato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommessaId");
+
+                    b.HasIndex("QualificaId");
+
+                    b.HasIndex("Anno", "Progressivo")
+                        .IsUnique()
+                        .HasFilter("\"Progressivo\" > 0");
+
+                    b.ToTable("PRV_ComunicazioniQualifica", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.CostoACorpo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -411,6 +589,77 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.HasIndex("OffertaId");
 
                     b.ToTable("PRV_CostiACorpo", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.DestinatarioComunicazione", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AttoreId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ComunicazioneId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Ente")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Indirizzo")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nominativo")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Pec")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ruolo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Selezionato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Titolo")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComunicazioneId");
+
+                    b.ToTable("PRV_DestinatariComunicazione", (string)null);
                 });
 
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.DestinatarioRichiesta", b =>
@@ -472,6 +721,64 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.HasIndex("RichiestaId");
 
                     b.ToTable("PRV_DestinatariRichiesta", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.DocumentoQualifica", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descrizione")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DocumentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordine")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("QualificaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Riservato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("Scadenza")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Verificato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QualificaId", "Ordine");
+
+                    b.ToTable("PRV_DocumentiQualifica", (string)null);
                 });
 
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.ElementoWbs", b =>
@@ -1048,6 +1355,101 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                         .IsUnique();
 
                     b.ToTable("PRV_Preventivi", (string)null);
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.QualificaFornitore", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ApprovataDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ApprovataIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Autorizzazione")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("DataAutorizzazione")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("DataConclusione")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DirettoreCantiere")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DirettoreCantiereId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Fornitore")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("FornitoreId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OggettoPrestazioni")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("PacchettoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Prescrizioni")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RiferimentoAutorizzazione")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RiferimentoFascicolo")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Stato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommessaId");
+
+                    b.HasIndex("FornitoreId");
+
+                    b.ToTable("PRV_Qualifiche", (string)null);
                 });
 
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.RichiestaOfferta", b =>
@@ -2099,6 +2501,15 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.ToTable("PRV_ElencoPrezzi", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.AllegatoComunicazione", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.ComunicazioneQualifica", null)
+                        .WithMany("Allegati")
+                        .HasForeignKey("ComunicazioneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Categoria", b =>
                 {
                     b.HasOne("Corico.Modules.Preventivo.Dominio.Computo", null)
@@ -2126,11 +2537,29 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.DestinatarioComunicazione", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.ComunicazioneQualifica", null)
+                        .WithMany("Destinatari")
+                        .HasForeignKey("ComunicazioneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.DestinatarioRichiesta", b =>
                 {
                     b.HasOne("Corico.Modules.Preventivo.Dominio.RichiestaOfferta", null)
                         .WithMany("Destinatari")
                         .HasForeignKey("RichiestaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.DocumentoQualifica", b =>
+                {
+                    b.HasOne("Corico.Modules.Preventivo.Dominio.QualificaFornitore", null)
+                        .WithMany("Documenti")
+                        .HasForeignKey("QualificaId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -2310,6 +2739,13 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
                     b.Navigation("Righe");
                 });
 
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.ComunicazioneQualifica", b =>
+                {
+                    b.Navigation("Allegati");
+
+                    b.Navigation("Destinatari");
+                });
+
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Offerta", b =>
                 {
                     b.Navigation("CostiACorpo");
@@ -2334,6 +2770,11 @@ namespace Corico.Modules.Preventivo.Dati.Migrazioni
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.Pacchetto", b =>
                 {
                     b.Navigation("Voci");
+                });
+
+            modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.QualificaFornitore", b =>
+                {
+                    b.Navigation("Documenti");
                 });
 
             modelBuilder.Entity("Corico.Modules.Preventivo.Dominio.RichiestaOfferta", b =>

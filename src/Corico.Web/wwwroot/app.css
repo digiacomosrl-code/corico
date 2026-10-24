@@ -270,6 +270,18 @@ tr.ordinata td { color: var(--testo-secondario); }
 .etichetta-ordine-bozza { background: var(--ambra-chiaro); color: var(--ambra); }
 .etichetta-ordine-emesso { background: var(--verde-chiaro); color: var(--verde); }
 .etichetta-ordine-annullato { background: var(--grigio-sfondo); color: var(--testo-secondario); }
+/* Qualificazione fornitori e comunicazione a DL, RUP e CSE */
+.etichetta-qualifica-inistruttoria { background: var(--ambra-chiaro); color: var(--ambra); }
+.etichetta-qualifica-approvata { background: var(--verde-chiaro); color: var(--verde); }
+.etichetta-qualifica-nonqualificato { background: var(--rosso-chiaro); color: var(--rosso); }
+.etichetta-comunicazione-bozza { background: var(--ambra-chiaro); color: var(--ambra); }
+.etichetta-comunicazione-pdfdefinitivo, .etichetta-comunicazione-approvataperinvio { background: var(--blu-chiaro); color: var(--blu); }
+.etichetta-comunicazione-inviata, .etichetta-comunicazione-ricevutaacquisita { background: var(--verde-chiaro); color: var(--verde); }
+.etichetta-comunicazione-annullata { background: var(--grigio-sfondo); color: var(--testo-secondario); }
+ol.avanzamento-stati { list-style: none; display: flex; flex-wrap: wrap; gap: .4rem; padding: 0; margin: .25rem 0 .9rem; counter-reset: fase; }
+ol.avanzamento-stati > li { counter-increment: fase; padding: .2rem .7rem; border-radius: 12px; font-size: .82rem; border: 1px solid var(--grigio-bordo); color: var(--testo-secondario); background: #fff; }
+ol.avanzamento-stati > li::before { content: counter(fase) ". "; }
+ol.avanzamento-stati > li.fatto { background: var(--verde-chiaro); color: var(--verde); border-color: var(--verde); font-weight: 600; }
 .blocco-budget { background: var(--blu-chiaro); color: var(--blu); border-radius: var(--raggio); padding: .45rem .75rem; margin-bottom: .75rem; }
 ul.controlli { list-style: none; padding: 0; margin: .5rem 0; }
 ul.controlli > li { padding: .35rem 0; border-bottom: 1px solid var(--grigio-sfondo); }

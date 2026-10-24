@@ -66,13 +66,14 @@
 </div>
 
 <table class="tabella">
-    <thead><tr><th>Denominazione</th><th>Partita IVA</th><th>Lavorazioni</th><th>Comune</th><th>Telefono</th></tr></thead>
+    <thead><tr><th>Denominazione</th><th>Partita IVA</th><th>Lavorazioni</th><th>Comune</th><th>Telefono</th><th></th></tr></thead>
     <tbody>
         @foreach (var c in _elenco)
         {
             <tr class="cliccabile @(c.Archiviato ? "riga-archiviata" : "")" @onclick="() => Modifica(c)">
                 <td>@c.Denominazione</td><td>@c.PartitaIva</td>
                 <td>@c.Categorie</td><td>@c.Comune @(c.Provincia is null ? "" : $"({c.Provincia})")</td><td>@c.Telefono</td>
+                <td><a class="pulsante piccolo" href="@($"fornitori/{c.Id}/fascicolo")" @onclick:stopPropagation="true">Fascicolo</a></td>
             </tr>
         }
     </tbody>

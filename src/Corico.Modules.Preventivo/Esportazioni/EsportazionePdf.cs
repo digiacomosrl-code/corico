@@ -10,7 +10,7 @@ using PdfSharp.Fonts;
 namespace Corico.Modules.Preventivo.Esportazioni;
 
 /// <summary>Stampe PDF in formato A4: riepilogo economico (verticale) e scheda pacchetto (orizzontale).</summary>
-public static class EsportazionePdf
+public static partial class EsportazionePdf
 {
     private const string Carattere = CaratteriStampa.Famiglia;
 

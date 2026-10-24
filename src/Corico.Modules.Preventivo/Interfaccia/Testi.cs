@@ -110,4 +110,61 @@ public static class Testi
         Servizi.OrigineRigaSpesa.ACorpo => "A corpo",
         _ => o.ToString(),
     };
+
+    public static string TipoOperatore(Dominio.TipoOperatore t) => t switch
+    {
+        Dominio.TipoOperatore.Fornitore => "Fornitore",
+        Dominio.TipoOperatore.ImpresaEsecutrice => "Impresa esecutrice",
+        Dominio.TipoOperatore.Subappaltatore => "Subappaltatore",
+        Dominio.TipoOperatore.SubAffidatario => "Sub-affidatario",
+        _ => t.ToString(),
+    };
+
+    public static string StatoQualifica(Dominio.StatoQualifica s) => s switch
+    {
+        Dominio.StatoQualifica.InIstruttoria => "In istruttoria",
+        Dominio.StatoQualifica.Approvata => "Qualificato",
+        Dominio.StatoQualifica.NonQualificato => "Non qualificato",
+        _ => s.ToString(),
+    };
+
+    public static string Autorizzazione(Dominio.StatoAutorizzazione s) => s switch
+    {
+        Dominio.StatoAutorizzazione.NonNecessaria => "Non necessaria",
+        Dominio.StatoAutorizzazione.DaRichiedere => "Da richiedere",
+        Dominio.StatoAutorizzazione.Richiesta => "Richiesta",
+        Dominio.StatoAutorizzazione.Autorizzata => "Autorizzata",
+        Dominio.StatoAutorizzazione.Negata => "Negata",
+        _ => s.ToString(),
+    };
+
+    public static string StatoComunicazione(Dominio.StatoComunicazione s) => s switch
+    {
+        Dominio.StatoComunicazione.Bozza => "Bozza",
+        Dominio.StatoComunicazione.PdfDefinitivo => "PDF definitivo",
+        Dominio.StatoComunicazione.ApprovataPerInvio => "Approvata per l'invio",
+        Dominio.StatoComunicazione.Inviata => "Inviata",
+        Dominio.StatoComunicazione.RicevutaAcquisita => "Ricevuta acquisita",
+        Dominio.StatoComunicazione.Annullata => "Annullata",
+        _ => s.ToString(),
+    };
+
+    public static string Modalita(Dominio.ModalitaInvio m) => m switch
+    {
+        Dominio.ModalitaInvio.Pec => "PEC",
+        Dominio.ModalitaInvio.Email => "Email",
+        Dominio.ModalitaInvio.Raccomandata => "Raccomandata A/R",
+        Dominio.ModalitaInvio.ConsegnaAMano => "Consegna a mano",
+        Dominio.ModalitaInvio.Altro => "Altro",
+        _ => m.ToString(),
+    };
+
+    /// <summary>Figura destinataria con la denominazione del D.Lgs. 36/2023, come nella comunicazione di qualificazione.</summary>
+    public static string RuoloLettera(Corico.Core.Dominio.RuoloCommessa r) => r switch
+    {
+        Corico.Core.Dominio.RuoloCommessa.DirettoreLavori => "Direttore dei Lavori",
+        Corico.Core.Dominio.RuoloCommessa.Rup => "Responsabile Unico del Progetto",
+        Corico.Core.Dominio.RuoloCommessa.Cse => "Coordinatore della Sicurezza in fase di Esecuzione",
+        _ => Corico.Core.Dominio.RuoliCommessa.Testo(r),
+    };
 }

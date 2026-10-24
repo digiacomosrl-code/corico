@@ -9,7 +9,8 @@ public sealed record FileEsportato(byte[] Contenuto, string TipoContenuto, strin
 /// <summary>Esportazioni del preventivo: Excel del computo e del riepilogo, PDF A4 del riepilogo e delle schede pacchetto.</summary>
 public sealed class EsportazioniService(
     RiepilogoService riepilogo, VersioniService versioni, PacchettiService pacchetti, ListaSpesaService listaSpesa,
-    OrdiniService ordini, RichiesteService richieste, CommesseService commesse, ImpostazioniService impostazioni, TimeProvider orologio)
+    OrdiniService ordini, RichiesteService richieste, QualificheService qualifiche, DocumentiService documenti, CommesseService commesse,
+    ImpostazioniService impostazioni, TimeProvider orologio)
 {
     public const string TipoExcel = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public const string TipoPdf = "application/pdf";
@@ -73,6 +74,24 @@ public sealed class EsportazioniService(
             ? $"Bozza ordine {Pulisci(ordine.Fornitore)}.pdf"
             : $"{ordine.Numero.Replace('/', '-')} {Pulisci(ordine.Fornitore)}{(ordine.Stato == Dominio.StatoOrdine.Annullato ? " ANNULLATO" : "")}.pdf";
         return new(EsportazionePdf.Ordine(azienda, ordine, NomeCommessa(commessa)), TipoPdf, nome);
+    }
+
+    /// <summary>
+    /// Comunicazione di qualificazione: la bozza si compone al momento (anteprima); dal PDF definitivo si restituisce
+    /// sempre il file archiviato, identico a quello generato.
+    /// </summary>
+    public async Task<FileEsportato?> ComunicazioneQualificaAsync(Guid commessaId, Guid comunicazioneId, CancellationToken ct = default)
+    {
+        var l = await qualifiche.LetteraAsync(commessaId, comunicazioneId, ct);
+        if (l is null) return null;
+        if (l.Comunicazione.DocumentoId is { } id && await documenti.ApriAsync(id, ct) is { } archiviato)
+        {
+            await using var flusso = archiviato.Contenuto;
+            using var ms = new MemoryStream();
+            await flusso.CopyToAsync(ms, ct);
+            return new(ms.ToArray(), TipoPdf, archiviato.Nome);
+        }
+        return new(EsportazionePdf.ComunicazioneQualifica(l), TipoPdf, $"Bozza comunicazione qualificazione {Pulisci(l.Qualifica.Fornitore)}.pdf");
     }
 
     public async Task<FileEsportato?> RichiestaAsync(Guid commessaId, Guid richiestaId, Guid? destinatarioId, bool excel, CancellationToken ct = default)

@@ -56,6 +56,20 @@ Riferimento: prompt strategico v2.1, sezioni 3, 4, 6, 9, 11, 18.
 - Per comunicazioni e lettere usare `AttoriService.FigureInCaricaAsync(commessa, data, ruolo)`: restituisce le figure in carica
   alla data con tutti i recapiti dell'attore.
 
+## Qualificazione dei fornitori e comunicazione a DL, RUP e CSE (modulo Preventivo, 1.2.6)
+
+- Scheda «Qualifiche fornitori» della commessa (`PRV_Qualifiche`, `PRV_DocumentiQualifica`): fornitore dall'anagrafica, tipologia
+  (fornitore, impresa esecutrice, subappaltatore, sub-affidatario), oggetto delle prestazioni, documenti verificati con file
+  dell'archivio e spunta «riservato», prescrizioni. L'esito (positivo o negativo) si registra con data e Direttore di cantiere
+  (dagli Attori o scritto a mano); dopo l'esito cambia solo lo stato dell'autorizzazione collegata, gestita a parte.
+- L'esito positivo genera la bozza della comunicazione (`PRV_ComunicazioniQualifica`, destinatari e allegati) con DL, RUP e CSE
+  in carica; il CSE è proposto per chi opera in cantiere. Stati: bozza, PDF definitivo (numero `CQ AAAA/NNN`, archiviato nei
+  documenti della commessa), approvata per l'invio (amministratore o operatore abilitato agli ordini), inviata (data, modalità,
+  destinatari effettivi, protocollo), ricevuta acquisita; annullabile con motivo. La generazione del PDF non vale come invio.
+- Allegati: attestato ed elenco dei documenti verificati generati nel PDF; documenti dell'archivio scelti a mano, mai i riservati.
+- Fascicolo del fornitore: pagina `/fornitori/{id}/fascicolo` con qualificazioni, documenti e comunicazioni di tutte le commesse.
+- Sostituisce, in questo processo, la comunicazione alla Prefettura, che non è prevista.
+
 ## Regole trasversali
 
 | Regola | Implementazione |

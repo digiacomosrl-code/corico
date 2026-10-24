@@ -1,0 +1,475 @@
+@* Comunicazione dell'esito della qualificazione a DL, RUP e CSE: bozza correggibile, anteprima, PDF definitivo archiviato,
+   approvazione per l'invio, registrazione della trasmissione e della ricevuta. *@
+@inject QualificheService Qualifiche
+@inject DocumentiService Documenti
+@inject ConflittiService Conflitti
+@inject SessioneUtente Sessione
+@inject TimeProvider Orologio
+
+@if (_c is null || _q is null)
+{
+    <div class="riquadro"><p class="testo-secondario">Caricamento…</p></div>
+    return;
+}
+@{ var c = _c; var bozza = c.Stato == StatoComunicazione.Bozza; var modificabile = bozza && !Sessione.SolaConsultazione; }
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Comunicazione @(bozza ? "in bozza" : c.Numero) – @_q.Fornitore</h3>
+        <div class="azioni-in-linea">
+            <span class="etichetta etichetta-comunicazione-@c.Stato.ToString().ToLowerInvariant()">@Testi.StatoComunicazione(c.Stato)</span>
+            <a class="pulsante" href="@Pdf" target="_blank">@(bozza ? "Anteprima PDF" : "Stampa / scarica PDF")</a>
+            <button class="pulsante" @onclick="ChiudiAsync">Chiudi</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    <ol class="avanzamento-stati">
+        @foreach (var (stato, testo) in Fasi(c))
+        {
+            <li class="@(stato ? "fatto" : "")">@testo</li>
+        }
+    </ol>
+
+    @if (bozza)
+    {
+        <p class="testo-secondario">
+            Bozza preparata da @c.CreatoDa il @Formato.DataOra(c.CreatoIl) con i destinatari in carica negli Attori della commessa.
+            Completa i dati mancanti, scegli i destinatari effettivi e gli allegati, poi genera il PDF definitivo: riceve il numero, si archivia
+            nel fascicolo del fornitore e non si modifica più. La generazione del PDF non vale come invio.
+        </p>
+        <div class="griglia-form">
+            <label>Data di emissione <input type="date" @bind="c.DataEmissione" disabled="@(!modificabile)" /></label>
+            <label class="largo">Oggetto <input @bind="c.Oggetto" disabled="@(!modificabile)" /></label>
+        </div>
+    }
+    else
+    {
+        <p>
+            <strong>@c.Numero</strong> del @Formato.Data(c.DataEmissione): @(c.Oggetto.TrimEnd('.')).
+            PDF definitivo generato da @c.GenerataDa il @Formato.DataOra(c.GenerataIl)@(c.ApprovataDa is null ? "" : $", approvato per l'invio da {c.ApprovataDa} il {Formato.DataOra(c.ApprovataIl)}").
+            @if (c.Stato == StatoComunicazione.Annullata)
+            {
+                <span class="testo-negativo"> Annullata il @Formato.Data(c.AnnullataIl): @c.MotivoAnnullamento</span>
+            }
+        </p>
+    }
+
+    <h4>Destinatari</h4>
+    @if (modificabile)
+    {
+        <p class="testo-secondario">I dati vengono dagli Attori della commessa; le correzioni qui valgono solo per questa lettera. Togli la spunta a chi non deve ricevere la comunicazione.</p>
+    }
+    <div class="scorrevole">
+        <table class="tabella">
+            <thead><tr><th></th><th>Ruolo</th><th>Titolo</th><th>Nominativo</th><th>Ente o società</th><th>Indirizzo</th><th>PEC</th><th>Email</th>@if (modificabile) { <th></th> }</tr></thead>
+            <tbody>
+                @foreach (var d in c.Destinatari)
+                {
+                    <tr class="@(d.Selezionato ? "" : "testo-secondario")">
+                        @if (modificabile)
+                        {
+                            <td><input type="checkbox" @bind="d.Selezionato" aria-label="Destinatario effettivo" /></td>
+                            <td class="nowrap" title="@Testi.RuoloLettera(d.Ruolo)">@RuoliCommessa.Sigla(d.Ruolo)</td>
+                            <td><input class="stretto" @bind="d.Titolo" placeholder="Ing." /></td>
+                            <td><input class="@(d.Selezionato && string.IsNullOrWhiteSpace(d.Nominativo) ? "da-compilare" : "")" @bind="d.Nominativo" /></td>
+                            <td><input @bind="d.Ente" /></td>
+                            <td><input @bind="d.Indirizzo" /></td>
+                            <td><input @bind="d.Pec" /></td>
+                            <td><input @bind="d.Email" /></td>
+                            <td><button class="pulsante piccolo" title="Togli la riga" @onclick="() => c.Destinatari.Remove(d)">✕</button></td>
+                        }
+                        else
+                        {
+                            <td>@(d.Selezionato ? "✓" : "")</td>
+                            <td class="nowrap" title="@Testi.RuoloLettera(d.Ruolo)">@RuoliCommessa.Sigla(d.Ruolo)</td>
+                            <td>@d.Titolo</td><td>@d.Nominativo</td><td>@d.Ente</td><td>@d.Indirizzo</td><td>@d.Pec</td><td>@d.Email</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (modificabile)
+    {
+        <div class="riga-form">
+            @foreach (var r in QualificheService.RuoliDestinatari)
+            {
+                <button class="pulsante piccolo" @onclick="() => AggiungiDestinatario(r)">+ @RuoliCommessa.Sigla(r)</button>
+            }
+        </div>
+    }
+
+    <h4>Contenuto</h4>
+    <div class="griglia-form">
+        <label class="largo">Limitazioni o prescrizioni <textarea rows="2" @bind="c.Prescrizioni" disabled="@(!modificabile)" placeholder="Nessuna"></textarea></label>
+        <label class="largo">Dati integrativi e note <textarea rows="3" @bind="c.Note" disabled="@(!modificabile)"></textarea></label>
+    </div>
+
+    <h4>Allegati</h4>
+    <div class="riga-form">
+        <label class="spunta"><input type="checkbox" @bind="c.AllegaAttestato" disabled="@(!modificabile)" /> Attestato di qualificazione del fornitore (generato da Corico)</label>
+        <label class="spunta"><input type="checkbox" @bind="c.AllegaElencoDocumenti" disabled="@(!modificabile)" /> Elenco dei documenti verificati (generato da Corico)</label>
+    </div>
+    @if (modificabile)
+    {
+        <p class="testo-secondario">
+            Altri documenti: scegli solo quelli pertinenti. Nessun documento del fornitore si allega in automatico e quelli segnati come riservati non compaiono.
+        </p>
+        @if (_allegabili.Count == 0)
+        {
+            <p class="testo-secondario">Nessun documento nell'archivio della commessa o della qualificazione.</p>
+        }
+        else
+        {
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead><tr><th></th><th>Documento</th><th>Descrizione nell'elenco allegati</th></tr></thead>
+                <tbody>
+                    @foreach (var a in _allegabili)
+                    {
+                        var scelto = c.Allegati.FirstOrDefault(x => x.DocumentoId == a.Id);
+                        <tr>
+                            <td><input type="checkbox" checked="@(scelto is not null)" @onchange="e => Allega(a, (bool)e.Value!)" aria-label="Allega" /></td>
+                            <td><a href="@($"documenti/{a.Id}/scarica")" target="_blank">@a.NomeOriginale</a> <span class="testo-secondario">@a.Tipo</span></td>
+                            <td>
+                                @if (scelto is not null)
+                                {
+                                    <input class="largo" @bind="scelto.Descrizione" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        }
+    }
+    else if (c.Allegati.Count > 0)
+    {
+        <ul>
+            @foreach (var a in c.Allegati)
+            {
+                <li><a href="@($"documenti/{a.DocumentoId}/scarica")" target="_blank">@a.Descrizione</a></li>
+            }
+        </ul>
+    }
+
+    @if (bozza && _verifica is { } v)
+    {
+        @foreach (var a in v.Avvisi)
+        {
+            <div class="segnalazione segnalazione-informazione">@a</div>
+        }
+        @foreach (var i in v.Impedimenti)
+        {
+            <div class="segnalazione segnalazione-attenzione">@i</div>
+        }
+    }
+
+    @if (modificabile)
+    {
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@_occupato" @onclick="SalvaAsync">Salva bozza</button>
+            @if (!_conferma)
+            {
+                <button class="pulsante primario" disabled="@_occupato" @onclick="ChiediConfermaAsync">Genera PDF definitivo…</button>
+            }
+            else
+            {
+                <span class="testo-differenza">Il PDF definitivo riceve il numero, si archivia e non si modifica più. Confermi?</span>
+                <button class="pulsante primario" disabled="@_occupato" @onclick="GeneraAsync">Conferma generazione</button>
+                <button class="pulsante" @onclick="() => _conferma = false">Indietro</button>
+            }
+            @if (!_eliminazione)
+            {
+                <button class="pulsante" @onclick="() => _eliminazione = true">Elimina bozza…</button>
+            }
+            else
+            {
+                <button class="pulsante pericolo" @onclick="EliminaAsync">Conferma eliminazione</button>
+                <button class="pulsante" @onclick="() => _eliminazione = false">Indietro</button>
+            }
+        </div>
+    }
+</div>
+
+@if (!bozza && c.Stato != StatoComunicazione.Annullata)
+{
+    <div class="riquadro">
+        <h3>Approvazione e invio</h3>
+        <p class="testo-secondario">
+            Corico non invia la comunicazione: la trasmetti con il canale aziendale (PEC, posta, consegna) e qui registri data, destinatari effettivi,
+            modalità e riferimenti di protocollo o ricevute.
+        </p>
+
+        @if (c.Stato == StatoComunicazione.PdfDefinitivo)
+        {
+            @if (Sessione.PuoEmettereOrdini)
+            {
+                <div class="azioni"><button class="pulsante primario" @onclick="ApprovaInvioAsync">Approva per l'invio</button></div>
+            }
+            else
+            {
+                <p class="testo-secondario">L'approvazione per l'invio spetta all'amministratore o a un operatore abilitato a emettere ordini.</p>
+            }
+        }
+        else
+        {
+            <div class="griglia-form">
+                <label>Data di trasmissione <input type="date" @bind="_inviataIl" disabled="@(c.Stato != StatoComunicazione.ApprovataPerInvio)" /></label>
+                <label>
+                    Modalità
+                    <select @bind="_modalita" disabled="@(c.Stato != StatoComunicazione.ApprovataPerInvio)">
+                        @foreach (var m in Enum.GetValues<ModalitaInvio>())
+                        {
+                            <option value="@m">@Testi.Modalita(m)</option>
+                        }
+                    </select>
+                </label>
+                <label class="largo">Destinatari effettivi <input @bind="_destinatariEffettivi" disabled="@(c.Stato != StatoComunicazione.ApprovataPerInvio)" /></label>
+                <label class="largo">Protocollo o riferimento dell'invio <input @bind="_riferimentoInvio" disabled="@(c.Stato != StatoComunicazione.ApprovataPerInvio)" /></label>
+            </div>
+            @if (c.Stato == StatoComunicazione.ApprovataPerInvio && !Sessione.SolaConsultazione)
+            {
+                <div class="azioni"><button class="pulsante primario" @onclick="RegistraInvioAsync">Registra l'invio</button></div>
+            }
+            @if (c.InvioRegistratoDa is not null)
+            {
+                <p class="testo-secondario">Invio registrato da @c.InvioRegistratoDa.</p>
+            }
+
+            @if (c.Stato is StatoComunicazione.Inviata or StatoComunicazione.RicevutaAcquisita)
+            {
+                <h4>Ricevuta o conferma (se disponibile)</h4>
+                <div class="griglia-form">
+                    <label>Ricevuta il <input type="date" @bind="_ricevutaIl" disabled="@(c.Stato != StatoComunicazione.Inviata)" /></label>
+                    <label class="largo">Riferimento della ricevuta <input @bind="_riferimentoRicevuta" disabled="@(c.Stato != StatoComunicazione.Inviata)" /></label>
+                    <label class="largo">
+                        File della ricevuta (dall'archivio della commessa)
+                        <select @bind="_ricevutaDocumentoId" disabled="@(c.Stato != StatoComunicazione.Inviata)">
+                            <option value="">—</option>
+                            @foreach (var d in _archivio)
+                            {
+                                <option value="@d.Id">@d.NomeOriginale@(d.Descrizione is null ? "" : $" – {d.Descrizione}")</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+                @if (c.Stato == StatoComunicazione.Inviata && !Sessione.SolaConsultazione)
+                {
+                    <div class="azioni"><button class="pulsante" @onclick="RegistraRicevutaAsync">Registra la ricevuta</button></div>
+                }
+                @if (c.RicevutaDocumentoId is { } rid)
+                {
+                    <a class="pulsante" href="@($"documenti/{rid}/scarica")" target="_blank">Apri la ricevuta</a>
+                }
+            }
+        }
+
+        @if (!Sessione.SolaConsultazione)
+        {
+            <h4>Annullamento</h4>
+            @if (!_annulla)
+            {
+                <button class="pulsante" @onclick="() => (_annulla, _motivo) = (true, null)">Annulla la comunicazione…</button>
+            }
+            else
+            {
+                <div class="riga-form">
+                    <input class="largo" placeholder="Motivo dell'annullamento (obbligatorio)" @bind="_motivo" />
+                    <button class="pulsante pericolo" @onclick="AnnullaAsync">Conferma annullamento</button>
+                    <button class="pulsante" @onclick="() => _annulla = false">Indietro</button>
+                </div>
+                <p class="testo-secondario">Il PDF resta nell'archivio; poi potrai preparare una nuova comunicazione dalla qualificazione.</p>
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Guid ComunicazioneId { get; set; }
+    [Parameter] public EventCallback OnChiuso { get; set; }
+
+    private ComunicazioneQualifica? _c;
+    private QualificaFornitore? _q;
+    private VerificaComunicazione? _verifica;
+    private IReadOnlyList<DocumentoRiepilogo> _archivio = [], _allegabili = [];
+    private DateOnly? _inviataIl, _ricevutaIl;
+    private ModalitaInvio _modalita = ModalitaInvio.Pec;
+    private string? _destinatariEffettivi, _riferimentoInvio, _riferimentoRicevuta, _motivo, _messaggio;
+    private Guid? _ricevutaDocumentoId;
+    private bool _errore, _occupato, _conferma, _eliminazione, _annulla;
+
+    private string Pdf => $"preventivo/{CommessaId}/qualifiche/comunicazioni/{ComunicazioneId}.pdf";
+
+    protected override Task OnParametersSetAsync() => CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _c = await Qualifiche.ComunicazioneAsync(CommessaId, ComunicazioneId);
+        if (_c is null) { await OnChiuso.InvokeAsync(); return; }
+        _q = await Qualifiche.OttieniAsync(CommessaId, _c.QualificaId);
+        _verifica = _c.Stato == StatoComunicazione.Bozza ? await Qualifiche.VerificaAsync(CommessaId, ComunicazioneId) : null;
+        _archivio = await Documenti.ElencoAsync(CommessaId);
+        var riservati = _q!.Documenti.Where(d => d.Riservato && d.DocumentoId is not null).Select(d => d.DocumentoId!.Value).ToHashSet();
+        var delFascicolo = _q.Documenti.Where(d => d.DocumentoId is not null).Select(d => d.DocumentoId!.Value).ToHashSet();
+        // Prima i documenti della qualificazione, poi gli altri della commessa (escluse le comunicazioni già generate).
+        _allegabili = _archivio.Where(d => !riservati.Contains(d.Id) && d.Tipo != QualificheService.TipoDocumentoComunicazione)
+            .OrderBy(d => delFascicolo.Contains(d.Id) ? 0 : 1).ThenBy(d => d.NomeOriginale).ToList();
+        var oggi = DateOnly.FromDateTime(Orologio.GetLocalNow().DateTime);
+        _inviataIl = _c.InviataIl ?? oggi;
+        _modalita = _c.Modalita ?? ModalitaInvio.Pec;
+        _destinatariEffettivi = _c.DestinatariEffettivi ?? string.Join("; ", _c.Destinatari.Where(d => d.Selezionato)
+            .Select(d => $"{RuoliCommessa.Sigla(d.Ruolo)} {QualificheService.Nominativo(d.Titolo, d.Nominativo)}{(d.Pec is { Length: > 0 } p ? $" ({p})" : "")}"));
+        _riferimentoInvio = _c.RiferimentoInvio;
+        (_ricevutaIl, _riferimentoRicevuta, _ricevutaDocumentoId) = (_c.RicevutaIl ?? oggi, _c.RiferimentoRicevuta, _c.RicevutaDocumentoId);
+        (_conferma, _eliminazione, _annulla) = (false, false, false);
+    }
+
+    private static IEnumerable<(bool, string)> Fasi(ComunicazioneQualifica c)
+    {
+        var s = c.Stato == StatoComunicazione.Annullata ? -1 : (int)c.Stato;
+        yield return (true, "Bozza generata");
+        yield return (s >= (int)StatoComunicazione.PdfDefinitivo || c.Progressivo > 0, "PDF definitivo predisposto");
+        yield return (s >= (int)StatoComunicazione.ApprovataPerInvio || c.ApprovataIl is not null, "Approvata per l'invio");
+        yield return (s >= (int)StatoComunicazione.Inviata || c.InviataIl is not null, "Inviata");
+        yield return (s >= (int)StatoComunicazione.RicevutaAcquisita || c.RicevutaIl is not null, "Ricevuta acquisita");
+    }
+
+    private void AggiungiDestinatario(RuoloCommessa r) =>
+        _c?.Destinatari.Add(new DestinatarioComunicazione { ComunicazioneId = ComunicazioneId, CommessaId = CommessaId, Ruolo = r });
+
+    private void Allega(DocumentoRiepilogo d, bool allega)
+    {
+        if (_c is null) return;
+        var presente = _c.Allegati.FirstOrDefault(a => a.DocumentoId == d.Id);
+        if (allega && presente is null)
+        {
+            var descrizione = _q?.Documenti.FirstOrDefault(x => x.DocumentoId == d.Id)?.Descrizione ?? d.Descrizione ?? Path.GetFileNameWithoutExtension(d.NomeOriginale);
+            _c.Allegati.Add(new AllegatoComunicazione
+            {
+                ComunicazioneId = ComunicazioneId, CommessaId = CommessaId, DocumentoId = d.Id, Descrizione = descrizione,
+                Ordine = _c.Allegati.Count == 0 ? 1 : _c.Allegati.Max(a => a.Ordine) + 1,
+            });
+        }
+        else if (!allega && presente is not null) _c.Allegati.Remove(presente);
+    }
+
+    private async Task<bool> SalvaInternoAsync()
+    {
+        if (_c is null) return false;
+        try
+        {
+            await Qualifiche.SalvaBozzaAsync(CommessaId, _c);
+            await CaricaAsync();
+            return true;
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        return false;
+    }
+
+    private async Task SalvaAsync()
+    {
+        _occupato = true;
+        if (await SalvaInternoAsync()) (_messaggio, _errore) = ("Bozza salvata. Controlla l'anteprima PDF.", false);
+        _occupato = false;
+    }
+
+    private async Task ChiediConfermaAsync()
+    {
+        _occupato = true;
+        if (await SalvaInternoAsync())
+        {
+            _messaggio = null;
+            if (_verifica is { Generabile: true }) _conferma = true;
+            else (_messaggio, _errore) = ("Prima di generare il PDF definitivo completa i punti segnalati.", true);
+        }
+        _occupato = false;
+    }
+
+    private Task GeneraAsync() => EseguiAsync(async () =>
+    {
+        var c = await Qualifiche.GeneraDefinitivoAsync(CommessaId, ComunicazioneId);
+        return $"PDF definitivo {c.Numero} generato e archiviato nel fascicolo del fornitore. Ora va approvato per l'invio.";
+    });
+
+    private Task ApprovaInvioAsync() => EseguiAsync(async () =>
+    {
+        await Qualifiche.ApprovaInvioAsync(CommessaId, ComunicazioneId);
+        return "Comunicazione approvata per l'invio. Trasmettila con il canale aziendale e registra l'invio.";
+    });
+
+    private Task RegistraInvioAsync() => EseguiAsync(async () =>
+    {
+        await Qualifiche.RegistraInvioAsync(CommessaId, ComunicazioneId, _inviataIl ?? throw new OperazioneNonValidaException("Indica la data di trasmissione."),
+            _modalita, _destinatariEffettivi, _riferimentoInvio);
+        return "Invio registrato.";
+    });
+
+    private Task RegistraRicevutaAsync() => EseguiAsync(async () =>
+    {
+        await Qualifiche.RegistraRicevutaAsync(CommessaId, ComunicazioneId, _ricevutaIl ?? throw new OperazioneNonValidaException("Indica la data della ricevuta."),
+            _riferimentoRicevuta, _ricevutaDocumentoId);
+        return "Ricevuta acquisita.";
+    });
+
+    private Task AnnullaAsync() => EseguiAsync(async () =>
+    {
+        await Qualifiche.AnnullaAsync(CommessaId, ComunicazioneId, _motivo ?? "");
+        return "Comunicazione annullata.";
+    });
+
+    private async Task EseguiAsync(Func<Task<string>> operazione)
+    {
+        _occupato = true;
+        try
+        {
+            var esito = await operazione();
+            await CaricaAsync();
+            (_messaggio, _errore) = (esito, false);
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore, _conferma) = (ex.Message, true, false);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task EliminaAsync()
+    {
+        try
+        {
+            await Qualifiche.EliminaBozzaAsync(CommessaId, ComunicazioneId);
+            await OnChiuso.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private Task ChiudiAsync() => OnChiuso.InvokeAsync();
+}

@@ -1,0 +1,93 @@
+@page "/fornitori/{FornitoreId:guid}/fascicolo"
+@* Fascicolo del fornitore: qualificazioni in tutte le commesse, documenti verificati e comunicazioni a DL, RUP e CSE. *@
+@inject QualificheService Qualifiche
+@inject FornitoriService Fornitori
+@inject CommesseService Commesse
+
+<PageTitle>Fascicolo fornitore — Corico</PageTitle>
+
+<div class="intestazione">
+    <h1>Fascicolo – @(_fornitore?.Denominazione ?? "fornitore")</h1>
+    <a class="pulsante" href="fornitori">Elenco fornitori</a>
+</div>
+
+@if (_fornitore is { } f)
+{
+    <p class="testo-secondario">
+        @string.Join(" · ", new[] { f.PartitaIva is { Length: > 0 } pi ? "P. IVA " + pi : null, f.CodiceFiscale is { Length: > 0 } cf ? "C.F. " + cf : null,
+            string.Join(" ", new[] { f.Indirizzo, f.Comune, f.Provincia }.Where(x => !string.IsNullOrWhiteSpace(x))) }.Where(x => !string.IsNullOrWhiteSpace(x)))
+    </p>
+}
+
+@if (_fascicolo is null)
+{
+    <p class="testo-secondario">Caricamento…</p>
+}
+else if (_fascicolo.Count == 0)
+{
+    <p class="testo-secondario">Nessuna qualificazione per questo fornitore. Si apre dalla commessa, scheda «Qualifiche fornitori».</p>
+}
+else
+{
+    @foreach (var (q, comunicazioni) in _fascicolo)
+    {
+        <div class="riquadro">
+            <div class="intestazione-riquadro">
+                <h3>@NomeCommessa(q.CommessaId) – @Testi.TipoOperatore(q.Tipo)</h3>
+                <span class="etichetta etichetta-qualifica-@q.Stato.ToString().ToLowerInvariant()">@Testi.StatoQualifica(q.Stato)</span>
+            </div>
+            <p>
+                @if (!string.IsNullOrWhiteSpace(q.OggettoPrestazioni)) { <span>@q.OggettoPrestazioni. </span> }
+                @if (q.DataConclusione is { } d) { <span>Esito del @Formato.Data(d), Direttore di cantiere @q.DirettoreCantiere. </span> }
+                @if (q.Autorizzazione != StatoAutorizzazione.NonNecessaria) { <span>Autorizzazione: @Testi.Autorizzazione(q.Autorizzazione)@(q.RiferimentoAutorizzazione is null ? "" : $" ({q.RiferimentoAutorizzazione})").</span> }
+            </p>
+            <table class="tabella">
+                <thead><tr><th>Documento verificato</th><th>Verificato</th><th>Validità fino al</th><th>Riservato</th><th>File</th></tr></thead>
+                <tbody>
+                    @foreach (var doc in q.Documenti)
+                    {
+                        <tr>
+                            <td>@doc.Descrizione</td>
+                            <td>@(doc.Verificato ? "Sì" : "No")</td>
+                            <td>@Formato.Data(doc.Scadenza)</td>
+                            <td>@(doc.Riservato ? "Sì" : "")</td>
+                            <td>@if (doc.DocumentoId is { } id) { <a href="@($"documenti/{id}/scarica")" target="_blank">Apri</a> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (comunicazioni.Count > 0)
+            {
+                <h4>Comunicazioni</h4>
+                <ul>
+                    @foreach (var c in comunicazioni)
+                    {
+                        <li>
+                            <strong>@c.NumeroVisibile</strong> del @Formato.Data(c.DataEmissione) – @Testi.StatoComunicazione(c.Stato)
+                            @if (c.InviataIl is { } inv) { <span>, inviata il @Formato.Data(inv)</span> }
+                            @if (c.DocumentoId is { } pdf) { <span> · <a href="@($"documenti/{pdf}/scarica")" target="_blank">PDF</a></span> }
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid FornitoreId { get; set; }
+
+    private DatiFornitore? _fornitore;
+    private IReadOnlyList<(QualificaFornitore Qualifica, IReadOnlyList<ComunicazioneQualifica> Comunicazioni)>? _fascicolo;
+    private readonly Dictionary<Guid, string> _commesse = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _fornitore = await Fornitori.OttieniAsync(FornitoreId);
+        _fascicolo = await Qualifiche.FascicoloAsync(FornitoreId);
+        foreach (var id in _fascicolo.Select(x => x.Qualifica.CommessaId).Distinct())
+            if (await Commesse.OttieniAsync(id) is { } c) _commesse[id] = $"Commessa {c.Codice} – {c.Descrizione}";
+    }
+
+    private string NomeCommessa(Guid id) => _commesse.GetValueOrDefault(id, "Commessa");
+}

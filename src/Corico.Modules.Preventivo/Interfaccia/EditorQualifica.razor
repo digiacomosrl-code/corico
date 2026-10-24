@@ -1,0 +1,447 @@
+@* Qualificazione di un fornitore per la commessa: istruttoria, documenti verificati, esito del Direttore di cantiere,
+   autorizzazione collegata e comunicazioni a DL, RUP e CSE. *@
+@inject QualificheService Qualifiche
+@inject AttoriService Attori
+@inject DocumentiService Documenti
+@inject ConflittiService Conflitti
+@inject SessioneUtente Sessione
+@inject TimeProvider Orologio
+
+@if (_comunicazione is { } com)
+{
+    <EditorComunicazione CommessaId="CommessaId" ComunicazioneId="com" OnChiuso="ChiudiComunicazioneAsync" />
+    return;
+}
+
+@if (_q is null)
+{
+    <div class="riquadro"><p class="testo-secondario">Caricamento…</p></div>
+    return;
+}
+@{ var q = _q; var istruttoria = q.Stato == StatoQualifica.InIstruttoria; var modificabile = istruttoria && !Sessione.SolaConsultazione; }
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Qualificazione – @q.Fornitore</h3>
+        <div class="azioni-in-linea">
+            <span class="etichetta etichetta-qualifica-@q.Stato.ToString().ToLowerInvariant()">@Testi.StatoQualifica(q.Stato)</span>
+            <a class="pulsante" href="@($"fornitori/{q.FornitoreId}/fascicolo")">Fascicolo del fornitore</a>
+            <button class="pulsante" @onclick="ChiudiAsync">Chiudi</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio @(_errore ? "messaggio-errore" : "messaggio-ok")" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (!istruttoria)
+    {
+        <p>
+            Esito <strong>@Testi.StatoQualifica(q.Stato).ToLowerInvariant()</strong> il @Formato.Data(q.DataConclusione),
+            Direttore di cantiere <strong>@q.DirettoreCantiere</strong>; registrato da @q.ApprovataDa il @Formato.DataOra(q.ApprovataIl).
+        </p>
+    }
+
+    <div class="griglia-form">
+        <label>
+            Tipologia di operatore
+            <select @bind="q.Tipo" disabled="@(!modificabile)">
+                @foreach (var t in Enum.GetValues<TipoOperatore>())
+                {
+                    <option value="@t">@Testi.TipoOperatore(t)</option>
+                }
+            </select>
+        </label>
+        <label>Riferimento al fascicolo (facoltativo) <input @bind="q.RiferimentoFascicolo" disabled="@(!modificabile)" placeholder="Es. cartella o protocollo interno" /></label>
+        <label class="largo">Oggetto delle prestazioni o lavorazioni <input @bind="q.OggettoPrestazioni" disabled="@(!modificabile)" /></label>
+        <label class="largo">Limitazioni o prescrizioni <textarea rows="2" @bind="q.Prescrizioni" disabled="@(!modificabile)"></textarea></label>
+        <label class="largo">Note interne <textarea rows="2" @bind="q.Note" disabled="@(!modificabile)"></textarea></label>
+    </div>
+
+    <h4>Documenti verificati</h4>
+    <p class="testo-secondario">
+        Spunta ogni documento dopo averlo verificato e, se vuoi, carica il file: resta nel fascicolo del fornitore e nei documenti della commessa.
+        I documenti segnati come riservati non si possono allegare alla comunicazione.
+    </p>
+    <div class="scorrevole">
+        <table class="tabella">
+            <thead><tr><th>N.</th><th>Documento</th><th>Verificato</th><th>Validità fino al</th><th>Riservato</th><th>File</th>@if (modificabile) { <th></th> }</tr></thead>
+            <tbody>
+                @foreach (var d in q.Documenti.OrderBy(d => d.Ordine))
+                {
+                    <tr>
+                        <td>@d.Ordine</td>
+                        @if (modificabile)
+                        {
+                            <td><input class="largo @(string.IsNullOrWhiteSpace(d.Descrizione) ? "da-compilare" : "")" @bind="d.Descrizione" /></td>
+                            <td><input type="checkbox" @bind="d.Verificato" aria-label="Verificato" /></td>
+                            <td><input type="date" @bind="d.Scadenza" /></td>
+                            <td><input type="checkbox" @bind="d.Riservato" aria-label="Riservato" /></td>
+                            <td class="nowrap">
+                                @if (d.DocumentoId is { } doc)
+                                {
+                                    <a href="@($"documenti/{doc}/scarica")" target="_blank">@NomeDocumento(doc)</a>
+                                    <button class="pulsante piccolo" title="Scollega il file" @onclick="() => d.DocumentoId = null">✕</button>
+                                }
+                                else
+                                {
+                                    <label class="pulsante piccolo carica">Carica file… <InputFile OnChange="e => CaricaFileAsync(d, e)" /></label>
+                                    <select class="stretto" @onchange="e => d.DocumentoId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null" aria-label="Documento già in archivio">
+                                        <option value="">o scegli dall'archivio…</option>
+                                        @foreach (var a in _archivio)
+                                        {
+                                            <option value="@a.Id">@a.NomeOriginale</option>
+                                        }
+                                    </select>
+                                }
+                            </td>
+                            <td><button class="pulsante piccolo" title="Togli il documento" @onclick="() => q.Documenti.Remove(d)">✕</button></td>
+                        }
+                        else
+                        {
+                            <td>@d.Descrizione</td>
+                            <td>@(d.Verificato ? "Sì" : "No")</td>
+                            <td>@Formato.Data(d.Scadenza)</td>
+                            <td>@(d.Riservato ? "Sì" : "")</td>
+                            <td>
+                                @if (d.DocumentoId is { } doc)
+                                {
+                                    <a href="@($"documenti/{doc}/scarica")" target="_blank">@NomeDocumento(doc)</a>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (modificabile)
+    {
+        <div class="riga-form">
+            <button class="pulsante piccolo" @onclick="AggiungiDocumento">+ Documento</button>
+        </div>
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@_occupato" @onclick="SalvaAsync">Salva</button>
+            @if (!_eliminazione)
+            {
+                <button class="pulsante" @onclick="() => _eliminazione = true">Elimina…</button>
+            }
+            else
+            {
+                <button class="pulsante pericolo" @onclick="EliminaAsync">Conferma eliminazione</button>
+                <button class="pulsante" @onclick="() => _eliminazione = false">Indietro</button>
+            }
+        </div>
+
+        <h4>Esito della qualificazione</h4>
+        <p class="testo-secondario">
+            L'esito si registra quando il Direttore di cantiere responsabile ha approvato la qualificazione. Dopo l'esito la scheda non si modifica più;
+            con l'esito positivo Corico prepara subito la bozza della comunicazione a DL, RUP e CSE.
+        </p>
+        <div class="griglia-form">
+            <label>Data di conclusione <input type="date" @bind="_dataConclusione" /></label>
+            <label>
+                Direttore di cantiere
+                <select @bind="_direttoreId">
+                    <option value="">— scrivi il nominativo —</option>
+                    @foreach (var f in _direttori)
+                    {
+                        <option value="@f.AttoreId">@f.NomeCompleto</option>
+                    }
+                </select>
+            </label>
+            @if (_direttoreId is null)
+            {
+                <label>Nominativo del Direttore di cantiere <input @bind="_direttore" placeholder="@(_direttori.Count == 0 ? "Nessun Direttore di cantiere negli Attori della commessa" : "")" /></label>
+            }
+        </div>
+        @foreach (var i in QualificheService.ImpedimentiApprovazione(q))
+        {
+            <div class="segnalazione segnalazione-attenzione">@i</div>
+        }
+        <div class="azioni">
+            @if (!_confermaEsito)
+            {
+                <button class="pulsante primario" disabled="@_occupato" @onclick="ChiediApprovazioneAsync">Registra esito positivo…</button>
+                <button class="pulsante" @onclick="() => (_negativo, _motivo) = (true, null)">Esito negativo…</button>
+            }
+            else
+            {
+                <span class="testo-differenza">Confermi l'approvazione del Direttore di cantiere con esito positivo? La scheda non si modificherà più.</span>
+                <button class="pulsante primario" disabled="@_occupato" @onclick="ApprovaAsync">Conferma esito positivo</button>
+                <button class="pulsante" @onclick="() => _confermaEsito = false">Indietro</button>
+            }
+        </div>
+        @if (_negativo)
+        {
+            <div class="riga-form">
+                <input class="largo" placeholder="Motivo dell'esito negativo (obbligatorio)" @bind="_motivo" />
+                <button class="pulsante pericolo" @onclick="EsitoNegativoAsync">Conferma esito negativo</button>
+                <button class="pulsante" @onclick="() => _negativo = false">Indietro</button>
+            </div>
+        }
+    }
+</div>
+
+<div class="riquadro">
+    <h3>Autorizzazione collegata</h3>
+    <p class="testo-secondario">
+        Stato dell'eventuale autorizzazione al subappalto o di altre procedure autorizzative: si gestisce qui, separatamente dall'esito della
+        qualificazione interna, che non la sostituisce.
+    </p>
+    <div class="griglia-form">
+        <label>
+            Stato
+            <select @bind="q.Autorizzazione" disabled="@Sessione.SolaConsultazione">
+                @foreach (var s in Enum.GetValues<StatoAutorizzazione>())
+                {
+                    <option value="@s">@Testi.Autorizzazione(s)</option>
+                }
+            </select>
+        </label>
+        <label>Data <input type="date" @bind="q.DataAutorizzazione" disabled="@Sessione.SolaConsultazione" /></label>
+        <label class="largo">Riferimento (richiesta, provvedimento, protocollo) <input @bind="q.RiferimentoAutorizzazione" disabled="@Sessione.SolaConsultazione" /></label>
+    </div>
+    @if (!istruttoria && !Sessione.SolaConsultazione)
+    {
+        <div class="azioni"><button class="pulsante" disabled="@_occupato" @onclick="SalvaAsync">Salva autorizzazione</button></div>
+    }
+</div>
+
+@if (q.Stato == StatoQualifica.Approvata || _comunicazioni.Count > 0)
+{
+    <div class="riquadro">
+        <div class="intestazione-riquadro">
+            <h3>Comunicazione a DL, RUP e CSE</h3>
+            @if (q.Stato == StatoQualifica.Approvata && !Sessione.SolaConsultazione && _comunicazioni.All(c => c.Stato == StatoComunicazione.Annullata))
+            {
+                <button class="pulsante primario" @onclick="NuovaBozzaAsync">Prepara una nuova comunicazione</button>
+            }
+        </div>
+        @if (_comunicazioni.Count == 0)
+        {
+            <p class="testo-secondario">Nessuna comunicazione.</p>
+        }
+        else
+        {
+            <table class="tabella">
+                <thead><tr><th>Numero</th><th>Data</th><th>Stato</th><th>Generata da</th><th>Invio</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in _comunicazioni)
+                    {
+                        <tr class="@(c.Stato == StatoComunicazione.Annullata ? "testo-secondario" : "")">
+                            <td class="nowrap"><strong>@c.NumeroVisibile</strong></td>
+                            <td>@Formato.Data(c.DataEmissione)</td>
+                            <td><span class="etichetta etichetta-comunicazione-@c.Stato.ToString().ToLowerInvariant()">@Testi.StatoComunicazione(c.Stato)</span></td>
+                            <td class="testo-secondario">@(c.GenerataDa is null ? "" : $"{c.GenerataDa}, {Formato.DataOra(c.GenerataIl)}")</td>
+                            <td>@(c.InviataIl is { } inv ? $"{Formato.Data(inv)} ({(c.Modalita is { } m ? Testi.Modalita(m) : "")})" : "")</td>
+                            <td><button class="pulsante piccolo" @onclick="() => _comunicazione = c.Id">Apri</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@if (!istruttoria && Sessione.Amministratore && _comunicazioni.All(c => c.Stato is StatoComunicazione.Bozza or StatoComunicazione.Annullata))
+{
+    <div class="azioni">
+        <button class="pulsante" @onclick="RiapriAsync">Riporta in istruttoria (amministratore)</button>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+    [Parameter, EditorRequired] public Guid QualificaId { get; set; }
+    [Parameter] public Guid? ComunicazioneIniziale { get; set; }
+    [Parameter] public EventCallback OnChiuso { get; set; }
+
+    private const long DimensioneMassima = 200L * 1024 * 1024;
+
+    private QualificaFornitore? _q;
+    private IReadOnlyList<ComunicazioneQualifica> _comunicazioni = [];
+    private IReadOnlyList<FiguraCommessa> _direttori = [];
+    private IReadOnlyList<DocumentoRiepilogo> _archivio = [];
+    private Guid? _comunicazione, _direttoreId;
+    private DateOnly _dataConclusione;
+    private string? _direttore, _motivo, _messaggio;
+    private bool _errore, _occupato, _eliminazione, _confermaEsito, _negativo;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _comunicazione = ComunicazioneIniziale;
+        _dataConclusione = DateOnly.FromDateTime(Orologio.GetLocalNow().DateTime);
+        _direttori = await Attori.FigureInCaricaAsync(CommessaId, null, RuoloCommessa.DirettoreCantiere);
+        _direttoreId = _direttori.Count > 0 ? _direttori[0].AttoreId : null;
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync()
+    {
+        _q = await Qualifiche.OttieniAsync(CommessaId, QualificaId);
+        if (_q is null) { await OnChiuso.InvokeAsync(); return; }
+        _comunicazioni = await Qualifiche.ComunicazioniAsync(CommessaId, QualificaId);
+        _archivio = await Documenti.ElencoAsync(CommessaId);
+        (_confermaEsito, _negativo, _eliminazione) = (false, false, false);
+    }
+
+    private string NomeDocumento(Guid id) => _archivio.FirstOrDefault(a => a.Id == id)?.NomeOriginale ?? "file";
+
+    private void AggiungiDocumento()
+    {
+        if (_q is null) return;
+        _q.Documenti.Add(new DocumentoQualifica
+        {
+            QualificaId = _q.Id, CommessaId = CommessaId, Ordine = _q.Documenti.Count == 0 ? 1 : _q.Documenti.Max(d => d.Ordine) + 1,
+        });
+    }
+
+    private async Task CaricaFileAsync(DocumentoQualifica d, InputFileChangeEventArgs e)
+    {
+        try
+        {
+            await using var stream = e.File.OpenReadStream(DimensioneMassima);
+            var esito = await Documenti.CaricaAsync(stream, e.File.Name, e.File.ContentType, CommessaId, QualificheService.TipoDocumentoQualifica);
+            if (!esito.GiaPresente)
+                await Documenti.AggiornaMetadatiAsync(esito.Documento.Id, QualificheService.TipoDocumentoQualifica,
+                    $"{d.Descrizione} – {_q!.Fornitore}".Trim(' ', '–'), null, CommessaId);
+            d.DocumentoId = esito.Documento.Id;
+            _archivio = await Documenti.ElencoAsync(CommessaId);
+            (_messaggio, _errore) = (esito.GiaPresente ? $"«{e.File.Name}» era già in archivio: collegato al documento." : $"«{e.File.Name}» caricato. Ricorda di salvare.", false);
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or IOException)
+        {
+            (_messaggio, _errore) = ($"«{e.File.Name}» non caricato: {ex.Message}", true);
+        }
+    }
+
+    private async Task<bool> SalvaInternoAsync()
+    {
+        if (_q is null) return false;
+        try
+        {
+            await Qualifiche.SalvaAsync(CommessaId, _q);
+            await CaricaAsync();
+            return true;
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+        return false;
+    }
+
+    private async Task SalvaAsync()
+    {
+        _occupato = true;
+        if (await SalvaInternoAsync()) (_messaggio, _errore) = ("Qualificazione salvata.", false);
+        _occupato = false;
+    }
+
+    private async Task ChiediApprovazioneAsync()
+    {
+        _occupato = true;
+        if (await SalvaInternoAsync())
+        {
+            _messaggio = null;
+            if (QualificheService.ImpedimentiApprovazione(_q!).Count == 0) _confermaEsito = true;
+            else (_messaggio, _errore) = ("Prima di registrare l'esito correggi i punti segnalati.", true);
+        }
+        _occupato = false;
+    }
+
+    private async Task ApprovaAsync()
+    {
+        _occupato = true;
+        try
+        {
+            var bozza = await Qualifiche.ApprovaAsync(CommessaId, QualificaId, _dataConclusione, _direttoreId, _direttore);
+            await CaricaAsync();
+            _comunicazione = bozza;
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, null, CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore, _confermaEsito) = (ex.Message, true, false);
+        }
+        finally
+        {
+            _occupato = false;
+        }
+    }
+
+    private async Task EsitoNegativoAsync()
+    {
+        try
+        {
+            if (!await SalvaInternoAsync()) return;
+            await Qualifiche.EsitoNegativoAsync(CommessaId, QualificaId, _dataConclusione, _direttoreId, _direttore, _motivo ?? "");
+            (_messaggio, _errore) = ("Esito negativo registrato: nessuna comunicazione sarà preparata.", false);
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task RiapriAsync()
+    {
+        try
+        {
+            await Qualifiche.RiapriAsync(CommessaId, QualificaId);
+            (_messaggio, _errore) = ("Qualificazione riportata in istruttoria.", false);
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task EliminaAsync()
+    {
+        try
+        {
+            await Qualifiche.EliminaAsync(CommessaId, QualificaId);
+            await OnChiuso.InvokeAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task NuovaBozzaAsync()
+    {
+        try
+        {
+            _comunicazione = await Qualifiche.NuovaBozzaAsync(CommessaId, QualificaId);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task ChiudiComunicazioneAsync()
+    {
+        _comunicazione = null;
+        await CaricaAsync();
+    }
+
+    private Task ChiudiAsync() => OnChiuso.InvokeAsync();
+}

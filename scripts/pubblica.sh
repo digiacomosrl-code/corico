@@ -9,7 +9,7 @@
 #     --ocr-da   prende la cartella Corico/ocr da un rilascio precedente se strumenti/ocr non esiste
 #     --uscita   cartella in cui scrivere il file finale (predefinita: publish)
 #     --zip      crea anche lo zip tradizionale Corico-<versione>-win-x64.zip
-# Richiede: dotnet (SDK 10), makensis (pacchetto nsis), 7z (solo con --ocr-da), zip (solo con --zip).
+# Richiede: dotnet (SDK 10), makensis (pacchetto nsis), zip, 7z (solo con --ocr-da).
 set -euo pipefail
 
 ocr_da=""
@@ -73,10 +73,14 @@ cp scripts/installa.* scripts/aggiorna.cmd scripts/aggiorna.ps1 scripts/pubblica
 echo "Creazione del file unico di aggiornamento..."
 makensis -V2 -DVERSIONE="$versione" -DORIGINE="$radice/$pacchetto" \
     -DUSCITA="$uscita/Corico-$versione-aggiorna.exe" scripts/aggiornamento.nsi
+# L'app di Claude non lascia scaricare i .exe: si consegna il file unico dentro uno zip senza compressione
+# (si apre lo zip e si fa doppio clic sull'eseguibile, senza estrarre).
+rm -f "$uscita/Corico-$versione-aggiorna.zip"
+(cd "$uscita" && zip -0 -q "Corico-$versione-aggiorna.zip" "Corico-$versione-aggiorna.exe")
 
 if $crea_zip; then
     rm -f "$uscita/Corico-$versione-win-x64.zip"
     (cd "$pacchetto" && zip -qr "$uscita/Corico-$versione-win-x64.zip" .)
 fi
 
-echo "Rilascio $versione pronto: $uscita/Corico-$versione-aggiorna.exe"
+echo "Rilascio $versione pronto: $uscita/Corico-$versione-aggiorna.zip (contiene Corico-$versione-aggiorna.exe)"

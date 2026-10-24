@@ -44,6 +44,21 @@ dotnet ef migrations add NomeMigrazione -p src/Corico.Core -s src/Corico.Core -o
 La cartella dati (`D:\CORICO`) contiene `Dati\`, `Documenti\`, `Backup\`, `Log\` e `Config\`.
 Reinstallare o aggiornare il programma non modifica mai la cartella dati.
 
+## Rilascio con un solo file (standard)
+
+Ogni versione si consegna come **un solo file**, `Corico-<versione>-aggiorna.exe`:
+
+```bash
+scripts/pubblica.sh --ocr-da Corico-<precedente>-aggiorna.exe   # da Linux (test, pacchetto, file unico)
+```
+
+Su Windows `scripts\pubblica.ps1` crea lo stesso file se NSIS (`makensis`) è installato.
+
+Sul PC basta un doppio clic sul file: estrae il pacchetto in una cartella temporanea (controllandone
+l'integrità), esegue la procedura guidata `aggiorna.ps1` descritta sotto con tutte le sue garanzie e alla
+fine elimina i file temporanei. Se Corico non è installato propone l'installazione (`installa.cmd`).
+`--zip` crea anche lo zip tradizionale.
+
 ## Aggiornamento
 
 1. `powershell -ExecutionPolicy Bypass -File scripts\pubblica.ps1` — esegue i test e crea il nuovo pacchetto con la scheda `rilascio.json`.

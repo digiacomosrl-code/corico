@@ -40,3 +40,14 @@ $modifiche = (git status --porcelain)
 Copy-Item -Path "scripts\installa.*", "scripts\aggiorna.*", "scripts\pubblica-tailscale.*" -Destination (Split-Path $Destinazione -Parent)
 
 Write-Host "Pacchetto $versione ($commit) pronto in $Destinazione"
+
+# File unico di aggiornamento (scripts\aggiornamento.nsi), formato standard dei rilasci: richiede NSIS (makensis).
+$origine = (Resolve-Path (Split-Path $Destinazione -Parent)).Path
+$fileUnico = Join-Path (Split-Path $origine -Parent) "Corico-$versione-aggiorna.exe"
+if (Get-Command makensis -ErrorAction SilentlyContinue) {
+    makensis -V2 "-DVERSIONE=$versione" "-DORIGINE=$origine" "-DUSCITA=$fileUnico" scripts\aggiornamento.nsi
+    if ($LASTEXITCODE -ne 0) { throw "Creazione del file unico non riuscita." }
+    Write-Host "File unico pronto: $fileUnico"
+} else {
+    Write-Warning "NSIS (makensis) non trovato: file unico Corico-$versione-aggiorna.exe non creato."
+}

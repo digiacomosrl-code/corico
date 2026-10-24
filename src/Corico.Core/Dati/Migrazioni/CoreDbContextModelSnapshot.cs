@@ -17,6 +17,82 @@ namespace Corico.Core.Dati.Migrazioni
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
+            modelBuilder.Entity("Corico.Core.Dominio.Attore", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Archiviato")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Cap")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Comune")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Ente")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Indirizzo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nominativo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Pec")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provincia")
+                        .HasMaxLength(5)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Telefono")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Titolo")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Nominativo");
+
+                    b.ToTable("CORE_Attori", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Core.Dominio.Cliente", b =>
                 {
                     b.Property<Guid>("Id")
@@ -356,6 +432,59 @@ namespace Corico.Core.Dati.Migrazioni
                     b.ToTable("CORE_Impostazioni", (string)null);
                 });
 
+            modelBuilder.Entity("Corico.Core.Dominio.IncaricoCommessa", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("Al")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AttoreId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CommessaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatoDa")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("Dal")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModificatoDa")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModificatoIl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ruolo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Versione")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttoreId");
+
+                    b.HasIndex("CommessaId", "Ruolo");
+
+                    b.ToTable("CORE_IncarichiCommessa", (string)null);
+                });
+
             modelBuilder.Entity("Corico.Core.Dominio.RegistroBackup", b =>
                 {
                     b.Property<long>("Id")
@@ -601,6 +730,23 @@ namespace Corico.Core.Dati.Migrazioni
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Commessa");
+                });
+
+            modelBuilder.Entity("Corico.Core.Dominio.IncaricoCommessa", b =>
+                {
+                    b.HasOne("Corico.Core.Dominio.Attore", "Attore")
+                        .WithMany()
+                        .HasForeignKey("AttoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Corico.Core.Dominio.Commessa", null)
+                        .WithMany()
+                        .HasForeignKey("CommessaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Attore");
                 });
 #pragma warning restore 612, 618
         }

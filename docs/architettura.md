@@ -47,6 +47,15 @@ Riferimento: prompt strategico v2.1, sezioni 3, 4, 6, 9, 11, 18.
 - Chiave d'accesso cifrata con DPAPI (ambito macchina) in `Config\ai-chiave.bin`, mai nel database né nel codice.
 - Configurazione e registro nella pagina «Intelligenza artificiale» (solo amministratore).
 
+## Attori della commessa (Core, 1.2.5)
+
+- Archivio unico `CORE_Attori` (sezione «Attori» del menu): nominativo, titolo, ente o società, indirizzo, email, PEC, telefono.
+- Figure della commessa in `CORE_IncarichiCommessa`: commessa, attore, `RuoloCommessa` (RUP, DL, CSE, direttore di cantiere,
+  capocantiere; valori salvati, si aggiungono solo in coda), date «Dal»/«Al» e note. Più soggetti per figura; la sostituzione
+  in corso d'opera chiude l'incarico il giorno prima del subentro e ne apre uno nuovo, quindi lo storico resta completo.
+- Per comunicazioni e lettere usare `AttoriService.FigureInCaricaAsync(commessa, data, ruolo)`: restituisce le figure in carica
+  alla data con tutti i recapiti dell'attore.
+
 ## Regole trasversali
 
 | Regola | Implementazione |

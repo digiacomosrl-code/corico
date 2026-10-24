@@ -1,0 +1,209 @@
+@page "/attori"
+@inject SessioneUtente Sessione
+@inject ConflittiService Conflitti
+@inject AttoriService Attori
+
+<PageTitle>Attori — Corico</PageTitle>
+
+<div class="intestazione">
+    <div>
+        <h1>Attori</h1>
+        <p class="testo-secondario">Archivio delle persone che ricoprono le figure delle commesse: RUP, direttore dei lavori, CSE, direttore di cantiere, capocantiere.</p>
+    </div>
+    <div class="riga-form">
+        @if (!Sessione.SolaConsultazione)
+        {
+            <button class="pulsante primario" @onclick="() => Modifica(new DatiAttore())">Nuovo attore</button>
+        }
+    </div>
+</div>
+
+<Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+@if (_modifica is not null)
+{
+    <EditForm Model="_modifica" OnValidSubmit="SalvaAsync" class="riquadro">
+        <h3>@(_modifica.Id == Guid.Empty ? "Nuovo attore" : "Modifica attore")</h3>
+        <p class="ultima-modifica">@_modifica.UltimaModifica</p>
+        <div class="griglia-form">
+            <label>Titolo <InputText @bind-Value="_modifica.Titolo" placeholder="Ing., Arch., Geom.…" /></label>
+            <label>Nome e cognome <InputText @bind-Value="_modifica.Nominativo" /></label>
+            <label class="largo">Ente o società <InputText @bind-Value="_modifica.Ente" placeholder="Es. Comune di Caltagirone, Studio tecnico…" /></label>
+            <label>Email <InputText @bind-Value="_modifica.Email" type="email" /></label>
+            <label>PEC <InputText @bind-Value="_modifica.Pec" type="email" /></label>
+            <label>Telefono <InputText @bind-Value="_modifica.Telefono" /></label>
+            <span></span>
+            <label class="largo">Indirizzo <InputText @bind-Value="_modifica.Indirizzo" /></label>
+            <label>CAP <InputText @bind-Value="_modifica.Cap" maxlength="5" /></label>
+            <label>Comune <InputText @bind-Value="_modifica.Comune" /></label>
+            <label>Provincia <InputText @bind-Value="_modifica.Provincia" maxlength="2" /></label>
+            <span></span>
+            <label class="largo">Note <InputTextArea @bind-Value="_modifica.Note" rows="2" /></label>
+        </div>
+        @if (_duplicati.Count > 0)
+        {
+            <div class="nota-mancanti">
+                Attenzione, possibili duplicati:
+                <ul>@foreach (var d in _duplicati) { <li>@d.Denominazione — @d.Motivo</li> }</ul>
+                Se si tratta di una persona diversa, premi di nuovo «Salva».
+            </div>
+        }
+        @if (_incarichi.Count > 0)
+        {
+            <div class="sotto-riquadro">
+                <strong>Figure ricoperte nelle commesse</strong>
+                <ul>
+                    @foreach (var i in _incarichi)
+                    {
+                        <li>
+                            <a href="commesse/@i.CommessaId">@i.CodiceCommessa — @i.DescrizioneCommessa</a>:
+                            @RuoliCommessa.Testo(i.Ruolo) @Periodo(i.Dal, i.Al)
+                        </li>
+                    }
+                </ul>
+                <small class="testo-secondario">Le modifiche ai recapiti valgono per tutte le commesse; i dati precedenti restano nello storico.</small>
+            </div>
+        }
+        <div class="azioni">
+            @if (!Sessione.SolaConsultazione)
+            {
+                <button type="submit" class="pulsante primario">Salva</button>
+            }
+            <button type="button" class="pulsante" @onclick="() => _modifica = null">Annulla</button>
+            @if (_modifica.Id != Guid.Empty && !Sessione.SolaConsultazione)
+            {
+                <span class="spazio"></span>
+                <button type="button" class="pulsante" @onclick="ArchiviaAsync">@(_modifica.Archiviato ? "Riattiva" : "Archivia")</button>
+                @if (Sessione.Amministratore && _incarichi.Count == 0)
+                {
+                    <button type="button" class="pulsante" @onclick="EliminaAsync">@(_confermaElimina ? "Conferma eliminazione" : "Elimina")</button>
+                }
+            }
+        </div>
+    </EditForm>
+}
+
+<div class="filtri">
+    <input type="search" placeholder="Cerca per nome, ente, email, PEC, comune…" @bind="_cerca" @bind:event="oninput" @bind:after="CaricaAsync" />
+    <label class="spunta"><input type="checkbox" @bind="_archiviati" @bind:after="CaricaAsync" /> Mostra archiviati</label>
+</div>
+
+<table class="tabella">
+    <thead><tr><th>Nominativo</th><th>Ente o società</th><th>Email</th><th>PEC</th><th>Telefono</th><th>Comune</th></tr></thead>
+    <tbody>
+        @foreach (var a in _elenco)
+        {
+            <tr class="cliccabile @(a.Archiviato ? "riga-archiviata" : "")" @onclick="() => Modifica(a)">
+                <td>@a.NomeCompleto</td><td>@a.Ente</td><td>@a.Email</td><td>@a.Pec</td><td>@a.Telefono</td>
+                <td>@a.Comune @(a.Provincia is null ? "" : $"({a.Provincia})")</td>
+            </tr>
+        }
+        @if (_elenco.Count == 0)
+        {
+            <tr><td colspan="6" class="testo-secondario">Nessun attore@(string.IsNullOrWhiteSpace(_cerca) ? ": inseriscilo con «Nuovo attore» oppure dai Dati generali della commessa." : $" per «{_cerca}».")</td></tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<DatiAttore> _elenco = [];
+    private DatiAttore? _modifica;
+    private IReadOnlyList<PossibileDuplicato> _duplicati = [];
+    private IReadOnlyList<IncaricoDiAttore> _incarichi = [];
+    private string? _cerca, _messaggio;
+    private bool _archiviati, _errore, _duplicatiConfermati, _confermaElimina;
+
+    protected override Task OnInitializedAsync() => CaricaAsync();
+
+    private async Task CaricaAsync() => _elenco = await Attori.ElencoAsync(_cerca, _archiviati);
+
+    private static string Periodo(DateOnly? dal, DateOnly? al) =>
+        (dal, al) switch
+        {
+            (null, null) => "(in carica)",
+            (_, null) => $"(dal {Formato.Data(dal)}, in carica)",
+            (null, _) => $"(fino al {Formato.Data(al)})",
+            _ => $"(dal {Formato.Data(dal)} al {Formato.Data(al)})",
+        };
+
+    private async Task Modifica(DatiAttore a)
+    {
+        _modifica = a.Clona();
+        _duplicati = [];
+        _duplicatiConfermati = _confermaElimina = false;
+        _incarichi = a.Id == Guid.Empty ? [] : await Attori.IncarichiDiAttoreAsync(a.Id);
+    }
+
+    private async Task SalvaAsync()
+    {
+        if (_modifica is null) return;
+        if (!_duplicatiConfermati)
+        {
+            _duplicati = await Attori.PossibiliDuplicatiAsync(_modifica);
+            if (_duplicati.Count > 0)
+            {
+                _duplicatiConfermati = true;
+                return;
+            }
+        }
+        try
+        {
+            await Attori.SalvaAsync(_modifica);
+            (_messaggio, _errore, _modifica) = ("Attore salvato.", false, null);
+            await CaricaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, SalvaAsync, RicaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task RicaricaAsync()
+    {
+        _modifica = null;
+        await CaricaAsync();
+    }
+
+    private async Task ArchiviaAsync()
+    {
+        if (_modifica is null) return;
+        try
+        {
+            await Attori.ImpostaArchiviazioneAsync(_modifica.Id, _modifica.Versione, !_modifica.Archiviato);
+            (_messaggio, _errore, _modifica) = ("Operazione eseguita.", false, null);
+            await CaricaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, ArchiviaAsync, RicaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task EliminaAsync()
+    {
+        if (_modifica is null) return;
+        if (!_confermaElimina)
+        {
+            _confermaElimina = true;
+            return;
+        }
+        try
+        {
+            await Attori.EliminaAsync(_modifica.Id);
+            (_messaggio, _errore, _modifica) = ("Attore eliminato.", false, null);
+            await CaricaAsync();
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+}

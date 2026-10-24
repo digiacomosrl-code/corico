@@ -1,0 +1,295 @@
+@* Figure della commessa (RUP, DL, CSE, direttore di cantiere, capocantiere) scelte dall'archivio «Attori».
+   Ogni operazione si salva subito e resta nello storico; i cambi in corso d'opera chiudono l'incarico precedente. *@
+@inject SessioneUtente Sessione
+@inject ConflittiService Conflitti
+@inject AttoriService Attori
+@using Corico.Modules.Preventivo.Interfaccia
+
+<div class="riquadro">
+    <div class="intestazione-riquadro">
+        <h3>Figure della commessa</h3>
+        <div class="riga-form">
+            <label class="spunta"><input type="checkbox" @bind="_storico" /> Mostra anche gli incarichi conclusi</label>
+            @if (!Sessione.SolaConsultazione)
+            {
+                <button type="button" class="pulsante" @onclick="() => Apri(Operazione.Aggiungi, null, RuoloCommessa.Rup)">Aggiungi figura…</button>
+            }
+        </div>
+    </div>
+
+    <Messaggio Testo="@_messaggio" Errore="_errore" OnChiudi="() => _messaggio = null" />
+
+    @if (_operazione is not null)
+    {
+        <div class="sotto-riquadro">
+            <strong>@TitoloOperazione()</strong>
+            <div class="griglia-form">
+                @if (_operazione == Operazione.Aggiungi)
+                {
+                    <label>
+                        Figura
+                        <select @bind="_ruolo">
+                            @foreach (var r in RuoliCommessa.Tutti)
+                            {
+                                <option value="@r">@RuoliCommessa.Testo(r)</option>
+                            }
+                        </select>
+                    </label>
+                }
+                @if (_operazione is Operazione.Aggiungi or Operazione.Sostituisci)
+                {
+                    <label>
+                        @(_operazione == Operazione.Sostituisci ? "Nuovo soggetto" : "Soggetto")
+                        <SceltaConRicerca Voci="_vociAttori" Etichetta="Attore" Segnaposto="Scrivi una parola per cercare nell'archivio Attori…"
+                                          Valore="@_attoreId?.ToString()"
+                                          ValoreChanged="v => _attoreId = Guid.TryParse(v, out var id) ? id : null" />
+                    </label>
+                    <div class="allinea-basso">
+                        <button type="button" class="pulsante" @onclick="() => _nuovoAttore = new DatiAttore()">Nuovo attore…</button>
+                    </div>
+                }
+                @if (_operazione is Operazione.Aggiungi or Operazione.Correggi or Operazione.Sostituisci)
+                {
+                    <label>@(_operazione == Operazione.Sostituisci ? "Subentra dal" : "In carica dal") <InputDate @bind-Value="_dal" /></label>
+                }
+                @if (_operazione is Operazione.Termina or Operazione.Correggi)
+                {
+                    <label>@(_operazione == Operazione.Termina ? "Fine incarico il" : "In carica fino al") <InputDate @bind-Value="_al" /></label>
+                }
+                <label class="largo">
+                    @(_operazione switch { Operazione.Sostituisci => "Motivo o riferimento della nuova nomina", Operazione.Termina => "Motivo", _ => "Note (es. estremi della nomina)" })
+                    <input @bind="_note" />
+                </label>
+            </div>
+
+            @if (_nuovoAttore is not null)
+            {
+                <div class="sotto-riquadro">
+                    <strong>Inserimento rapido nell'archivio Attori</strong>
+                    <div class="riga-form">
+                        <input placeholder="Titolo (Ing., Arch.…)" @bind="_nuovoAttore.Titolo" size="10" />
+                        <input placeholder="Nome e cognome" @bind="_nuovoAttore.Nominativo" />
+                        <input placeholder="Ente o società" @bind="_nuovoAttore.Ente" />
+                        <input placeholder="Email" type="email" @bind="_nuovoAttore.Email" />
+                        <input placeholder="PEC" type="email" @bind="_nuovoAttore.Pec" />
+                        <button type="button" class="pulsante primario" @onclick="CreaAttoreAsync">@(_duplicati.Count > 0 ? "Crea comunque" : "Crea")</button>
+                        <button type="button" class="pulsante" @onclick="() => { _nuovoAttore = null; _duplicati = []; }">Annulla</button>
+                    </div>
+                    @if (_duplicati.Count > 0)
+                    {
+                        <div class="nota-mancanti">
+                            Possibili duplicati:
+                            @foreach (var d in _duplicati)
+                            {
+                                <div>
+                                    @d.Denominazione (@d.Motivo)
+                                    <button type="button" class="pulsante piccolo" @onclick="() => UsaEsistente(d.Id)">Usa questo</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                    <small class="testo-secondario">Indirizzo e telefono si completano dalla sezione <a href="attori">Attori</a>.</small>
+                </div>
+            }
+
+            <div class="azioni">
+                <button type="button" class="pulsante primario" @onclick="ConfermaAsync">Conferma</button>
+                <button type="button" class="pulsante" @onclick="Chiudi">Annulla</button>
+            </div>
+        </div>
+    }
+
+    <table class="tabella tabella-figure">
+        <thead><tr><th style="width:15%">Figura</th><th style="width:19%">Soggetto</th><th style="width:19%">Email</th><th style="width:19%">PEC</th><th style="width:12%">Periodo</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var ruolo in RuoliCommessa.Tutti)
+            {
+                var righe = _incarichi.Where(i => i.Ruolo == ruolo && (_storico || i.InCarica || IsFuturo(i))).ToList();
+                @if (righe.Count == 0)
+                {
+                    <tr>
+                        <td>@RuoliCommessa.Testo(ruolo)</td>
+                        <td colspan="4" class="testo-secondario">— non indicato —</td>
+                        <td>
+                            @if (!Sessione.SolaConsultazione)
+                            {
+                                <button type="button" class="pulsante piccolo" @onclick="() => Apri(Operazione.Aggiungi, null, ruolo)">Aggiungi</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                @foreach (var i in righe)
+                {
+                    <tr class="@(i.InCarica || IsFuturo(i) ? "" : "riga-archiviata")" title="@i.UltimaModifica">
+                        <td>@RuoliCommessa.Testo(ruolo)</td>
+                        <td>
+                            @(string.IsNullOrWhiteSpace(i.Titolo) ? i.Nominativo : $"{i.Titolo} {i.Nominativo}")
+                            @if (!string.IsNullOrWhiteSpace(i.Ente)) { <div class="testo-secondario">@i.Ente</div> }
+                            @if (!string.IsNullOrWhiteSpace(i.Note)) { <div class="testo-secondario">@i.Note</div> }
+                        </td>
+                        <td>@if (i.Email is { } e) { <a href="mailto:@e">@e</a> }</td>
+                        <td>@if (i.Pec is { } p) { <a href="mailto:@p">@p</a> }</td>
+                        <td>@Periodo(i)</td>
+                        <td class="azioni-riga">
+                            @if (!Sessione.SolaConsultazione)
+                            {
+                                @if (i.Al is null)
+                                {
+                                    <button type="button" class="pulsante piccolo" title="Cambio in corso d'opera: l'incarico attuale si chiude e resta nello storico" @onclick="() => Apri(Operazione.Sostituisci, i, ruolo)">Sostituisci…</button>
+                                    <button type="button" class="pulsante piccolo" @onclick="() => Apri(Operazione.Termina, i, ruolo)">Termina…</button>
+                                    <button type="button" class="pulsante piccolo" title="Aggiunge un altro soggetto alla stessa figura" @onclick="() => Apri(Operazione.Aggiungi, null, ruolo)">+</button>
+                                }
+                                <button type="button" class="pulsante piccolo" @onclick="() => Apri(Operazione.Correggi, i, ruolo)">Correggi…</button>
+                                <button type="button" class="pulsante piccolo" title="Solo per un inserimento sbagliato: per un cambio reale usa «Sostituisci»" @onclick="() => EliminaAsync(i)">@(_daEliminare == i.Id ? "Conferma eliminazione" : "Elimina")</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+    <p class="testo-secondario">I recapiti vengono dall'archivio <a href="attori">Attori</a>. Ogni nomina, sostituzione o correzione è registrata nello storico della commessa.</p>
+</div>
+
+@code {
+    private enum Operazione { Aggiungi, Sostituisci, Termina, Correggi }
+
+    [Parameter, EditorRequired] public Guid CommessaId { get; set; }
+
+    private IReadOnlyList<DatiIncarico> _incarichi = [];
+    private IReadOnlyList<VoceScelta> _vociAttori = [];
+    private Operazione? _operazione;
+    private DatiIncarico? _incarico;
+    private RuoloCommessa _ruolo;
+    private Guid? _attoreId, _daEliminare;
+    private DateOnly? _dal, _al;
+    private string? _note, _messaggio;
+    private DatiAttore? _nuovoAttore;
+    private IReadOnlyList<PossibileDuplicato> _duplicati = [];
+    private bool _storico, _errore;
+
+    protected override Task OnInitializedAsync() => CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _incarichi = await Attori.IncarichiAsync(CommessaId);
+        _vociAttori = VoceScelta.Da(await Attori.ElencoAsync());
+    }
+
+    private static DateOnly Oggi => DateOnly.FromDateTime(DateTime.Now);
+
+    private static bool IsFuturo(DatiIncarico i) => i.Dal > Oggi;
+
+    private static string Periodo(DatiIncarico i) => (i.Dal, i.Al) switch
+    {
+        (null, null) => "in carica",
+        (_, null) when i.Dal > Oggi => $"dal {Formato.Data(i.Dal)} (non ancora iniziato)",
+        (_, null) => $"dal {Formato.Data(i.Dal)}",
+        (null, _) => $"fino al {Formato.Data(i.Al)}",
+        _ => $"dal {Formato.Data(i.Dal)} al {Formato.Data(i.Al)}",
+    };
+
+    private string TitoloOperazione() => _operazione switch
+    {
+        Operazione.Aggiungi => "Aggiungi un soggetto",
+        Operazione.Sostituisci => $"{RuoliCommessa.Testo(_ruolo)}: sostituzione di {_incarico?.Nominativo}",
+        Operazione.Termina => $"{RuoliCommessa.Testo(_ruolo)}: fine incarico di {_incarico?.Nominativo}",
+        _ => $"{RuoliCommessa.Testo(_ruolo)}: correzione dell'incarico di {_incarico?.Nominativo}",
+    };
+
+    private void Apri(Operazione operazione, DatiIncarico? incarico, RuoloCommessa ruolo)
+    {
+        (_operazione, _incarico, _ruolo, _attoreId, _nuovoAttore, _duplicati, _daEliminare) = (operazione, incarico, ruolo, null, null, [], null);
+        (_dal, _al, _note) = operazione switch
+        {
+            Operazione.Sostituisci => (Oggi, (DateOnly?)null, (string?)null),
+            Operazione.Termina => (null, Oggi, null),
+            Operazione.Correggi => (incarico!.Dal, incarico.Al, incarico.Note),
+            _ => (null, null, null),
+        };
+    }
+
+    private void Chiudi() => (_operazione, _incarico, _nuovoAttore, _duplicati) = (null, null, null, []);
+
+    private async Task ConfermaAsync()
+    {
+        try
+        {
+            switch (_operazione)
+            {
+                case Operazione.Aggiungi:
+                    if (_attoreId is not { } nuovo) throw new OperazioneNonValidaException("Scegli il soggetto dall'archivio, oppure crealo con «Nuovo attore…».");
+                    await Attori.AggiungiIncaricoAsync(CommessaId, _ruolo, nuovo, _dal, _note);
+                    break;
+                case Operazione.Sostituisci:
+                    if (_attoreId is not { } subentrante) throw new OperazioneNonValidaException("Scegli il nuovo soggetto dall'archivio, oppure crealo con «Nuovo attore…».");
+                    if (_dal is not { } dal) throw new OperazioneNonValidaException("Indica da quando subentra il nuovo soggetto.");
+                    await Attori.SostituisciAsync(_incarico!.Id, _incarico.Versione, subentrante, dal, _note);
+                    break;
+                case Operazione.Termina:
+                    if (_al is not { } al) throw new OperazioneNonValidaException("Indica la data di fine dell'incarico.");
+                    await Attori.TerminaIncaricoAsync(_incarico!.Id, _incarico.Versione, al, _note);
+                    break;
+                case Operazione.Correggi:
+                    await Attori.CorreggiIncaricoAsync(_incarico!.Id, _incarico.Versione, _dal, _al, _note);
+                    break;
+            }
+            Chiudi();
+            (_messaggio, _errore) = ("Figure della commessa aggiornate.", false);
+            await CaricaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, ConfermaAsync, async () => { Chiudi(); await CaricaAsync(); });
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task EliminaAsync(DatiIncarico i)
+    {
+        if (_daEliminare != i.Id)
+        {
+            _daEliminare = i.Id;
+            return;
+        }
+        try
+        {
+            await Attori.EliminaIncaricoAsync(i.Id, i.Versione);
+            (_messaggio, _errore, _daEliminare) = ("Incarico eliminato.", false, null);
+            await CaricaAsync();
+        }
+        catch (ConflittoModificaException c)
+        {
+            Conflitti.Mostra(c, () => EliminaAsync(i), CaricaAsync);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private async Task CreaAttoreAsync()
+    {
+        if (_nuovoAttore is null) return;
+        if (_duplicati.Count == 0)
+        {
+            _duplicati = await Attori.PossibiliDuplicatiAsync(_nuovoAttore);
+            if (_duplicati.Count > 0) return;
+        }
+        try
+        {
+            var a = await Attori.SalvaAsync(_nuovoAttore);
+            _vociAttori = VoceScelta.Da(await Attori.ElencoAsync());
+            (_attoreId, _nuovoAttore, _duplicati) = (a.Id, null, []);
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            (_messaggio, _errore) = (ex.Message, true);
+        }
+    }
+
+    private void UsaEsistente(Guid id) => (_attoreId, _nuovoAttore, _duplicati) = (id, null, []);
+}

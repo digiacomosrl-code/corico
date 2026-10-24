@@ -11,6 +11,8 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
 
     public DbSet<Commessa> Commesse => Set<Commessa>();
     public DbSet<Cliente> Clienti => Set<Cliente>();
+    public DbSet<Attore> Attori => Set<Attore>();
+    public DbSet<IncaricoCommessa> IncarichiCommessa => Set<IncaricoCommessa>();
     public DbSet<Fornitore> Fornitori => Set<Fornitore>();
     public DbSet<Documento> Documenti => Set<Documento>();
     public DbSet<ContatoreCodice> ContatoriCodice => Set<ContatoreCodice>();
@@ -55,6 +57,30 @@ public sealed class CoreDbContext(DbContextOptions<CoreDbContext> options, IUten
             e.Property(x => x.Provincia).HasMaxLength(5);
             e.HasIndex(x => x.PartitaIva);
             e.HasIndex(x => x.CodiceFiscale);
+        });
+
+        modelBuilder.Entity<Attore>(e =>
+        {
+            e.ToTable("CORE_Attori");
+            e.Property(x => x.Nominativo).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Titolo).HasMaxLength(30);
+            e.Property(x => x.Ente).HasMaxLength(300);
+            e.Property(x => x.Cap).HasMaxLength(10);
+            e.Property(x => x.Provincia).HasMaxLength(5);
+            e.Property(x => x.Email).HasMaxLength(200);
+            e.Property(x => x.Pec).HasMaxLength(200);
+            e.HasIndex(x => x.Nominativo);
+        });
+
+        modelBuilder.Entity<IncaricoCommessa>(e =>
+        {
+            e.ToTable("CORE_IncarichiCommessa");
+            e.HasIndex(x => new { x.CommessaId, x.Ruolo });
+            e.HasIndex(x => x.AttoreId);
+            e.Property(x => x.Ruolo).HasConversion<int>();
+            e.Property(x => x.Note).HasMaxLength(500);
+            e.HasOne<Commessa>().WithMany().HasForeignKey(x => x.CommessaId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Attore).WithMany().HasForeignKey(x => x.AttoreId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Fornitore>(e =>

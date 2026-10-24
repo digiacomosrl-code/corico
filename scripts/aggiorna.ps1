@@ -1,7 +1,7 @@
 # Aggiornamento guidato di Corico (prompt strategico, sez. 5.3).
 #  1. verifica che il pacchetto abbia superato i test automatici (scheda rilascio.json creata da pubblica.ps1);
 #  2. arresta Corico ed esegue una copia di sicurezza verificata del database;
-#  3. chiede l'approvazione esplicita;
+#  3. chiede l'approvazione esplicita (con -SenzaConferma vale come approvazione l'avvio del file di aggiornamento);
 #  4. installa la nuova versione e applica le migrazioni del database;
 #  5. esegue i controlli successivi (integrità, apertura dati, ricalcolo commesse, versioni ufficiali) e l'avvio;
 #  6. in caso di errore ripristina automaticamente programma e dati precedenti.
@@ -9,10 +9,12 @@
 #
 # Uso:  powershell -ExecutionPolicy Bypass -File scripts\aggiorna.ps1 -Pacchetto publish\Corico
 # Prova del ritorno alla versione precedente (ambiente di prova):  ... -SimulaErrore
+# Senza domanda di conferma (file unico Corico-x.y.z-aggiorna.exe):  ... -SenzaConferma
 param(
     [Parameter(Mandatory = $true)][string]$Pacchetto,
     [string]$CartellaProgramma = "$env:LOCALAPPDATA\Programs\Corico",
-    [switch]$SimulaErrore
+    [switch]$SimulaErrore,
+    [switch]$SenzaConferma
 )
 
 $ErrorActionPreference = "Stop"
@@ -99,7 +101,12 @@ if ($esito.Codice -ne 0 -or -not $copia) {
 $copia = $copia.Substring(6)
 
 # ---------------------------------------------------------------- 3. approvazione
-$risposta = Read-Host "Installare la nuova versione? Scrivi S per confermare"
+if ($SenzaConferma) {
+    Write-Host "Installazione confermata dall'avvio del file di aggiornamento."
+    $risposta = "S"
+} else {
+    $risposta = Read-Host "Installare la nuova versione? Scrivi S per confermare"
+}
 if ($risposta -ne "S" -and $risposta -ne "s") {
     Avvia-Corico
     Write-Host "Aggiornamento annullato. Corico riavviato con la versione installata."

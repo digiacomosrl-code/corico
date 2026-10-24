@@ -1,0 +1,220 @@
+@* Importa analisi da file (es. Analisi costo SIC24): scelta del file, anteprima con nuove/aggiornate/invariate/conservate, conferma. *@
+@inject ImportazioneAnalisiService Importazione
+
+<div class="riquadro">
+    <div class="riga-form">
+        <h3 class="spazio">Importa analisi da file</h3>
+        <button class="pulsante" @onclick="OnChiudi">Chiudi</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_messaggio))
+    {
+        <div class="messaggio messaggio-errore" role="status">
+            @_messaggio
+            <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
+        </div>
+    }
+
+    @if (_anteprima is null)
+    {
+        <p>
+            Scegli il file Excel del tracciato (fogli Analisi e RigheAnalisi, es. SIC24_Import_CORICO.xlsx)
+            oppure i due CSV delle analisi e delle righe, selezionandoli insieme.
+            Il codice dell'analisi è la chiave: importando di nuovo lo stesso file si aggiornano le analisi cambiate,
+            mentre quelle modificate a mano in Corico dopo l'importazione si conservano.
+        </p>
+        <InputFile OnChange="CaricaAsync" accept=".xlsx,.xlsm,.csv,.txt" multiple disabled="@_inCorso" />
+        @if (_inCorso)
+        {
+            <p class="testo-secondario">Lettura del file…</p>
+        }
+    }
+    else
+    {
+        var a = _anteprima;
+        <p>
+            File <strong>@string.Join(", ", a.File)</strong>: @a.Analisi.Count analisi.
+            <strong>@a.Conta(EsitoAnalisiDaFile.Nuova) nuove</strong>,
+            <strong>@a.Conta(EsitoAnalisiDaFile.Aggiornata) da aggiornare</strong>,
+            @a.Conta(EsitoAnalisiDaFile.Invariata) invariate,
+            @a.Conta(EsitoAnalisiDaFile.ModificataInCorico) conservate perché modificate in Corico,
+            @a.Conta(EsitoAnalisiDaFile.Errata) con errori (non si importano).
+        </p>
+        @if (a.DaSalvare > 0)
+        {
+            <p class="testo-secondario">
+                Delle @a.DaSalvare analisi da salvare, @a.InBozza entrano in Bozza (da verificare prima di applicarle alle offerte)
+                e @(a.DaSalvare - a.InBozza) in Confermate o Archiviate, come indicato nel file.
+                @if (a.VociEscluse > 0)
+                {
+                    <span>Le @a.VociEscluse voci escluse del tracciato non si importano.</span>
+                }
+            </p>
+        }
+        @foreach (var avviso in a.Avvisi)
+        {
+            <p class="testo-secondario">@avviso</p>
+        }
+
+        <div class="riga-form">
+            <label>
+                Mostra
+                <select @bind="_filtro">
+                    <option value="">Tutte le analisi</option>
+                    <option value="@EsitoAnalisiDaFile.Nuova">Nuove</option>
+                    <option value="@EsitoAnalisiDaFile.Aggiornata">Da aggiornare</option>
+                    <option value="@EsitoAnalisiDaFile.Invariata">Invariate</option>
+                    <option value="@EsitoAnalisiDaFile.ModificataInCorico">Conservate</option>
+                    <option value="@EsitoAnalisiDaFile.Errata">Con errori</option>
+                </select>
+            </label>
+            <label class="spunta"><input type="checkbox" @bind="_soloBozza" /> Solo in Bozza</label>
+            <label>Cerca <input @bind="_cerca" @bind:event="oninput" placeholder="codice o lavorazione" /></label>
+        </div>
+
+        var visibili = Visibili().ToList();
+        <div class="scorrevole">
+            <table class="tabella">
+                <thead>
+                    <tr><th>Codice</th><th>Lavorazione</th><th>U.M.</th><th class="num">Risorse</th><th class="num">Costo unitario</th><th>Stato</th><th>Esito</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in visibili.Take(MassimoMostrate))
+                    {
+                        <tr>
+                            <td class="codice">@r.Codice</td>
+                            <td>
+                                @r.Descrizione
+                                @if (!string.IsNullOrEmpty(r.Dettaglio))
+                                {
+                                    <div class="testo-secondario">@r.Dettaglio</div>
+                                }
+                            </td>
+                            <td>@r.Unita</td>
+                            <td class="num">@r.Risorse</td>
+                            <td class="num">@Formato.Euro(r.CostoUnitario)</td>
+                            <td><span class="etichetta etichetta-analisi-@r.Stato.ToString().ToLowerInvariant()">@Testi.StatoAnalisi(r.Stato)</span></td>
+                            <td><span class="etichetta @Classe(r.Esito)">@Testo(r.Esito)</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (visibili.Count > MassimoMostrate)
+        {
+            <p class="testo-secondario">Mostrate le prime @MassimoMostrate analisi di @visibili.Count: usa «Mostra» o «Cerca» per trovarne altre.</p>
+        }
+
+        <div class="azioni">
+            <button class="pulsante primario" disabled="@(_inCorso || a.DaSalvare == 0)" @onclick="ConfermaAsync">
+                @(a.DaSalvare == 0 ? "Niente da importare" : $"Importa {a.DaSalvare} analisi")
+            </button>
+            <button class="pulsante" disabled="@_inCorso" @onclick="() => { _anteprima = null; _file = []; }">Scegli un altro file</button>
+        </div>
+        @if (_inCorso)
+        {
+            <p class="testo-secondario">Backup del database e salvataggio delle analisi in corso…</p>
+        }
+    }
+</div>
+
+@code {
+    private const int MassimoMostrate = 200;
+    private const long DimensioneMassima = 50 * 1024 * 1024;
+
+    [Parameter] public EventCallback OnChiudi { get; set; }
+    [Parameter] public EventCallback<EsitoImportazioneAnalisi> OnImportate { get; set; }
+
+    private List<FileCaricato> _file = [];
+    private AnteprimaAnalisiDaFile? _anteprima;
+    private EsitoAnalisiDaFile? _filtro;
+    private bool _soloBozza;
+    private string? _cerca;
+    private bool _inCorso;
+    private string? _messaggio;
+
+    private IEnumerable<AnalisiInAnteprima> Visibili()
+    {
+        IEnumerable<AnalisiInAnteprima> righe = _anteprima!.Analisi;
+        if (_filtro is { } f) righe = righe.Where(r => r.Esito == f);
+        if (_soloBozza) righe = righe.Where(r => r.Stato == StatoAnalisi.Bozza);
+        if (string.IsNullOrWhiteSpace(_cerca)) return righe;
+        var t = _cerca.Trim();
+        return righe.Where(r => (r.Codice?.Contains(t, StringComparison.CurrentCultureIgnoreCase) ?? false)
+            || r.Descrizione.Contains(t, StringComparison.CurrentCultureIgnoreCase));
+    }
+
+    private async Task CaricaAsync(InputFileChangeEventArgs e)
+    {
+        _inCorso = true;
+        _messaggio = null;
+        try
+        {
+            var file = new List<FileCaricato>();
+            foreach (var f in e.GetMultipleFiles(10))
+            {
+                using var ms = new MemoryStream();
+                await f.OpenReadStream(DimensioneMassima).CopyToAsync(ms);
+                file.Add(new FileCaricato(f.Name, ms.ToArray()));
+            }
+            _anteprima = await Importazione.AnteprimaAsync(file);
+            _file = file;
+            (_soloBozza, _cerca) = (false, null);
+            // Se ci sono errori o analisi conservate, si mostrano per prime.
+            _filtro = _anteprima.Conta(EsitoAnalisiDaFile.Errata) > 0 ? EsitoAnalisiDaFile.Errata
+                : _anteprima.Conta(EsitoAnalisiDaFile.ModificataInCorico) > 0 ? EsitoAnalisiDaFile.ModificataInCorico : null;
+        }
+        catch (OperazioneNonValidaException ex)
+        {
+            _messaggio = ex.Message;
+        }
+        catch (IOException)
+        {
+            _messaggio = "Un file supera i 50 MB.";
+        }
+        catch (InvalidOperationException)
+        {
+            _messaggio = "Si possono scegliere al massimo 10 file insieme.";
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private async Task ConfermaAsync()
+    {
+        _inCorso = true;
+        try
+        {
+            var esito = await Importazione.ConfermaAsync(_file);
+            (_anteprima, _file) = (null, []);
+            await OnImportate.InvokeAsync(esito);
+        }
+        catch (Exception ex) when (ex is OperazioneNonValidaException or ConflittoModificaException)
+        {
+            _messaggio = ex.Message;
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private static string Testo(EsitoAnalisiDaFile e) => e switch
+    {
+        EsitoAnalisiDaFile.Nuova => "Nuova",
+        EsitoAnalisiDaFile.Aggiornata => "Da aggiornare",
+        EsitoAnalisiDaFile.Invariata => "Invariata",
+        EsitoAnalisiDaFile.ModificataInCorico => "Conservata",
+        _ => "Con errori",
+    };
+
+    private static string Classe(EsitoAnalisiDaFile e) => e switch
+    {
+        EsitoAnalisiDaFile.Nuova or EsitoAnalisiDaFile.Aggiornata => "etichetta-attiva",
+        EsitoAnalisiDaFile.Errata => "etichetta-budget-respinto",
+        EsitoAnalisiDaFile.ModificataInCorico => "etichetta-consultazione",
+        _ => "etichetta-disattivo",
+    };
+}

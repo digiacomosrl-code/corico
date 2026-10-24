@@ -7,7 +7,10 @@
 
 <div class="intestazione">
     <h1>Analisi prezzi</h1>
-    <button class="pulsante primario" @onclick="Nuova">Nuova analisi</button>
+    <div class="azioni">
+        <button class="pulsante" @onclick="() => _importa = true">Importa analisi da file</button>
+        <button class="pulsante primario" @onclick="Nuova">Nuova analisi</button>
+    </div>
 </div>
 
 @if (!string.IsNullOrEmpty(_messaggio))
@@ -16,6 +19,11 @@
         @_messaggio
         <button type="button" class="chiudi" @onclick="() => _messaggio = null" aria-label="Chiudi">✕</button>
     </div>
+}
+
+@if (_importa)
+{
+    <ImportaAnalisi OnChiudi="() => _importa = false" OnImportate="ImportateAsync" />
 }
 
 @if (_modifica is not null)
@@ -65,9 +73,13 @@
         <input class="largo" placeholder="Cerca per codice o lavorazione…" @bind="_testo" @bind:event="oninput" @bind:after="AggiornaAsync" />
         <label class="spunta"><input type="checkbox" @bind="_archiviate" @bind:after="AggiornaAsync" /> Mostra archiviate</label>
     </div>
-    @if (_elenco.Count == 0)
+    @if (_elenco.Count == 0 && !string.IsNullOrWhiteSpace(_testo))
     {
-        <p class="testo-secondario">Nessuna analisi. Creane una qui oppure salva come analisi le risorse di una voce da una scheda offerta.</p>
+        <p class="testo-secondario">Nessuna analisi trovata per «@_testo».</p>
+    }
+    else if (_elenco.Count == 0)
+    {
+        <p class="testo-secondario">Nessuna analisi. Creane una qui, importale da file oppure salva come analisi le risorse di una voce da una scheda offerta.</p>
     }
     else
     {
@@ -88,11 +100,19 @@
                 }
             </tbody>
         </table>
+        @if (_totale > _elenco.Count)
+        {
+            <p class="testo-secondario">Mostrate le prime @_elenco.Count analisi di @_totale: scrivi un codice o una parola della lavorazione per trovare le altre.</p>
+        }
     }
 </div>
 
 @code {
+    private const int MassimoMostrate = 200;
+
     private IReadOnlyList<RiepilogoAnalisi> _elenco = [];
+    private int _totale;
+    private bool _importa;
     private AnalisiAziendale? _modifica;
     private string? _testo;
     private bool _archiviate;
@@ -101,7 +121,19 @@
 
     protected override Task OnInitializedAsync() => AggiornaAsync();
 
-    private async Task AggiornaAsync() => _elenco = await Analisi.ElencoAsync(_testo, includiArchiviate: _archiviate);
+    private async Task AggiornaAsync()
+    {
+        var r = await Analisi.CercaAsync(_testo, _archiviate, MassimoMostrate);
+        (_elenco, _totale) = (r.Analisi, r.Totale);
+    }
+
+    private async Task ImportateAsync(EsitoImportazioneAnalisi e)
+    {
+        _importa = false;
+        (_messaggio, _errore) = ($"Importazione completata: {e.Nuove} analisi nuove e {e.Aggiornate} aggiornate; " +
+            $"{e.Invariate} invariate, {e.Conservate} conservate perché modificate in Corico, {e.Errate} non importate per errori.", false);
+        await AggiornaAsync();
+    }
 
     private void Nuova() => _modifica = new AnalisiAziendale { Id = Guid.Empty };
 

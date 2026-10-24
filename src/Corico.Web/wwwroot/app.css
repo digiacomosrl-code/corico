@@ -38,6 +38,7 @@ code { background: var(--blu-chiaro); padding: 0 .3rem; border-radius: 3px; }
 .marchio { padding: 1.25rem 1rem; border-bottom: 1px solid rgba(255,255,255,.15); }
 .marchio-nome { display: block; font-size: 1.35rem; font-weight: 700; letter-spacing: .12em; }
 .marchio-sotto { display: block; font-size: .78rem; opacity: .75; }
+.marchio-firma { display: block; font-size: .7rem; font-style: italic; opacity: .6; margin-top: .15rem; }
 .laterale nav { padding: .5rem 0; }
 .voce { display: block; padding: .6rem 1rem; color: #fff; text-decoration: none; opacity: .85; }
 .voce:hover { background: rgba(255,255,255,.08); opacity: 1; }

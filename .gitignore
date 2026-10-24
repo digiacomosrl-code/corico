@@ -27,3 +27,5 @@ Esempi/
 publish/
 # Strumenti esterni inclusi nel pacchetto (es. Tesseract per l OCR), non nel repository
 strumenti/
+# File unico di aggiornamento creato da scripts\pubblica.ps1
+Corico-*-aggiorna.exe

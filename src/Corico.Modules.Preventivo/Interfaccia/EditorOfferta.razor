@@ -131,13 +131,10 @@
                             <td colspan="13">
                                 <div class="riga-form">
                                     <strong class="spazio">Risorse per @(c.Voce.Unita ?? "unità") di «@Accorcia(c.Voce.Descrizione, 70)»</strong>
-                                    <select @bind="_analisiScelta">
-                                        <option value="@Guid.Empty">— applica un'analisi confermata —</option>
-                                        @foreach (var a in _analisi)
-                                        {
-                                            <option value="@a.Id">@a.Codice @Accorcia(a.Descrizione, 50) (@a.Unita, @Formato.Euro(a.CostoUnitario))</option>
-                                        }
-                                    </select>
+                                    <SceltaConRicerca Voci="_vociAnalisi" Classe="largo" Etichetta="Analisi confermata da applicare"
+                                                      Segnaposto="Cerca un'analisi confermata per codice o lavorazione…"
+                                                      Valore="@(_analisiScelta == Guid.Empty ? null : _analisiScelta.ToString())"
+                                                      ValoreChanged="v => _analisiScelta = Guid.TryParse(v, out var g) ? g : Guid.Empty" />
                                     <button class="pulsante piccolo" disabled="@(_analisiScelta == Guid.Empty)" @onclick="() => ApplicaAnalisiAsync(ov)">Applica</button>
                                     <button class="pulsante piccolo" disabled="@(ov.Risorse.Count == 0)" @onclick="() => SalvaComeAnalisiAsync(c.Voce, ov)">Salva come analisi</button>
                                 </div>
@@ -290,7 +287,7 @@
     private IReadOnlyList<DocumentoRiepilogo> _documenti = [];
     private decimal _scontoPredefinito;
     private readonly HashSet<Guid> _risorseAperte = [];
-    private IReadOnlyList<RiepilogoAnalisi> _analisi = [];
+    private IReadOnlyList<VoceScelta> _vociAnalisi = [];
     private Guid _analisiScelta;
     private bool _confermaElimina;
     private string? _messaggio;
@@ -301,7 +298,11 @@
         _fornitori = await Fornitori.ElencoAsync();
         _vociFornitori = VoceScelta.Da(_fornitori);
         _documenti = await Documenti.ElencoAsync(CommessaId);
-        _analisi = await Analisi.ElencoAsync(soloConfermate: true);
+        // Con l'archivio importato da file le analisi confermate sono migliaia: si sceglie cercando, non da una tendina.
+        _vociAnalisi = (await Analisi.ElencoAsync(soloConfermate: true))
+            .Select(a => new VoceScelta(a.Id.ToString(), $"{a.Codice} {Accorcia(a.Descrizione, 80)}".Trim(),
+                $"{a.Unita} · {Formato.Euro(a.CostoUnitario)}"))
+            .ToList();
         _scontoPredefinito = Offerta.Righe.LastOrDefault()?.ScontoPercentuale ?? 0;
         if (ApriRisorseVoce is { } voce) _risorseAperte.Add(voce);
     }

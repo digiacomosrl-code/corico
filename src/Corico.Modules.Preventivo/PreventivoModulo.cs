@@ -47,6 +47,7 @@ public sealed class PreventivoModulo : ICoricoModulo
         servizi.AddSingleton<VersioniService>();
         servizi.AddSingleton<EsportazioniService>();
         servizi.AddSingleton<AnalisiService>();
+        servizi.AddSingleton<ImportazioneAnalisiService>();
         servizi.AddSingleton<ListaSpesaService>();
         servizi.AddSingleton<OrdiniService>();
         servizi.AddSingleton<BudgetService>();

@@ -276,7 +276,8 @@ public sealed class ImportazioneAnagraficheService(IDbContextFactory<CoreDbConte
 
     // --- Lettura del file ---
 
-    internal static List<List<string>> Leggi(Stream contenuto, string nomeFile)
+    /// <summary>Righe di un file Excel (primo foglio) o CSV, come testo; usata anche da altre importazioni tabellari.</summary>
+    public static List<List<string>> Leggi(Stream contenuto, string nomeFile)
     {
         var estensione = Path.GetExtension(nomeFile).ToLowerInvariant();
         return estensione switch
